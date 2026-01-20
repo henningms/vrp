@@ -100,6 +100,7 @@ struct ProblemProperties {
     has_multi_dimen_capacity: bool,
     has_breaks: bool,
     has_skills: bool,
+    has_preferences: bool,
     has_unreachable_locations: bool,
     has_reloads: bool,
     has_recharges: bool,

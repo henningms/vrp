@@ -1,5 +1,6 @@
 use crate::format::coord_index::CoordIndex;
 use crate::format::problem::JobSkills as ApiJobSkills;
+use crate::format::problem::JobPreferences as ApiJobPreferences;
 use crate::format::problem::*;
 use crate::format::{JobIndex, Location};
 use crate::utils::VariableJobPermutation;
@@ -7,7 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
-        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobSkills as FeatureJobSkills,
+        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension,
+        JobPreferences as FeatureJobPreferences, JobPreferencesDimension, JobSkills as FeatureJobSkills,
         JobSkillsDimension,
     },
     models::common::*,
@@ -428,6 +430,10 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
     if let Some(skills) = get_skills(&job.skills) {
         dimens.set_job_skills(skills);
     }
+
+    if let Some(preferences) = get_preferences(&job.preferences) {
+        dimens.set_job_preferences(preferences);
+    }
 }
 
 fn get_single_job(job: &ApiJob, single: Single) -> Job {
@@ -473,6 +479,12 @@ fn get_skills(skills: &Option<ApiJobSkills>) -> Option<FeatureJobSkills> {
     skills
         .as_ref()
         .map(|skills| FeatureJobSkills::new(skills.all_of.clone(), skills.one_of.clone(), skills.none_of.clone()))
+}
+
+fn get_preferences(preferences: &Option<ApiJobPreferences>) -> Option<FeatureJobPreferences> {
+    preferences.as_ref().map(|prefs| {
+        FeatureJobPreferences::new(prefs.preferred.clone(), prefs.acceptable.clone(), prefs.avoid.clone())
+    })
 }
 
 fn empty() -> MultiDimLoad {

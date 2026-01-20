@@ -58,6 +58,10 @@ pub(super) fn create_goal_context(
         features.push(create_skills_feature("skills", SKILL_CONSTRAINT_CODE)?)
     }
 
+    if props.has_preferences {
+        features.push(create_preferences_feature("preferences", PreferencePenalty::default())?)
+    }
+
     if !blocks.locks.is_empty() {
         features.push(create_locked_jobs_feature(
             "locked_jobs",

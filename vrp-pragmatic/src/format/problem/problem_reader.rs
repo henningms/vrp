@@ -127,6 +127,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
             .iter()
             .any(|job| job.all_tasks_iter().any(|task| task.demand.as_ref().is_some_and(|d| d.len() > 1)));
     let has_skills = api_problem.plan.jobs.iter().any(|job| job.skills.is_some());
+    let has_preferences = api_problem.plan.jobs.iter().any(|job| job.preferences.is_some());
 
     let shift_has_fn = |shift_has: fn(&VehicleShift) -> bool| {
         api_problem.fleet.vehicles.iter().any(|t| t.shifts.iter().any(shift_has))
@@ -160,6 +161,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
         has_multi_dimen_capacity,
         has_breaks,
         has_skills,
+        has_preferences,
         has_unreachable_locations,
         has_reloads,
         has_recharges,

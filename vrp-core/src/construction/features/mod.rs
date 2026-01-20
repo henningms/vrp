@@ -50,6 +50,11 @@ pub use self::reloads::{ReloadFeatureFactory, ReloadIntervalsTourState, SharedRe
 mod skills;
 pub use self::skills::{JobSkills, JobSkillsDimension, VehicleSkillsDimension, create_skills_feature};
 
+mod preferences;
+pub use self::preferences::{
+    JobPreferences, JobPreferencesDimension, PreferencePenalty, VehicleAttributesDimension, create_preferences_feature,
+};
+
 mod total_value;
 pub use self::total_value::*;
 

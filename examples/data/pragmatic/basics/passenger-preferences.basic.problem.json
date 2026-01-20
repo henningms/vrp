@@ -1,0 +1,162 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "passenger1",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52599,
+                  "lng": 13.45413
+                },
+                "duration": 300.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "preferences": {
+          "preferred": ["driver:alice"]
+        }
+      },
+      {
+        "id": "passenger2",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5225,
+                  "lng": 13.4095
+                },
+                "duration": 240.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "preferences": {
+          "preferred": ["driver:alice", "driver:bob"],
+          "avoid": ["shift:night"]
+        }
+      },
+      {
+        "id": "passenger3",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5165,
+                  "lng": 13.3808
+                },
+                "duration": 240.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "preferences": {
+          "preferred": ["vehicle:suv"],
+          "acceptable": ["vehicle:sedan"]
+        }
+      },
+      {
+        "id": "passenger4",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5316,
+                  "lng": 13.3884
+                },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "alice_suv",
+        "vehicleIds": [
+          "alice_vehicle_1"
+        ],
+        "profile": {
+          "matrix": "normal_car"
+        },
+        "costs": {
+          "fixed": 22.0,
+          "distance": 0.0002,
+          "time": 0.004806
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2019-07-04T09:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2019-07-04T18:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            }
+          }
+        ],
+        "capacity": [2],
+        "skills": ["driver:alice", "vehicle:suv", "shift:day"]
+      },
+      {
+        "typeId": "bob_sedan",
+        "vehicleIds": [
+          "bob_vehicle_1"
+        ],
+        "profile": {
+          "matrix": "normal_car"
+        },
+        "costs": {
+          "fixed": 22.0,
+          "distance": 0.0002,
+          "time": 0.004806
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2019-07-04T09:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2019-07-04T18:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            }
+          }
+        ],
+        "capacity": [2],
+        "skills": ["driver:bob", "vehicle:sedan", "shift:day"]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "normal_car"
+      }
+    ]
+  }
+}

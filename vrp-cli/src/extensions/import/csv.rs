@@ -95,6 +95,7 @@ mod actual {
                 replacements: None,
                 services: get_tasks(&tasks, Box::new(|j| j.demand == 0)),
                 skills: None,
+                preferences: None,
                 value: None,
                 group: None,
                 compatibility: None,

@@ -89,6 +89,7 @@ prop_compose! {
             replacements: None,
             services: None,
             skills,
+            preferences: None,
             value,
             group,
             compatibility
@@ -135,6 +136,7 @@ prop_compose! {
             replacements,
             services,
             skills,
+            preferences: None,
             value,
             group,
             compatibility,
