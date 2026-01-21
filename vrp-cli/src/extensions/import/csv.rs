@@ -99,6 +99,7 @@ mod actual {
                 value: None,
                 group: None,
                 compatibility: None,
+                lifo_group: None,
             })
             .collect();
 
@@ -130,6 +131,7 @@ mod actual {
                     capacity: vec![vehicle.capacity],
                     skills: None,
                     limits: None,
+                    lifo_required: None,
                 }
             })
             .collect();

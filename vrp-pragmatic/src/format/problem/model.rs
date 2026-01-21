@@ -150,6 +150,13 @@ pub struct Job {
     /// A compatibility group: jobs with different compatibility cannot be assigned to the same tour.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<String>,
+
+    /// LIFO (Last-In-First-Out) group identifier.
+    /// Jobs with the same lifoGroup must follow stack-like ordering on vehicles with lifoRequired=true.
+    /// Used for scenarios like wheelchair passengers in minibuses where space constraints
+    /// require that the last passenger picked up is delivered first.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoGroup")]
+    pub lifo_group: Option<String>,
 }
 
 // region Clustering
@@ -493,6 +500,13 @@ pub struct VehicleType {
     /// Vehicle limits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limits: Option<VehicleLimits>,
+
+    /// Indicates whether this vehicle requires LIFO (Last-In-First-Out) ordering for jobs.
+    /// When true, jobs marked with a LIFO group must follow stack-like ordering:
+    /// the last passenger/item picked up must be delivered first.
+    /// Useful for vehicles with limited maneuvering space (e.g., wheelchair minibuses, narrow cargo holds).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoRequired")]
+    pub lifo_required: Option<bool>,
 }
 
 /// Specifies a vehicle profile.

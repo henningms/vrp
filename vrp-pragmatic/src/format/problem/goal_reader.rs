@@ -62,6 +62,10 @@ pub(super) fn create_goal_context(
         features.push(create_preferences_feature("preferences", PreferencePenalty::default())?)
     }
 
+    if props.has_lifo {
+        features.push(create_lifo_ordering_feature()?)
+    }
+
     if !blocks.locks.is_empty() {
         features.push(create_locked_jobs_feature(
             "locked_jobs",

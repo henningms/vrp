@@ -9,7 +9,9 @@ use crate::get_unique_locations;
 use crate::utils::get_approx_transportation;
 use std::collections::HashSet;
 use vrp_core::construction::enablers::create_typed_actor_groups;
-use vrp_core::construction::features::{VehicleAttributesDimension, VehicleCapacityDimension, VehicleSkillsDimension};
+use vrp_core::construction::features::{
+    VehicleAttributesDimension, VehicleCapacityDimension, VehicleLifoRequiredDimension, VehicleSkillsDimension,
+};
 use vrp_core::models::common::*;
 use vrp_core::models::problem::*;
 
@@ -161,6 +163,10 @@ pub(super) fn read_fleet(api_problem: &ApiProblem, props: &ProblemProperties, co
                     dimens.set_vehicle_skills(skills_set.clone());
                     // Skills are also used as attributes for preference matching
                     dimens.set_vehicle_attributes(skills_set);
+                }
+
+                if let Some(lifo_required) = vehicle.lifo_required {
+                    dimens.set_vehicle_lifo_required(lifo_required);
                 }
 
                 vehicles.push(Arc::new(Vehicle {

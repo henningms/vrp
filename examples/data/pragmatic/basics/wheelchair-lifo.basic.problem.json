@@ -1,0 +1,142 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "wheelchair_passenger_1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52599,
+                  "lng": 13.45413
+                },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5225,
+                  "lng": 13.4095
+                },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "lifoGroup": "wheelchair"
+      },
+      {
+        "id": "wheelchair_passenger_2",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5165,
+                  "lng": 13.3808
+                },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5316,
+                  "lng": 13.3884
+                },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "lifoGroup": "wheelchair"
+      },
+      {
+        "id": "regular_passenger",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5180,
+                  "lng": 13.4000
+                },
+                "duration": 60.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5250,
+                  "lng": 13.4200
+                },
+                "duration": 60.0
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "wheelchair_minibus",
+        "vehicleIds": ["minibus_1"],
+        "profile": {
+          "matrix": "normal_car"
+        },
+        "costs": {
+          "fixed": 25.0,
+          "distance": 0.0002,
+          "time": 0.005
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2024-01-01T18:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            }
+          }
+        ],
+        "capacity": [3],
+        "lifoRequired": true
+      }
+    ],
+    "profiles": [
+      {
+        "name": "normal_car"
+      }
+    ]
+  }
+}

@@ -70,6 +70,11 @@ pub use self::tour_order::*;
 mod transport;
 pub use self::transport::*;
 
+mod lifo_ordering;
+pub use self::lifo_ordering::{
+    LifoGroupId, LifoGroupDimension, VehicleLifoRequiredDimension, create_lifo_ordering_feature,
+};
+
 mod work_balance;
 pub use self::work_balance::{
     create_activity_balanced_feature, create_distance_balanced_feature, create_duration_balanced_feature,
