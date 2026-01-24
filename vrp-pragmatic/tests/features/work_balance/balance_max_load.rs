@@ -20,7 +20,7 @@ fn can_balance_max_load() {
             vehicles: vec![VehicleType {
                 vehicle_ids: vec!["my_vehicle_1".to_string(), "my_vehicle_2".to_string()],
                 shifts: vec![create_default_open_vehicle_shift()],
-                capacity: vec![5],
+                capacity: Some(vec![5]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

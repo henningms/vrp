@@ -23,7 +23,7 @@ fn can_prefer_jobs_with_more_value_impl(objectives: Option<Vec<Objective>>) {
             ..create_empty_plan()
         },
         fleet: Fleet {
-            vehicles: vec![VehicleType { capacity: vec![1], ..create_default_vehicle_type() }],
+            vehicles: vec![VehicleType { capacity: Some(vec![1]), ..create_default_vehicle_type() }],
             ..create_default_fleet()
         },
         objectives,

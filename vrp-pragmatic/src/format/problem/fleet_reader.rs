@@ -152,10 +152,18 @@ pub(super) fn read_fleet(api_problem: &ApiProblem, props: &ProblemProperties, co
                     dimens.set_tour_size(tour_size);
                 }
 
-                if props.has_multi_dimen_capacity {
-                    dimens.set_vehicle_capacity(MultiDimLoad::new(vehicle.capacity.clone()));
-                } else {
-                    dimens.set_vehicle_capacity(SingleDimLoad::new(*vehicle.capacity.first().unwrap()));
+                if props.has_configurable_capacity {
+                    if let Some(configs) = &vehicle.capacity_configurations {
+                        let configurations: Vec<Vec<i32>> =
+                            configs.iter().map(|c| c.capacities.clone()).collect();
+                        dimens.set_vehicle_capacity(ConfigurableLoad::new(configurations));
+                    }
+                } else if props.has_multi_dimen_capacity {
+                    if let Some(capacity) = &vehicle.capacity {
+                        dimens.set_vehicle_capacity(MultiDimLoad::new(capacity.clone()));
+                    }
+                } else if let Some(capacity) = &vehicle.capacity {
+                    dimens.set_vehicle_capacity(SingleDimLoad::new(*capacity.first().unwrap_or(&0)));
                 }
 
                 if let Some(skills) = vehicle.skills.as_ref() {

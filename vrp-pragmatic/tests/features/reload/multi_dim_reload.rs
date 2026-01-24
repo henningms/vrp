@@ -24,7 +24,7 @@ fn can_use_multi_dim_capacity() {
                     }]),
                     ..create_default_vehicle_shift()
                 }],
-                capacity: vec![1, 1],
+                capacity: Some(vec![1, 1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()
@@ -94,7 +94,7 @@ fn can_use_multi_dim_capacity_with_different_values() {
                     reloads: Some(vec![create_default_reload()]),
                     ..create_default_vehicle_shift()
                 }],
-                capacity: vec![2, 1],
+                capacity: Some(vec![2, 1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

@@ -360,3 +360,225 @@ impl Display for MultiDimLoad {
         write!(f, "{:?}", self.load)
     }
 }
+
+/// Maximum number of capacity configurations supported.
+const MAX_CONFIGURATIONS: usize = 8;
+
+/// Specifies a load type with multiple mutually exclusive capacity configurations.
+///
+/// Used for scenarios like wheelchair-accessible vehicles where seating capacity
+/// trades off against wheelchair spaces. For example, a minibus might have:
+/// - Configuration 1: 13 seated passengers + 0 wheelchairs
+/// - Configuration 2: 6 seated passengers + 1 wheelchair
+///
+/// The `can_fit` method returns true if the load fits within ANY valid configuration,
+/// rather than requiring all dimensions to fit independently.
+#[derive(Clone, Copy, Debug)]
+pub struct ConfigurableLoad {
+    /// Current load values.
+    pub load: [i32; LOAD_DIMENSION_SIZE],
+    /// Valid capacity configurations (each is a capacity vector).
+    /// Unused configurations have all zeros.
+    pub configurations: [[i32; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS],
+    /// Number of valid configurations.
+    pub config_count: usize,
+    /// Actual used dimension count.
+    pub size: usize,
+}
+
+impl ConfigurableLoad {
+    /// Creates a new instance of `ConfigurableLoad` with the given configurations.
+    pub fn new(configurations: Vec<Vec<i32>>) -> Self {
+        assert!(!configurations.is_empty(), "At least one configuration is required");
+        assert!(configurations.len() <= MAX_CONFIGURATIONS, "Maximum {} configurations supported", MAX_CONFIGURATIONS);
+
+        let size = configurations.iter().map(|c| c.len()).max().unwrap_or(0);
+        assert!(size <= LOAD_DIMENSION_SIZE, "Maximum {} dimensions supported", LOAD_DIMENSION_SIZE);
+
+        let mut configs = [[0; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS];
+        for (i, config) in configurations.iter().enumerate() {
+            for (j, &value) in config.iter().enumerate() {
+                configs[i][j] = value;
+            }
+        }
+
+        Self {
+            load: [0; LOAD_DIMENSION_SIZE],
+            configurations: configs,
+            config_count: configurations.len(),
+            size,
+        }
+    }
+
+    /// Creates a load value (for job demand) without configurations.
+    /// This is used when creating demand, not vehicle capacity.
+    pub fn from_load(data: Vec<i32>) -> Self {
+        assert!(data.len() <= LOAD_DIMENSION_SIZE);
+
+        let mut load = [0; LOAD_DIMENSION_SIZE];
+        for (idx, value) in data.iter().enumerate() {
+            load[idx] = *value;
+        }
+
+        // For demand, we create a single "infinite" configuration so can_fit works
+        let mut configs = [[0; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS];
+        configs[0] = [i32::MAX; LOAD_DIMENSION_SIZE];
+
+        Self {
+            load,
+            configurations: configs,
+            config_count: 1,
+            size: data.len(),
+        }
+    }
+
+    /// Converts to vector representation.
+    pub fn as_vec(&self) -> Vec<i32> {
+        if self.size == 0 { vec![0] } else { self.load[..self.size].to_vec() }
+    }
+
+    /// Returns the configurations as vectors.
+    pub fn configurations_as_vec(&self) -> Vec<Vec<i32>> {
+        (0..self.config_count)
+            .map(|i| self.configurations[i][..self.size].to_vec())
+            .collect()
+    }
+
+    fn get(&self, idx: usize) -> i32 {
+        self.load[idx]
+    }
+}
+
+impl Load for ConfigurableLoad {
+    fn is_not_empty(&self) -> bool {
+        self.size == 0 || self.load.iter().any(|v| *v != 0)
+    }
+
+    fn max_load(self, other: Self) -> Self {
+        let mut result = self;
+        result.load.iter_mut().zip(other.load.iter()).for_each(|(a, b)| *a = (*a).max(*b));
+        result
+    }
+
+    fn can_fit(&self, other: &Self) -> bool {
+        // Check if `other` load can fit within this capacity.
+        // For configurable capacity, we check if the load fits in ANY configuration.
+        let size = self.size.max(other.size);
+
+        (0..self.config_count).any(|config_idx| {
+            let config = &self.configurations[config_idx];
+            (0..size).all(|dim| config[dim] >= other.load[dim])
+        })
+    }
+
+    fn ratio(&self, other: &Self) -> Float {
+        // Return the minimum ratio across configurations (best fit)
+        let size = self.size.max(other.size);
+
+        (0..self.config_count)
+            .filter_map(|config_idx| {
+                let config = &self.configurations[config_idx];
+                // Check if this config can fit the load
+                let fits = (0..size).all(|dim| config[dim] >= other.load[dim]);
+                if fits {
+                    // Calculate max ratio for this config
+                    let ratio: Float = (0..size)
+                        .filter(|&dim| config[dim] != 0)
+                        .map(|dim| other.load[dim] as Float / config[dim] as Float)
+                        .fold(0_f64, |acc, r| acc.max(r));
+                    Some(ratio)
+                } else {
+                    None
+                }
+            })
+            .fold(Float::MAX, |acc, r| acc.min(r))
+    }
+}
+
+impl LoadOps for ConfigurableLoad {}
+
+impl Default for ConfigurableLoad {
+    fn default() -> Self {
+        let mut configs = [[0; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS];
+        configs[0] = [i32::MAX; LOAD_DIMENSION_SIZE];
+
+        Self {
+            load: [0; LOAD_DIMENSION_SIZE],
+            configurations: configs,
+            config_count: 1,
+            size: 0,
+        }
+    }
+}
+
+impl Add for ConfigurableLoad {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut result = self;
+        for (idx, value) in rhs.load.iter().enumerate() {
+            result.load[idx] += *value;
+        }
+        result.size = result.size.max(rhs.size);
+        result
+    }
+}
+
+impl Sub for ConfigurableLoad {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let mut result = self;
+        for (idx, value) in rhs.load.iter().enumerate() {
+            result.load[idx] -= *value;
+        }
+        result.size = result.size.max(rhs.size);
+        result
+    }
+}
+
+impl PartialOrd for ConfigurableLoad {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let size = self.size.max(other.size);
+        (0..size)
+            .try_fold(None, |acc, idx| {
+                let result = self.get(idx).cmp(&other.get(idx));
+                acc.map_or(ControlFlow::Continue(Some(result)), |acc| {
+                    if acc != result { ControlFlow::Break(None) } else { ControlFlow::Continue(Some(result)) }
+                })
+            })
+            .unwrap_value()
+    }
+}
+
+impl Eq for ConfigurableLoad {}
+
+impl PartialEq for ConfigurableLoad {
+    fn eq(&self, other: &Self) -> bool {
+        self.partial_cmp(other) == Some(Ordering::Equal)
+    }
+}
+
+impl Mul<Float> for ConfigurableLoad {
+    type Output = Self;
+
+    fn mul(self, value: Float) -> Self::Output {
+        let mut result = self;
+        result.load.iter_mut().for_each(|item| {
+            *item = (*item as Float * value).round() as i32;
+        });
+        result
+    }
+}
+
+impl Sum for ConfigurableLoad {
+    fn sum<I: Iterator<Item = ConfigurableLoad>>(iter: I) -> Self {
+        iter.fold(ConfigurableLoad::default(), |acc, item| item + acc)
+    }
+}
+
+impl Display for ConfigurableLoad {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.load)
+    }
+}

@@ -6,6 +6,7 @@ extern crate serde_json;
 
 use crate::format::{FormatError, Location, MultiFormatError};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Error, Read, Write};
 use vrp_core::prelude::Float;
 // region Plan
@@ -98,15 +99,22 @@ pub struct JobPlace {
 }
 
 /// Specifies a job task.
-#[derive(Clone, Deserialize, Debug, Serialize)]
+#[derive(Clone, Deserialize, Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct JobTask {
     /// A list of possible places where given task can be performed.
+    #[serde(default)]
     pub places: Vec<JobPlace>,
-    /// Job place demand.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Job place demand as positional array (mutually exclusive with namedDemand).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub demand: Option<Vec<i32>>,
+    /// Job place demand using named dimensions (mutually exclusive with demand).
+    /// Requires capacityDimensions to be defined on the fleet.
+    /// Example: {"wheelchair": 1, "seated": 0}
+    #[serde(skip_serializing_if = "Option::is_none", default, rename = "namedDemand")]
+    pub named_demand: Option<HashMap<String, i32>>,
     /// An order, bigger value - later assignment in the route.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub order: Option<i32>,
 }
 
@@ -489,6 +497,17 @@ pub enum VehicleBreak {
     },
 }
 
+/// Represents a single capacity configuration for vehicles with configurable capacity.
+/// Used for scenarios like wheelchair-accessible vehicles where capacity dimensions are dependent.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+pub struct CapacityConfiguration {
+    /// Optional name for this configuration (e.g., "all-seated", "one-wheelchair").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Capacity values for each dimension in this configuration.
+    pub capacities: Vec<i32>,
+}
+
 /// Specifies a vehicle type.
 #[derive(Clone, Deserialize, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -508,8 +527,16 @@ pub struct VehicleType {
     /// Vehicle shifts.
     pub shifts: Vec<VehicleShift>,
 
-    /// Vehicle capacity.
-    pub capacity: Vec<i32>,
+    /// Vehicle capacity (mutually exclusive with capacityConfigurations).
+    /// Use this for independent capacity dimensions (e.g., weight + volume).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub capacity: Option<Vec<i32>>,
+
+    /// Multiple capacity configurations (mutually exclusive with capacity).
+    /// Use this for dependent capacity dimensions where loading one thing reduces
+    /// capacity in another dimension (e.g., wheelchair spaces reduce seated capacity).
+    #[serde(skip_serializing_if = "Option::is_none", default, rename = "capacityConfigurations")]
+    pub capacity_configurations: Option<Vec<CapacityConfiguration>>,
 
     /// Vehicle skills.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -567,6 +594,7 @@ pub enum VehicleResource {
 
 /// Specifies fleet.
 #[derive(Clone, Deserialize, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Fleet {
     /// Vehicle types.
     pub vehicles: Vec<VehicleType>,
@@ -577,6 +605,12 @@ pub struct Fleet {
     /// Specifies vehicle resources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<Vec<VehicleResource>>,
+
+    /// Named capacity dimensions for self-documenting JSON.
+    /// When specified, jobs can use namedDemand with dimension names as keys.
+    /// Example: ["seated", "wheelchair", "stroller"]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "capacityDimensions")]
+    pub capacity_dimensions: Option<Vec<String>>,
 }
 
 // endregion

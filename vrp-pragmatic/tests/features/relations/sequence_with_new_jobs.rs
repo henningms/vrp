@@ -23,7 +23,7 @@ fn can_use_sequence_relation_with_strict_time_windows() {
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 vehicle_ids: vec!["my_vehicle_1".to_string()],
-                capacity: vec![10],
+                capacity: Some(vec![10]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

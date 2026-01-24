@@ -46,6 +46,7 @@ pub(crate) fn generate_plan(
                     } else {
                         get_random_item(demands.as_slice(), &rnd).cloned()
                     },
+                    named_demand: None,
                     order: task.order,
                 })
                 .collect::<Vec<_>>()

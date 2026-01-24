@@ -31,7 +31,8 @@ prop_compose! {
             profile,
             costs,
             shifts,
-            capacity,
+            capacity: Some(capacity),
+            capacity_configurations: None,
             skills,
             limits,
             lifo_required: None,
@@ -132,7 +133,7 @@ prop_compose! {
      vehicles in vehicles_proto,
      profiles in profiles_proto
     ) -> Fleet {
-        Fleet { vehicles, profiles, resources: None }
+        Fleet { vehicles, profiles, resources: None, capacity_dimensions: None }
     }
 }
 

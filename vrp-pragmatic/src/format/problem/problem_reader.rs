@@ -120,12 +120,22 @@ fn to_multi_format_error(error: GenericError) -> MultiFormatError {
 
 fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> ProblemProperties {
     let has_unreachable_locations = matrices.iter().any(|m| m.error_codes.is_some());
-    let has_multi_dimen_capacity = api_problem.fleet.vehicles.iter().any(|t| t.capacity.len() > 1)
-        || api_problem
-            .plan
-            .jobs
-            .iter()
-            .any(|job| job.all_tasks_iter().any(|task| task.demand.as_ref().is_some_and(|d| d.len() > 1)));
+
+    // Check for configurable capacity (mutually exclusive configurations)
+    let has_configurable_capacity = api_problem
+        .fleet
+        .vehicles
+        .iter()
+        .any(|v| v.capacity_configurations.is_some());
+
+    // Check for multi-dimensional capacity (only if not using configurable capacity)
+    let has_multi_dimen_capacity = !has_configurable_capacity
+        && (api_problem.fleet.vehicles.iter().any(|t| t.capacity.as_ref().is_some_and(|c| c.len() > 1))
+            || api_problem
+                .plan
+                .jobs
+                .iter()
+                .any(|job| job.all_tasks_iter().any(|task| task.demand.as_ref().is_some_and(|d| d.len() > 1))));
     let has_skills = api_problem.plan.jobs.iter().any(|job| job.skills.is_some());
     let has_preferences = api_problem.plan.jobs.iter().any(|job| job.preferences.is_some());
 
@@ -164,6 +174,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
 
     ProblemProperties {
         has_multi_dimen_capacity,
+        has_configurable_capacity,
         has_breaks,
         has_skills,
         has_preferences,
