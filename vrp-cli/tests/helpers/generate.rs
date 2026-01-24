@@ -15,6 +15,7 @@ pub fn create_empty_job() -> Job {
         compatibility: None,
         lifo_group: None,
         fixed_order: None,
+        max_ride_duration: None,
     }
 }
 

@@ -63,7 +63,15 @@ pub(super) fn create_goal_context(
     }
 
     if props.has_lifo {
-        features.push(create_lifo_ordering_feature()?)
+        features.push(create_lifo_ordering_feature(LIFO_CONSTRAINT_CODE)?)
+    }
+
+    if props.has_max_ride_duration {
+        features.push(create_max_ride_duration_feature(
+            "max_ride_duration",
+            MAX_RIDE_DURATION_CONSTRAINT_CODE,
+            blocks.transport.clone(),
+        )?)
     }
 
     if !blocks.locks.is_empty() {

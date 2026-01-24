@@ -1,0 +1,96 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "passenger_impossible",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5000, "lng": 13.3800 },
+                "duration": 60,
+                "times": [["2024-01-01T08:00:00Z", "2024-01-01T18:00:00Z"]]
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.6000, "lng": 13.5000 },
+                "duration": 60,
+                "times": [["2024-01-01T08:00:00Z", "2024-01-01T18:00:00Z"]]
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "maxRideDuration": 60
+      },
+      {
+        "id": "passenger_possible",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5100, "lng": 13.4000 },
+                "duration": 60,
+                "times": [["2024-01-01T08:00:00Z", "2024-01-01T18:00:00Z"]]
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5150, "lng": 13.4050 },
+                "duration": 60,
+                "times": [["2024-01-01T08:00:00Z", "2024-01-01T18:00:00Z"]]
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "maxRideDuration": 600
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "vehicle",
+        "vehicleIds": ["vehicle_1"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 20.0,
+          "distance": 0.001,
+          "time": 0.002
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": { "lat": 52.5000, "lng": 13.4000 }
+            },
+            "end": {
+              "latest": "2024-01-01T20:00:00Z",
+              "location": { "lat": 52.5000, "lng": 13.4000 }
+            }
+          }
+        ],
+        "capacity": [4]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  }
+}

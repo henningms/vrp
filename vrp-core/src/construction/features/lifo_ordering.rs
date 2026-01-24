@@ -55,9 +55,6 @@ custom_dimension!(pub VehicleLifoRequired typeof bool);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LifoGroupId(pub usize);
 
-/// Violation code for LIFO constraint violations.
-const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(1100);
-
 /// Creates a LIFO ordering feature as a hard constraint.
 ///
 /// This feature enforces LIFO ordering for jobs marked with LIFO groups on vehicles
@@ -65,12 +62,12 @@ const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(1100);
 ///
 /// # Example
 /// ```ignore
-/// let lifo_feature = create_lifo_ordering_feature()?;
+/// let lifo_feature = create_lifo_ordering_feature(ViolationCode(16))?;
 /// ```
-pub fn create_lifo_ordering_feature() -> Result<Feature, GenericError> {
+pub fn create_lifo_ordering_feature(code: ViolationCode) -> Result<Feature, GenericError> {
     FeatureBuilder::default()
         .with_name("lifo_ordering")
-        .with_constraint(LifoOrderingConstraint { code: LIFO_CONSTRAINT_CODE })
+        .with_constraint(LifoOrderingConstraint { code })
         .build()
 }
 

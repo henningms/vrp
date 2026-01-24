@@ -43,7 +43,7 @@ fn test_vehicle_lifo_not_required_dimension() {
 
 #[test]
 fn test_feature_creation() {
-    let feature = create_lifo_ordering_feature().unwrap();
+    let feature = create_lifo_ordering_feature(LIFO_VIOLATION_CODE).unwrap();
     assert_eq!(feature.name, "lifo_ordering");
 }
 

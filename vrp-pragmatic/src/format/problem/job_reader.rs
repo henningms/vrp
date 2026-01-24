@@ -10,7 +10,7 @@ use std::sync::Arc;
 use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension,
-        JobPreferences as FeatureJobPreferences, JobPreferencesDimension,
+        JobMaxRideDurationDimension, JobPreferences as FeatureJobPreferences, JobPreferencesDimension,
         JobRequestedTimesDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
         LifoGroupDimension, LifoGroupId,
     },
@@ -466,6 +466,11 @@ fn get_single_job(job: &ApiJob, single: Single) -> Job {
 fn get_multi_job(job: &ApiJob, mut singles: Vec<Single>, deliveries_start_index: usize, random: &Arc<dyn Random>) -> Job {
     let mut dimens: Dimensions = Default::default();
     fill_dimens(job, &mut dimens);
+
+    // If this job has a max ride duration, store it in the Multi job dimensions
+    if let Some(max_ride_duration) = job.max_ride_duration {
+        dimens.set_job_max_ride_duration(max_ride_duration);
+    }
 
     // If this job has a LIFO group, we need to assign the LIFO group ID to each Single
     // We use a hash of the lifoGroup string to generate a consistent numeric ID

@@ -168,6 +168,13 @@ pub struct Job {
     /// Useful for companion trips where the sequence pickup1 → pickup2 → delivery1 → delivery2 must be exact.
     #[serde(skip_serializing_if = "Option::is_none", rename = "fixedOrder")]
     pub fixed_order: Option<bool>,
+
+    /// Maximum ride duration in seconds for pickup/delivery jobs.
+    /// This limits the time between when a pickup is completed (departure from pickup)
+    /// and when the corresponding delivery begins (arrival at delivery).
+    /// Only applies to jobs with both pickups and deliveries.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "maxRideDuration")]
+    pub max_ride_duration: Option<Float>,
 }
 
 // region Clustering

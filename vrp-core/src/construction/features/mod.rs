@@ -80,6 +80,9 @@ pub use self::requested_time::{
     JobRequestedTimesDimension, RequestedTimePenalty, RequestedTimes, create_requested_time_feature,
 };
 
+mod ride_duration;
+pub use self::ride_duration::{JobMaxRideDurationDimension, create_max_ride_duration_feature};
+
 mod work_balance;
 pub use self::work_balance::{
     create_activity_balanced_feature, create_distance_balanced_feature, create_duration_balanced_feature,

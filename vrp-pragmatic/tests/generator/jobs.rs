@@ -95,6 +95,7 @@ prop_compose! {
             compatibility,
             lifo_group: None,
             fixed_order: None,
+            max_ride_duration: None,
         }
     }
 }
@@ -144,6 +145,7 @@ prop_compose! {
             compatibility,
             lifo_group: None,
             fixed_order: None,
+            max_ride_duration: None,
         }
     }
 }

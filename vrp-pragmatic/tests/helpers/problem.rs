@@ -28,6 +28,7 @@ pub fn create_job(id: &str) -> Job {
         compatibility: None,
         lifo_group: None,
         fixed_order: None,
+        max_ride_duration: None,
     }
 }
 
