@@ -262,6 +262,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
                 duration,
                 times: Some(vec![vec![times.0, times.1]]),
                 tag: None,
+                requested_time: None,
             }],
             demand: None,
             order: None,

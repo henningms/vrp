@@ -207,6 +207,13 @@ fn get_objective_feature_layer(
         }
         Objective::TourOrder => create_tour_order_soft_feature("tour_order", get_tour_order_fn()),
         Objective::FastService => get_fast_service_feature("fast_service", blocks),
+        Objective::MatchRequestedTime { early_penalty, late_penalty } => {
+            let penalty = RequestedTimePenalty::new(
+                early_penalty.unwrap_or(1.0),
+                late_penalty.unwrap_or(1.0),
+            );
+            create_requested_time_feature("match_requested_time", penalty, blocks.transport.clone())
+        }
         Objective::HierarchicalAreas { levels } => get_hierarchical_areas_feature(blocks, *levels),
         Objective::MultiObjective { objectives, strategy: composition_type } => {
             let features = objectives

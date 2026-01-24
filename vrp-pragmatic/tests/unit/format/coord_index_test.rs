@@ -17,6 +17,7 @@ fn can_use_index_with_coordinate_an_unknown_location_types() {
                             duration: 0.,
                             times: None,
                             tag: None,
+                            requested_time: None,
                         }],
                         demand: None,
                         order: None,

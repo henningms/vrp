@@ -80,6 +80,7 @@ prop_compose! {
           location,
           duration,
           tag,
+          requested_time: None,
         }
     }
 }

@@ -90,6 +90,11 @@ pub struct JobPlace {
     /// You can use it to identify used place in solution.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    /// The requested/preferred arrival time in RFC3339 format.
+    /// When used with MatchRequestedTime objective, the solver will try to minimize
+    /// deviation from this time rather than just arriving within the time window.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requestedTime")]
+    pub requested_time: Option<String>,
 }
 
 /// Specifies a job task.
@@ -631,6 +636,20 @@ pub enum Objective {
 
     /// An objective to prefer jobs to be served as soon as possible.
     FastService,
+
+    /// An objective to minimize deviation from requested arrival times.
+    /// Jobs with requestedTime specified on their places will be penalized
+    /// based on how far the actual arrival deviates from the requested time.
+    MatchRequestedTime {
+        /// Penalty per minute for arriving early (before requested time).
+        /// Default is 1.0.
+        #[serde(skip_serializing_if = "Option::is_none", rename = "earlyPenalty")]
+        early_penalty: Option<Float>,
+        /// Penalty per minute for arriving late (after requested time).
+        /// Default is 1.0.
+        #[serde(skip_serializing_if = "Option::is_none", rename = "latePenalty")]
+        late_penalty: Option<Float>,
+    },
 
     /// An objective to consider hierarchy of areas while serving jobs.
     HierarchicalAreas {

@@ -3,14 +3,16 @@ use crate::format::problem::JobSkills as ApiJobSkills;
 use crate::format::problem::JobPreferences as ApiJobPreferences;
 use crate::format::problem::*;
 use crate::format::{JobIndex, Location};
+use crate::parse_time;
 use crate::utils::VariableJobPermutation;
 use std::collections::HashMap;
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension,
-        JobPreferences as FeatureJobPreferences, JobPreferencesDimension, JobSkills as FeatureJobSkills,
-        JobSkillsDimension, LifoGroupDimension, LifoGroupId,
+        JobPreferences as FeatureJobPreferences, JobPreferencesDimension,
+        JobRequestedTimesDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
+        LifoGroupDimension, LifoGroupId,
     },
     models::common::*,
     models::problem::{
@@ -22,7 +24,7 @@ use vrp_core::{
 // TODO configure sample size
 const MULTI_JOB_SAMPLE_SIZE: usize = 3;
 
-type PlaceData = (Option<Location>, Duration, Vec<TimeSpan>, Option<String>);
+type PlaceData = (Option<Location>, Duration, Vec<TimeSpan>, Option<String>, Option<Timestamp>);
 type ApiJob = crate::format::problem::Job;
 
 pub(super) fn read_jobs_with_extra_locks(
@@ -133,7 +135,10 @@ fn read_required_jobs(
         let places = task
             .places
             .iter()
-            .map(|p| (Some(p.location.clone()), p.duration, parse_times(&p.times), p.tag.clone()))
+            .map(|p| {
+                let requested_time = p.requested_time.as_ref().map(|t| parse_time(t));
+                (Some(p.location.clone()), p.duration, parse_times(&p.times), p.tag.clone(), requested_time)
+            })
             .collect();
 
         get_single_with_dimens(places, demand, &task.order, activity_type, has_multi_dimens, coord_index)
@@ -235,7 +240,7 @@ fn read_optional_breaks(
                     let job_id = format!("{vehicle_id}_break_{shift_index}_{break_idx}");
                     let places = break_places
                         .iter()
-                        .map(|place| (place.location.clone(), place.duration, times.clone(), place.tag.clone()))
+                        .map(|place| (place.location.clone(), place.duration, times.clone(), place.tag.clone(), None))
                         .collect();
 
                     let mut job =
@@ -277,6 +282,7 @@ fn read_reloads(
             duration: reload.duration,
             times: reload.times.clone(),
             tag: reload.tag.clone(),
+            requested_time: None,
         }),
     )
 }
@@ -319,13 +325,14 @@ fn read_specific_job_places(
                     let job_id = format!("{vehicle_id}_{job_type}_{shift_index}_{place_idx}");
                     let times = parse_times(&place.times);
 
+                    let requested_time = place.requested_time.as_ref().map(|t| parse_time(t));
                     let job = get_conditional_job(
                         coord_index,
                         vehicle_id.clone(),
                         &job_id,
                         job_type,
                         shift_index,
-                        vec![(Some(place.location.clone()), place.duration, times, place.tag.clone())],
+                        vec![(Some(place.location.clone()), place.duration, times, place.tag.clone(), requested_time)],
                     );
 
                     (job_id, job)
@@ -363,14 +370,23 @@ fn add_conditional_job(job_index: &mut JobIndex, jobs: &mut Vec<Job>, job_id: St
 fn get_single(places: Vec<PlaceData>, coord_index: &CoordIndex) -> Single {
     let tags = places
         .iter()
-        .map(|(_, _, _, tag)| tag)
+        .map(|(_, _, _, tag, _)| tag)
         .enumerate()
         .filter_map(|(idx, tag)| tag.as_ref().map(|tag| (idx, tag.clone())))
         .collect::<Vec<_>>();
 
+    // Collect requested times for each place index
+    let requested_times: HashMap<usize, Timestamp> = places
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, (_, _, _, _, requested_time))| {
+            requested_time.map(|t| (idx, t))
+        })
+        .collect();
+
     let places = places
         .into_iter()
-        .map(|(location, duration, times, _)| Place {
+        .map(|(location, duration, times, _, _)| Place {
             location: location.as_ref().and_then(|l| coord_index.get_by_loc(l)),
             duration,
             times,
@@ -380,6 +396,10 @@ fn get_single(places: Vec<PlaceData>, coord_index: &CoordIndex) -> Single {
     let mut dimens = Dimensions::default();
 
     dimens.set_place_tags(tags);
+
+    if !requested_times.is_empty() {
+        dimens.set_job_requested_times(requested_times);
+    }
 
     Single { places, dimens }
 }

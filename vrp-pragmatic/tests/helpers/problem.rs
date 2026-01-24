@@ -7,7 +7,7 @@ use vrp_core::models::common::Duration;
 use vrp_core::prelude::Float;
 
 pub fn create_job_place(location: (f64, f64), tag: Option<String>) -> JobPlace {
-    JobPlace { times: None, location: location.to_loc(), duration: 1., tag }
+    JobPlace { times: None, location: location.to_loc(), duration: 1., tag, requested_time: None }
 }
 
 pub fn create_task(location: (f64, f64), tag: Option<String>) -> JobTask {
@@ -166,7 +166,13 @@ pub fn create_pickup_delivery_job_with_params(
 pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
     Job {
         deliveries: Some(vec![JobTask {
-            places: vec![JobPlace { times: None, location: Location::Reference { index }, duration: 1., tag: None }],
+            places: vec![JobPlace {
+                times: None,
+                location: Location::Reference { index },
+                duration: 1.,
+                tag: None,
+                requested_time: None,
+            }],
             demand: Some(vec![1]),
             order: None,
         }]),

@@ -143,7 +143,13 @@ fn can_follow_order_when_prioritized_property_set() {
 fn can_handle_order_between_special_activities() {
     let create_test_job = |id: &str, location: (f64, f64), order: i32| Job {
         deliveries: Some(vec![JobTask {
-            places: vec![JobPlace { times: None, location: location.to_loc(), duration: 100., tag: None }],
+            places: vec![JobPlace {
+                times: None,
+                location: location.to_loc(),
+                duration: 100.,
+                tag: None,
+                requested_time: None,
+            }],
             demand: Some(vec![1]),
             order: Some(order),
         }]),

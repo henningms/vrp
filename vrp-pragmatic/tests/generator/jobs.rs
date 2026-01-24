@@ -176,7 +176,7 @@ prop_compose! {
      times in time_windows,
      tag in tags
     ) -> JobPlace {
-      JobPlace { times, location, duration, tag }
+      JobPlace { times, location, duration, tag, requested_time: None }
     }
 }
 

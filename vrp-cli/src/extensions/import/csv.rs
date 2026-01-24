@@ -71,6 +71,7 @@ mod actual {
                 duration: job.duration as Float,
                 times: parse_tw(job.tw_start.clone(), job.tw_end.clone()).map(|tw| vec![tw]),
                 tag: None,
+                requested_time: None,
             }],
             demand: if job.demand != 0 { Some(vec![job.demand.abs()]) } else { None },
             order: None,

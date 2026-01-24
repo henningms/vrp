@@ -19,6 +19,7 @@ fn can_use_recharge_trivial_case() {
                             duration: 0.0,
                             times: None,
                             tag: None,
+                            requested_time: None,
                         }],
                     }),
                     ..create_default_vehicle_shift_with_locations((0., 0.), (100., 0.))
@@ -66,6 +67,7 @@ fn can_still_skip_jobs_with_recharge() {
                             duration: 900.,
                             times: None,
                             tag: None,
+                            requested_time: None,
                         }],
                     }),
                     ..create_default_vehicle_shift_with_locations((52.5189, 13.4011), (52.5189, 13.4011))
@@ -100,6 +102,7 @@ fn can_use_recharge_with_ten_jobs() {
                             duration: 0.0,
                             times: None,
                             tag: None,
+                            requested_time: None,
                         }],
                     }),
                     ..create_default_open_vehicle_shift()
