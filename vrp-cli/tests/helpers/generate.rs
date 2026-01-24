@@ -13,6 +13,8 @@ pub fn create_empty_job() -> Job {
         value: None,
         group: None,
         compatibility: None,
+        lifo_group: None,
+        fixed_order: None,
     }
 }
 
@@ -48,6 +50,7 @@ pub fn create_test_vehicle_type() -> VehicleType {
         capacity: vec![10],
         skills: None,
         limits: None,
+        lifo_required: None,
     }
 }
 

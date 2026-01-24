@@ -34,6 +34,7 @@ prop_compose! {
             capacity,
             skills,
             limits,
+            lifo_required: None,
         }
     }
 }

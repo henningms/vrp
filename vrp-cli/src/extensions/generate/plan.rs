@@ -71,6 +71,7 @@ pub(crate) fn generate_plan(
                 group: job_proto.group.clone(),
                 compatibility: job_proto.compatibility.clone(),
                 lifo_group: job_proto.lifo_group.clone(),
+                fixed_order: job_proto.fixed_order,
             }
         })
         .collect();

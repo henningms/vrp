@@ -465,7 +465,12 @@ fn get_multi_job(job: &ApiJob, mut singles: Vec<Single>, deliveries_start_index:
 
     let singles = singles.into_iter().map(Arc::new).collect::<Vec<_>>();
 
-    let multi = if singles.len() == 2 && deliveries_start_index == 1 {
+    // Use fixed order permutation if:
+    // 1. fixedOrder is explicitly set to true, OR
+    // 2. It's a simple 2-job case (1 pickup + 1 delivery) - existing behavior
+    let use_fixed_order = job.fixed_order.unwrap_or(false) || (singles.len() == 2 && deliveries_start_index == 1);
+
+    let multi = if use_fixed_order {
         Multi::new_shared(singles, dimens)
     } else {
         let jobs_len = singles.len();

@@ -157,6 +157,12 @@ pub struct Job {
     /// require that the last passenger picked up is delivered first.
     #[serde(skip_serializing_if = "Option::is_none", rename = "lifoGroup")]
     pub lifo_group: Option<String>,
+
+    /// When true, enforces that pickups and deliveries must occur in the exact order specified.
+    /// Without this, the solver may reorder pickups among themselves and deliveries among themselves.
+    /// Useful for companion trips where the sequence pickup1 → pickup2 → delivery1 → delivery2 must be exact.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "fixedOrder")]
+    pub fixed_order: Option<bool>,
 }
 
 // region Clustering

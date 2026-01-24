@@ -26,6 +26,8 @@ pub fn create_job(id: &str) -> Job {
         value: None,
         group: None,
         compatibility: None,
+        lifo_group: None,
+        fixed_order: None,
     }
 }
 
@@ -255,6 +257,7 @@ pub fn create_vehicle_with_capacity(id: &str, capacity: Vec<i32>) -> VehicleType
         capacity,
         skills: None,
         limits: None,
+        lifo_required: None,
     }
 }
 

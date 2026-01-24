@@ -100,6 +100,7 @@ mod actual {
                 group: None,
                 compatibility: None,
                 lifo_group: None,
+                fixed_order: None,
             })
             .collect();
 

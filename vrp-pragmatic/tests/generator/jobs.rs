@@ -92,7 +92,9 @@ prop_compose! {
             preferences: None,
             value,
             group,
-            compatibility
+            compatibility,
+            lifo_group: None,
+            fixed_order: None,
         }
     }
 }
@@ -140,6 +142,8 @@ prop_compose! {
             value,
             group,
             compatibility,
+            lifo_group: None,
+            fixed_order: None,
         }
     }
 }

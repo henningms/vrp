@@ -1,0 +1,161 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "companion_trip_1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5200, "lng": 13.4050 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "companion_pickup"
+          },
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5210, "lng": 13.4100 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "rider_pickup"
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5270, "lng": 13.4000 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "rider_delivery"
+          },
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5280, "lng": 13.3950 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "companion_delivery"
+          }
+        ],
+        "fixedOrder": true
+      },
+      {
+        "id": "companion_trip_2",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5150, "lng": 13.3900 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "companion_pickup"
+          },
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5160, "lng": 13.3920 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "rider_pickup"
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5310, "lng": 13.4180 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "rider_delivery"
+          },
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5300, "lng": 13.4150 },
+                "duration": 180.0
+              }
+            ],
+            "demand": [1],
+            "tag": "companion_delivery"
+          }
+        ],
+        "fixedOrder": true
+      },
+      {
+        "id": "regular_trip",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5180, "lng": 13.4000 },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 52.5250, "lng": 13.4200 },
+                "duration": 120.0
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "vehicle",
+        "vehicleIds": ["vehicle_1", "vehicle_2"],
+        "profile": {
+          "matrix": "normal_car"
+        },
+        "costs": {
+          "fixed": 25.0,
+          "distance": 0.0002,
+          "time": 0.005
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": { "lat": 52.5200, "lng": 13.4050 }
+            },
+            "end": {
+              "latest": "2024-01-01T18:00:00Z",
+              "location": { "lat": 52.5200, "lng": 13.4050 }
+            }
+          }
+        ],
+        "capacity": [5]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "normal_car"
+      }
+    ]
+  }
+}
