@@ -13,7 +13,7 @@ fn can_schedule_pickup_at_tour_end() {
             ..create_empty_plan()
         },
         fleet: Fleet {
-            vehicles: vec![VehicleType { capacity: vec![2], ..create_default_vehicle_type() }],
+            vehicles: vec![VehicleType { capacity: Some(vec![2]), ..create_default_vehicle_type() }],
             ..create_default_fleet()
         },
         ..create_empty_problem()

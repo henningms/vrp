@@ -55,7 +55,7 @@ fn can_consume_limited_resource_with_single_vehicle_impl(
                     ),
                     ..create_default_vehicle_shift()
                 }],
-                capacity: vec![vehicle_capacity],
+                capacity: Some(vec![vehicle_capacity]),
                 ..create_default_vehicle_type()
             }],
             resources: Some(vec![VehicleResource::Reload {
@@ -115,7 +115,7 @@ fn can_consume_limited_resource_with_two_vehicles_impl(
                         }]),
                         ..create_default_vehicle_shift()
                     }],
-                    capacity: vec![capacity],
+                    capacity: Some(vec![capacity]),
                     ..create_default_vehicle_type()
                 })
                 .collect(),

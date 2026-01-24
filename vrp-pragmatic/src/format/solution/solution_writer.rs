@@ -406,6 +406,16 @@ fn get_capacity(dimens: &Dimensions) -> Option<Demand<MultiDimLoad>> {
         return Some(demand);
     }
 
+    // Try to get ConfigurableLoad demand and convert to MultiDimLoad
+    let demand: Option<&Demand<ConfigurableLoad>> = dimens.get_job_demand();
+    if let Some(demand) = demand {
+        let convert = |load: ConfigurableLoad| MultiDimLoad::new(load.as_vec());
+        return Some(Demand {
+            pickup: (convert(demand.pickup.0), convert(demand.pickup.1)),
+            delivery: (convert(demand.delivery.0), convert(demand.delivery.1)),
+        });
+    }
+
     let create_capacity = |capacity: SingleDimLoad| {
         if capacity.value == 0 { MultiDimLoad::default() } else { MultiDimLoad::new(vec![capacity.value]) }
     };

@@ -74,6 +74,7 @@ mod actual {
                 requested_time: None,
             }],
             demand: if job.demand != 0 { Some(vec![job.demand.abs()]) } else { None },
+            named_demand: None,
             order: None,
         };
 
@@ -131,7 +132,8 @@ mod actual {
                         reloads: None,
                         recharges: None,
                     }],
-                    capacity: vec![vehicle.capacity],
+                    capacity: Some(vec![vehicle.capacity]),
+                    capacity_configurations: None,
                     skills: None,
                     limits: None,
                     lifo_required: None,
@@ -166,6 +168,7 @@ mod actual {
                 vehicles,
                 profiles: matrix_profile_names.into_iter().map(|name| MatrixProfile { name, speed: None }).collect(),
                 resources: None,
+                capacity_dimensions: None,
             },
             objectives: None,
         })

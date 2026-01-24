@@ -98,6 +98,7 @@ impl PragmaticProblem for (ApiProblem, Option<Vec<Matrix>>) {
 /// Keeps track of problem properties (e.g. features).
 struct ProblemProperties {
     has_multi_dimen_capacity: bool,
+    has_configurable_capacity: bool,
     has_breaks: bool,
     has_skills: bool,
     has_preferences: bool,
@@ -123,6 +124,42 @@ struct ProblemBlocks {
     activity: Arc<dyn ActivityCost>,
     locks: Vec<Arc<Lock>>,
     reserved_times_index: ReservedTimesIndex,
+}
+
+/// Mapping between dimension names and their indices.
+/// Used when capacityDimensions is defined on the fleet.
+#[derive(Clone, Debug)]
+pub struct CapacityDimensionMapping {
+    name_to_index: std::collections::HashMap<String, usize>,
+    names: Vec<String>,
+}
+
+impl CapacityDimensionMapping {
+    /// Creates a mapping from a list of dimension names.
+    pub fn from_names(names: &[String]) -> Self {
+        let name_to_index = names
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| (name.clone(), idx))
+            .collect();
+        Self { name_to_index, names: names.to_vec() }
+    }
+
+    /// Resolves named demand to a positional demand vector.
+    pub fn resolve_demand(&self, named: &std::collections::HashMap<String, i32>) -> Vec<i32> {
+        let mut result = vec![0; self.names.len()];
+        for (name, &value) in named {
+            if let Some(&idx) = self.name_to_index.get(name) {
+                result[idx] = value;
+            }
+        }
+        result
+    }
+
+    /// Returns the dimension names.
+    pub fn names(&self) -> &[String] {
+        &self.names
+    }
 }
 
 fn parse_time_window(tw: &[String]) -> TimeWindow {

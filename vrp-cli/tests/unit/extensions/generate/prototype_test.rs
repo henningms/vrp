@@ -18,6 +18,7 @@ fn can_generate_jobs_with_time_windows() {
             vehicles: vec![create_test_vehicle_type()],
             profiles: vec![create_test_vehicle_profile()],
             resources: None,
+            capacity_dimensions: None,
         },
         objectives: None,
     };

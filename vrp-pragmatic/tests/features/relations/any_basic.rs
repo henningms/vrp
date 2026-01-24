@@ -16,7 +16,7 @@ fn can_skip_constraints_check() {
             ..create_empty_plan()
         },
         fleet: Fleet {
-            vehicles: vec![VehicleType { capacity: vec![1], ..create_default_vehicle_type() }],
+            vehicles: vec![VehicleType { capacity: Some(vec![1]), ..create_default_vehicle_type() }],
             ..create_default_fleet()
         },
         ..create_empty_problem()

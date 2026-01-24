@@ -87,7 +87,7 @@ fn can_check_breaks_impl(
                     reloads: None,
                     recharges: None,
                 }],
-                capacity: vec![5],
+                capacity: Some(vec![5]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

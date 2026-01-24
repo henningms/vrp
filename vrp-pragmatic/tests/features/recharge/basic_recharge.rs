@@ -111,6 +111,7 @@ fn can_use_recharge_with_ten_jobs() {
             }],
             profiles: create_default_matrix_profiles(),
             resources: None,
+            capacity_dimensions: None,
         },
         ..create_empty_problem()
     };

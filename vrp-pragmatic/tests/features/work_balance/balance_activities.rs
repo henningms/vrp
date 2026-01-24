@@ -29,14 +29,14 @@ fn can_balance_activities() {
                 VehicleType {
                     vehicle_ids: vec!["my_vehicle1".to_string()],
                     shifts: vec![create_default_open_vehicle_shift()],
-                    capacity: vec![4],
+                    capacity: Some(vec![4]),
                     ..create_default_vehicle_type()
                 },
                 VehicleType {
                     type_id: "my_vehicle2".to_string(),
                     vehicle_ids: vec!["my_vehicle2".to_string()],
                     shifts: vec![create_default_vehicle_shift_with_locations((3., 0.), (3., 0.))],
-                    capacity: vec![4],
+                    capacity: Some(vec![4]),
                     ..create_default_vehicle_type()
                 },
             ],

@@ -32,7 +32,7 @@ fn can_serve_multi_job_and_delivery_with_reload() {
                     }]),
                     recharges: None,
                 }],
-                capacity: vec![2],
+                capacity: Some(vec![2]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()
@@ -82,7 +82,7 @@ fn can_properly_handle_load_without_capacity_violation() {
                     ]),
                     ..create_default_vehicle_shift()
                 }],
-                capacity: vec![2],
+                capacity: Some(vec![2]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

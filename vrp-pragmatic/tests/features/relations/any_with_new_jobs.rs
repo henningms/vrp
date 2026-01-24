@@ -21,7 +21,7 @@ fn create_and_solve_problem_with_three_jobs(any_relation_jobs: Vec<String>) -> S
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 shifts: vec![create_default_open_vehicle_shift()],
-                capacity: vec![3],
+                capacity: Some(vec![3]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

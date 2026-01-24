@@ -16,6 +16,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
             requested_time: None,
         }],
         demand: Some(vec![1]),
+named_demand: None,
         order: None,
     };
 

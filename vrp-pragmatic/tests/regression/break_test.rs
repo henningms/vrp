@@ -25,6 +25,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![1]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job1")
@@ -42,6 +43,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![1]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job2")
@@ -59,6 +61,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![1]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job3")
@@ -76,6 +79,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![2]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job4")
@@ -93,6 +97,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![3]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job5")
@@ -110,6 +115,7 @@ fn can_handle_properly_invalid_break_removal() {
                                 requested_time: None,
                             }],
                             demand: Some(vec![1]),
+named_demand: None,
                             order: None,
                         }]),
                         ..create_job("job6")
@@ -145,7 +151,8 @@ fn can_handle_properly_invalid_break_removal() {
                         reloads: None,
                         recharges: None,
                     }],
-                    capacity: vec![5],
+                    capacity: Some(vec![5]),
+                    capacity_configurations: None,
                     skills: None,
                     limits: None,
                     lifo_required: None,

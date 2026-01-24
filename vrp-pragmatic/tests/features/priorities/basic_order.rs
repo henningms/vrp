@@ -151,6 +151,7 @@ fn can_handle_order_between_special_activities() {
                 requested_time: None,
             }],
             demand: Some(vec![1]),
+named_demand: None,
             order: Some(order),
         }]),
         ..create_job(id)

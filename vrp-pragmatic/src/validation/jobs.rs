@@ -19,6 +19,9 @@ fn check_e1100_no_jobs_with_duplicate_ids(ctx: &ValidationContext) -> Result<(),
 
 /// Checks that jobs have proper demand.
 fn check_e1101_correct_job_types_demand(ctx: &ValidationContext) -> Result<(), FormatError> {
+    // A task has valid demand if it has either `demand` or `named_demand` set
+    let task_has_demand = |task: &JobTask| task.demand.is_some() || task.named_demand.is_some();
+
     let ids = ctx
         .jobs()
         .filter(|job| {
@@ -27,7 +30,7 @@ fn check_e1101_correct_job_types_demand(ctx: &ValidationContext) -> Result<(), F
                 .chain(job.deliveries.iter())
                 .chain(job.replacements.iter())
                 .flat_map(|tasks| tasks.iter())
-                .any(|task| task.demand.is_none())
+                .any(|task| !task_has_demand(task))
                 || job.services.iter().flat_map(|tasks| tasks.iter()).any(|task| task.demand.is_some())
         })
         .map(|job| job.id.clone())
@@ -47,9 +50,34 @@ fn check_e1101_correct_job_types_demand(ctx: &ValidationContext) -> Result<(), F
 /// Checks that sum of pickup/delivery demand should be equal.
 fn check_e1102_multiple_pickups_deliveries_demand(ctx: &ValidationContext) -> Result<(), FormatError> {
     let has_tasks = |tasks: &Option<Vec<JobTask>>| tasks.as_ref().is_some_and(|tasks| !tasks.is_empty());
-    let get_demand = |tasks: &Option<Vec<JobTask>>| {
+
+    // Get capacity dimension names for resolving named demand
+    let dimension_names = ctx.problem.fleet.capacity_dimensions.as_ref();
+
+    let get_task_demand = |task: &JobTask| -> MultiDimLoad {
+        if let Some(demand) = &task.demand {
+            MultiDimLoad::new(demand.clone())
+        } else if let Some(named_demand) = &task.named_demand {
+            if let Some(names) = dimension_names {
+                // Resolve named demand to positional vector
+                let mut values = vec![0; names.len()];
+                for (name, &value) in named_demand {
+                    if let Some(idx) = names.iter().position(|n| n == name) {
+                        values[idx] = value;
+                    }
+                }
+                MultiDimLoad::new(values)
+            } else {
+                MultiDimLoad::default()
+            }
+        } else {
+            MultiDimLoad::default()
+        }
+    };
+
+    let get_demand = |tasks: &Option<Vec<JobTask>>| -> MultiDimLoad {
         if let Some(tasks) = tasks {
-            tasks.iter().map(|task| task.demand.clone().map_or_else(MultiDimLoad::default, MultiDimLoad::new)).sum()
+            tasks.iter().map(get_task_demand).sum()
         } else {
             MultiDimLoad::default()
         }
@@ -179,6 +207,78 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
     }
 }
 
+/// Checks that demand and namedDemand are mutually exclusive.
+fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let ids: Vec<String> = ctx
+        .jobs()
+        .filter(|job| {
+            ctx.tasks(job).iter().any(|task| task.demand.is_some() && task.named_demand.is_some())
+        })
+        .map(|job| job.id.clone())
+        .collect();
+
+    if ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E1108".to_string(),
+            "demand and namedDemand are mutually exclusive".to_string(),
+            format!("remove either demand or namedDemand for jobs: '{}'", ids.join(", ")),
+        ))
+    }
+}
+
+/// Checks that namedDemand keys exist in capacityDimensions.
+fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let dimension_names: std::collections::HashSet<_> = ctx
+        .problem
+        .fleet
+        .capacity_dimensions
+        .as_ref()
+        .map(|names| names.iter().cloned().collect())
+        .unwrap_or_default();
+
+    // Check if any job uses namedDemand without capacityDimensions defined
+    if dimension_names.is_empty() {
+        let ids: Vec<String> = ctx
+            .jobs()
+            .filter(|job| ctx.tasks(job).iter().any(|task| task.named_demand.is_some()))
+            .map(|job| job.id.clone())
+            .collect();
+
+        if !ids.is_empty() {
+            return Err(FormatError::new(
+                "E1109".to_string(),
+                "namedDemand used without capacityDimensions".to_string(),
+                format!("define capacityDimensions on fleet or use positional demand for jobs: '{}'", ids.join(", ")),
+            ));
+        }
+    } else {
+        // Check that all named keys exist in capacityDimensions
+        let ids: Vec<String> = ctx
+            .jobs()
+            .filter(|job| {
+                ctx.tasks(job).iter().any(|task| {
+                    task.named_demand.as_ref().is_some_and(|named| {
+                        named.keys().any(|key| !dimension_names.contains(key))
+                    })
+                })
+            })
+            .map(|job| job.id.clone())
+            .collect();
+
+        if !ids.is_empty() {
+            return Err(FormatError::new(
+                "E1109".to_string(),
+                "namedDemand contains unknown dimension names".to_string(),
+                format!("use dimension names from capacityDimensions for jobs: '{}'", ids.join(", ")),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Validates jobs from the plan.
 pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -190,6 +290,8 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1105_empty_jobs(ctx),
         check_e1106_negative_duration(ctx),
         check_e1107_negative_demand(ctx),
+        check_e1108_demand_named_demand_mutual_exclusion(ctx),
+        check_e1109_named_demand_dimensions_exist(ctx),
     ])
     .map_err(From::from)
 }

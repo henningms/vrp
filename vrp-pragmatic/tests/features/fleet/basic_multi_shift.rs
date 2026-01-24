@@ -26,7 +26,7 @@ fn can_use_multiple_times_from_vehicle_and_job() {
                         ..create_default_vehicle_shift()
                     },
                 ],
-                capacity: vec![1],
+                capacity: Some(vec![1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()
@@ -119,7 +119,7 @@ fn can_prefer_first_days_with_minimize_arrival_time_objective() {
                         ..create_default_vehicle_shift()
                     })
                     .collect(),
-                capacity: vec![1],
+                capacity: Some(vec![1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

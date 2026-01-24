@@ -265,6 +265,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
                 requested_time: None,
             }],
             demand: None,
+            named_demand: None,
             order: None,
         }]),
         ..create_job(index.to_string().as_str())

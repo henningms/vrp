@@ -20,6 +20,7 @@ fn can_use_index_with_coordinate_an_unknown_location_types() {
                             requested_time: None,
                         }],
                         demand: None,
+                        named_demand: None,
                         order: None,
                     }]),
                     ..create_job("job3")

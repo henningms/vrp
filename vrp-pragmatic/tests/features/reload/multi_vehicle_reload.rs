@@ -22,7 +22,7 @@ fn can_use_one_vehicle_with_reload_instead_of_two() {
                     }]),
                     ..create_default_vehicle_shift()
                 }],
-                capacity: vec![1],
+                capacity: Some(vec![1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

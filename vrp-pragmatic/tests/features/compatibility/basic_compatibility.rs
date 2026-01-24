@@ -20,14 +20,14 @@ fn can_separate_jobs_based_on_compatibility() {
                     type_id: "type1".to_string(),
                     vehicle_ids: vec!["type1_1".to_string()],
                     shifts: vec![create_default_vehicle_shift_with_locations((0., 0.), (0., 0.))],
-                    capacity: vec![2],
+                    capacity: Some(vec![2]),
                     ..create_default_vehicle_type()
                 },
                 VehicleType {
                     type_id: "type2".to_string(),
                     vehicle_ids: vec!["type2_1".to_string()],
                     shifts: vec![create_default_vehicle_shift_with_locations((10., 0.), (10., 0.))],
-                    capacity: vec![2],
+                    capacity: Some(vec![2]),
                     ..create_default_vehicle_type()
                 },
             ],
@@ -58,7 +58,7 @@ fn can_unassign_job_due_to_compatibility() {
             ..create_empty_plan()
         },
         fleet: Fleet {
-            vehicles: vec![VehicleType { capacity: vec![2], ..create_default_vehicle_type() }],
+            vehicles: vec![VehicleType { capacity: Some(vec![2]), ..create_default_vehicle_type() }],
             ..create_default_fleet()
         },
         ..create_empty_problem()

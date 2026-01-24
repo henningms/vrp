@@ -3,6 +3,7 @@
 mod capacity_test;
 
 use super::*;
+use crate::format::problem::VehicleType;
 use crate::utils::combine_error_results;
 use std::iter::once;
 use vrp_core::models::common::{Load, MultiDimLoad};
@@ -17,8 +18,14 @@ pub fn check_vehicle_load(context: &CheckerContext) -> Result<(), Vec<GenericErr
 
 fn check_vehicle_load_assignment(context: &CheckerContext) -> GenericResult<()> {
     context.solution.tours.iter().try_for_each::<_, GenericResult<_>>(|tour| {
-        let capacity = MultiDimLoad::new(context.get_vehicle(&tour.vehicle_id)?.capacity.clone());
+        let vehicle = context.get_vehicle(&tour.vehicle_id)?;
+        let capacities = get_vehicle_capacities(vehicle)?;
         let intervals = get_intervals(context, tour);
+
+        // Helper to check if load fits any of the capacity configurations
+        let load_fits = |load: &MultiDimLoad| {
+            capacities.iter().any(|cap| cap.can_fit(load))
+        };
 
         intervals
             .iter()
@@ -43,7 +50,7 @@ fn check_vehicle_load_assignment(context: &CheckerContext) -> GenericResult<()> 
                         let from_load = MultiDimLoad::new(from.load().clone());
                         let to_load = MultiDimLoad::new(to.load().clone());
 
-                        if !capacity.can_fit(&from_load) || !capacity.can_fit(&to_load) {
+                        if !load_fits(&from_load) || !load_fits(&to_load) {
                             return Err(format!("load exceeds capacity in tour '{}'", tour.vehicle_id).into());
                         }
 
@@ -170,13 +177,35 @@ fn get_demand(
     activity: &Activity,
     activity_type: &ActivityType,
 ) -> GenericResult<(DemandType, MultiDimLoad)> {
+    // Get capacity dimension mapping if available
+    let dimension_mapping = context.problem.fleet.capacity_dimensions.as_ref();
+
     let (is_dynamic, demand) = context.visit_job(
         activity,
         activity_type,
         |job, task| {
             let is_dynamic = job.pickups.as_ref().is_some_and(|p| !p.is_empty())
                 && job.deliveries.as_ref().is_some_and(|p| !p.is_empty());
-            let demand = task.demand.clone().map_or_else(MultiDimLoad::default, MultiDimLoad::new);
+
+            // Handle both demand and named_demand
+            let demand = if let Some(demand) = &task.demand {
+                MultiDimLoad::new(demand.clone())
+            } else if let Some(named_demand) = &task.named_demand {
+                if let Some(names) = dimension_mapping {
+                    // Resolve named demand to positional vector
+                    let mut values = vec![0; names.len()];
+                    for (name, &value) in named_demand {
+                        if let Some(idx) = names.iter().position(|n| n == name) {
+                            values[idx] = value;
+                        }
+                    }
+                    MultiDimLoad::new(values)
+                } else {
+                    MultiDimLoad::default()
+                }
+            } else {
+                MultiDimLoad::default()
+            };
 
             (is_dynamic, demand)
         },
@@ -249,4 +278,24 @@ fn get_activities_from_interval<'a>(
 
 fn is_reload_stop(context: &CheckerContext, stop: &Stop) -> bool {
     context.get_stop_activity_types(stop).first().is_some_and(|a| a == "reload")
+}
+
+/// Returns all capacity configurations for a vehicle.
+/// For vehicles with simple `capacity`, returns a single-element vector.
+/// For vehicles with `capacity_configurations`, returns all configurations.
+fn get_vehicle_capacities(vehicle: &VehicleType) -> GenericResult<Vec<MultiDimLoad>> {
+    // Try to get capacity from the simple capacity field first
+    if let Some(capacity) = &vehicle.capacity {
+        return Ok(vec![MultiDimLoad::new(capacity.clone())]);
+    }
+
+    // Otherwise, get all capacity configurations
+    if let Some(configs) = &vehicle.capacity_configurations {
+        if configs.is_empty() {
+            return Err("vehicle has empty capacity configurations".into());
+        }
+        return Ok(configs.iter().map(|c| MultiDimLoad::new(c.capacities.clone())).collect());
+    }
+
+    Err("vehicle has no capacity defined".into())
 }
