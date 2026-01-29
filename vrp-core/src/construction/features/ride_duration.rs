@@ -121,21 +121,18 @@ impl MaxRideDurationConstraint {
 
         // Look for the corresponding delivery in the tour (after insertion point)
         for idx in activity_ctx.index..tour.total() {
-            if let Some(activity) = tour.get(idx) {
-                if let Some(delivery_single) = activity.job.as_ref() {
-                    if self.is_same_job(pickup_single, delivery_single) && self.is_delivery(delivery_single) {
-                        // Found the delivery - recalculate its arrival time considering the insertion
-                        let delivery_arrival = self.estimate_arrival_at_activity_after_insertion(
-                            route_ctx,
-                            activity_ctx,
-                            idx,
-                        );
+            if let Some(activity) = tour.get(idx)
+                && let Some(delivery_single) = activity.job.as_ref()
+                && self.is_same_job(pickup_single, delivery_single)
+                && self.is_delivery(delivery_single)
+            {
+                // Found the delivery - recalculate its arrival time considering the insertion
+                let delivery_arrival =
+                    self.estimate_arrival_at_activity_after_insertion(route_ctx, activity_ctx, idx);
 
-                        let ride_duration = delivery_arrival - pickup_departure;
-                        if ride_duration > max_ride_duration {
-                            return Some(ConstraintViolation { code: self.code, stopped: false });
-                        }
-                    }
+                let ride_duration = delivery_arrival - pickup_departure;
+                if ride_duration > max_ride_duration {
+                    return Some(ConstraintViolation { code: self.code, stopped: false });
                 }
             }
         }
@@ -159,24 +156,24 @@ impl MaxRideDurationConstraint {
         // The delivery will be inserted AFTER prev, so we need to check indices 0..=activity_ctx.index
         // to include prev (which might be the pickup).
         for idx in 0..=activity_ctx.index {
-            if let Some(activity) = tour.get(idx) {
-                if let Some(pickup_single) = activity.job.as_ref() {
-                    if self.is_same_job(delivery_single, pickup_single) && self.is_pickup(pickup_single) {
-                        // Found the pickup - get its departure time
-                        let pickup_departure = activity.schedule.departure;
+            if let Some(activity) = tour.get(idx)
+                && let Some(pickup_single) = activity.job.as_ref()
+                && self.is_same_job(delivery_single, pickup_single)
+                && self.is_pickup(pickup_single)
+            {
+                // Found the pickup - get its departure time
+                let pickup_departure = activity.schedule.departure;
 
-                        // Calculate when we would arrive at the delivery
-                        let delivery_arrival = self.estimate_arrival_time(route_ctx, activity_ctx);
+                // Calculate when we would arrive at the delivery
+                let delivery_arrival = self.estimate_arrival_time(route_ctx, activity_ctx);
 
-                        let ride_duration = delivery_arrival - pickup_departure;
-                        if ride_duration > max_ride_duration {
-                            return Some(ConstraintViolation { code: self.code, stopped: false });
-                        }
-
-                        // Found and checked the pickup, no need to continue
-                        return None;
-                    }
+                let ride_duration = delivery_arrival - pickup_departure;
+                if ride_duration > max_ride_duration {
+                    return Some(ConstraintViolation { code: self.code, stopped: false });
                 }
+
+                // Found and checked the pickup, no need to continue
+                return None;
             }
         }
 
@@ -257,12 +254,12 @@ impl MaxRideDurationConstraint {
 
     /// Checks if a job activity is a pickup.
     fn is_pickup(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().map_or(false, |d| d.pickup.1.is_not_empty())
+        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
     }
 
     /// Checks if a job activity is a delivery.
     fn is_delivery(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().map_or(false, |d| d.delivery.1.is_not_empty())
+        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.delivery.1.is_not_empty())
     }
 
     /// Checks if two Singles belong to the same Multi job.

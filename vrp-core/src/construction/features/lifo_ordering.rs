@@ -122,24 +122,24 @@ impl LifoOrderingConstraint {
 
         // Process activities up to insertion point
         for idx in 0..activity_ctx.index {
-            if let Some(activity) = tour.get(idx) {
-                if self.process_activity(activity, &mut stack).is_err() {
-                    return true; // Violation in existing tour (shouldn't happen)
-                }
+            if let Some(activity) = tour.get(idx)
+                && self.process_activity(activity, &mut stack).is_err()
+            {
+                return true; // Violation in existing tour (shouldn't happen)
             }
         }
 
         // Process the new activity being inserted
-        if self.process_activity(&activity_ctx.target, &mut stack).is_err() {
+        if self.process_activity(activity_ctx.target, &mut stack).is_err() {
             return true; // Insertion would violate LIFO
         }
 
         // Process remaining activities
         for idx in activity_ctx.index..tour.total() {
-            if let Some(activity) = tour.get(idx) {
-                if self.process_activity(activity, &mut stack).is_err() {
-                    return true; // Insertion causes downstream violation
-                }
+            if let Some(activity) = tour.get(idx)
+                && self.process_activity(activity, &mut stack).is_err()
+            {
+                return true; // Insertion causes downstream violation
             }
         }
 
@@ -150,20 +150,20 @@ impl LifoOrderingConstraint {
     ///
     /// Returns Err if the activity violates LIFO ordering (delivery doesn't match stack top).
     fn process_activity(&self, activity: &Activity, stack: &mut Vec<LifoGroupId>) -> Result<(), ()> {
-        if let Some(single) = activity.job.as_ref().map(|j| j.as_ref()) {
-            if let Some(lifo_group_id) = single.dimens.get_lifo_group().copied() {
-                // This activity is part of a LIFO group
-                if self.is_pickup(single) {
-                    // Pickup: push group ID onto stack
-                    stack.push(lifo_group_id);
-                } else if self.is_delivery(single) {
-                    // Delivery: must match top of stack (LIFO)
-                    if stack.last() == Some(&lifo_group_id) {
-                        stack.pop();
-                    } else {
-                        // Violation: delivery doesn't match stack top (not LIFO)
-                        return Err(());
-                    }
+        if let Some(single) = activity.job.as_ref().map(|j| j.as_ref())
+            && let Some(lifo_group_id) = single.dimens.get_lifo_group().copied()
+        {
+            // This activity is part of a LIFO group
+            if self.is_pickup(single) {
+                // Pickup: push group ID onto stack
+                stack.push(lifo_group_id);
+            } else if self.is_delivery(single) {
+                // Delivery: must match top of stack (LIFO)
+                if stack.last() == Some(&lifo_group_id) {
+                    stack.pop();
+                } else {
+                    // Violation: delivery doesn't match stack top (not LIFO)
+                    return Err(());
                 }
             }
         }
@@ -173,12 +173,12 @@ impl LifoOrderingConstraint {
     /// Checks if a job activity is a pickup.
     /// For PUDO (pickup-delivery) jobs, the dynamic pickup demand is stored in pickup.1
     fn is_pickup(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().map_or(false, |d| d.pickup.1.is_not_empty())
+        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
     }
 
     /// Checks if a job activity is a delivery.
     /// For PUDO (pickup-delivery) jobs, the dynamic delivery demand is stored in delivery.1
     fn is_delivery(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().map_or(false, |d| d.delivery.1.is_not_empty())
+        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.delivery.1.is_not_empty())
     }
 }
