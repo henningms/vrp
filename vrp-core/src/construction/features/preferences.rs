@@ -33,6 +33,7 @@ custom_solution_state!(PreferencesFitness typeof Cost);
 ///     Some(vec!["driver:alice".to_string(), "driver:bob".to_string()]),
 ///     Some(vec!["driver:charlie".to_string()]),
 ///     Some(vec!["shift:night".to_string()]),
+///     Some(2.0), // Double the penalty weight for this job
 /// );
 /// // Job prefers Alice or Bob, accepts Charlie, wants to avoid night shift
 /// ```
@@ -45,6 +46,10 @@ pub struct JobPreferences {
 
     /// List of attributes to avoid. Penalty applied for EACH attribute present.
     pub avoid: Option<HashSet<String>>,
+
+    /// Weight multiplier for penalties. Default is 1.0.
+    /// Higher values make this job's preferences more important.
+    pub weight: Cost,
 }
 
 impl JobPreferences {
@@ -53,11 +58,12 @@ impl JobPreferences {
         preferred: Option<Vec<String>>,
         acceptable: Option<Vec<String>>,
         avoid: Option<Vec<String>>,
+        weight: Option<Cost>,
     ) -> Self {
         let map: fn(Option<Vec<_>>) -> Option<HashSet<_>> =
             |attrs| attrs.and_then(|v| if v.is_empty() { None } else { Some(v.into_iter().collect()) });
 
-        Self { preferred: map(preferred), acceptable: map(acceptable), avoid: map(avoid) }
+        Self { preferred: map(preferred), acceptable: map(acceptable), avoid: map(avoid), weight: weight.unwrap_or(1.0) }
     }
 
     /// Check if any preferred attribute matches the vehicle attributes.
@@ -217,7 +223,8 @@ fn calculate_job_penalty(penalty_config: &PreferencePenalty, job: &Job, route_ct
     let avoided_count = preferences.count_avoided(vehicle_attrs);
     total_penalty += (avoided_count as Cost) * penalty_config.per_avoided_present;
 
-    total_penalty
+    // Apply job-specific weight multiplier
+    total_penalty * preferences.weight
 }
 
 /// Calculate total penalty for all jobs in a route.

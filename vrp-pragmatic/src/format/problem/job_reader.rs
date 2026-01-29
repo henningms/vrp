@@ -529,7 +529,7 @@ fn get_skills(skills: &Option<ApiJobSkills>) -> Option<FeatureJobSkills> {
 
 fn get_preferences(preferences: &Option<ApiJobPreferences>) -> Option<FeatureJobPreferences> {
     preferences.as_ref().map(|prefs| {
-        FeatureJobPreferences::new(prefs.preferred.clone(), prefs.acceptable.clone(), prefs.avoid.clone())
+        FeatureJobPreferences::new(prefs.preferred.clone(), prefs.acceptable.clone(), prefs.avoid.clone(), prefs.weight)
     })
 }
 
