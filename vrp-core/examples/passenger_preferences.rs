@@ -40,6 +40,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
                     Some(vec!["driver:alice".to_string()]), // Preferred: Alice
                     None,                                    // Acceptable: none specified
                     None,                                    // Avoid: none
+                    None,                                    // Weight: default
                 ));
             })
             .build_as_job()?,
@@ -53,6 +54,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
                     Some(vec!["driver:alice".to_string(), "driver:bob".to_string()]),
                     None,
                     Some(vec!["shift:night".to_string()]),
+                    None,
                 ));
             })
             .build_as_job()?,
@@ -66,6 +68,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
                     Some(vec!["vehicle:suv".to_string()]),
                     Some(vec!["vehicle:sedan".to_string()]),
                     Some(vec!["vehicle:old".to_string()]),
+                    None,
                 ));
             })
             .build_as_job()?,
