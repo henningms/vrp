@@ -93,7 +93,7 @@ prop_compose! {
             value,
             group,
             compatibility,
-            lifo_group: None,
+            lifo_tag: None,
             fixed_order: None,
             max_ride_duration: None,
         }
@@ -143,7 +143,7 @@ prop_compose! {
             value,
             group,
             compatibility,
-            lifo_group: None,
+            lifo_tag: None,
             fixed_order: None,
             max_ride_duration: None,
         }

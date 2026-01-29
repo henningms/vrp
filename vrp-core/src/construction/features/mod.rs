@@ -72,7 +72,8 @@ pub use self::transport::*;
 
 mod lifo_ordering;
 pub use self::lifo_ordering::{
-    LifoGroupId, LifoGroupDimension, VehicleLifoRequiredDimension, create_lifo_ordering_feature,
+    LifoGroupDimension, LifoGroupId, LifoTagDimension, VehicleLifoTagsDimension,
+    create_lifo_ordering_feature,
 };
 
 mod requested_time;

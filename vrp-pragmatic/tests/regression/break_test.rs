@@ -148,7 +148,7 @@ fn can_handle_properly_invalid_break_removal() {
                     capacity: vec![5],
                     skills: None,
                     limits: None,
-                    lifo_required: None,
+                    lifo_tags: None,
                 }],
                 ..create_default_fleet()
             },

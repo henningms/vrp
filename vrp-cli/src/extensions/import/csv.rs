@@ -100,7 +100,7 @@ mod actual {
                 value: None,
                 group: None,
                 compatibility: None,
-                lifo_group: None,
+                lifo_tag: None,
                 fixed_order: None,
                 max_ride_duration: None,
             })
@@ -134,7 +134,7 @@ mod actual {
                     capacity: vec![vehicle.capacity],
                     skills: None,
                     limits: None,
-                    lifo_required: None,
+                    lifo_tags: None,
                 }
             })
             .collect();

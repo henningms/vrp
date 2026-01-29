@@ -13,7 +13,7 @@ pub fn create_empty_job() -> Job {
         value: None,
         group: None,
         compatibility: None,
-        lifo_group: None,
+        lifo_tag: None,
         fixed_order: None,
         max_ride_duration: None,
     }
@@ -57,7 +57,7 @@ pub fn create_test_vehicle_type() -> VehicleType {
         capacity: vec![10],
         skills: None,
         limits: None,
-        lifo_required: None,
+        lifo_tags: None,
     }
 }
 

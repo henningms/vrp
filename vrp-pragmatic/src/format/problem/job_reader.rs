@@ -12,7 +12,7 @@ use vrp_core::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension,
         JobMaxRideDurationDimension, JobPreferences as FeatureJobPreferences, JobPreferencesDimension,
         JobRequestedTimesDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
-        LifoGroupDimension, LifoGroupId,
+        LifoGroupDimension, LifoGroupId, LifoTagDimension,
     },
     models::common::*,
     models::problem::{
@@ -472,18 +472,18 @@ fn get_multi_job(job: &ApiJob, mut singles: Vec<Single>, deliveries_start_index:
         dimens.set_job_max_ride_duration(max_ride_duration);
     }
 
-    // If this job has a LIFO group, we need to assign the LIFO group ID to each Single
-    // We use a hash of the lifoGroup string to generate a consistent numeric ID
-    if let Some(lifo_group) = &job.lifo_group {
+    // If this job has a LIFO tag, set it on all singles and derive group ID from job ID
+    if let Some(lifo_tag) = &job.lifo_tag {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
+        // Derive LIFO group ID from job ID
         let mut hasher = DefaultHasher::new();
-        lifo_group.hash(&mut hasher);
+        job.id.hash(&mut hasher);
         let lifo_id = LifoGroupId(hasher.finish() as usize);
 
-        // Set LIFO group ID on all singles (both pickups and deliveries)
         for single in &mut singles {
+            single.dimens.set_lifo_tag(lifo_tag.clone());
             single.dimens.set_lifo_group(lifo_id);
         }
     }
