@@ -156,12 +156,12 @@ pub struct Job {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<String>,
 
-    /// LIFO (Last-In-First-Out) group identifier.
-    /// Jobs with the same lifoGroup must follow stack-like ordering on vehicles with lifoRequired=true.
-    /// Used for scenarios like wheelchair passengers in minibuses where space constraints
-    /// require that the last passenger picked up is delivered first.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoGroup")]
-    pub lifo_group: Option<String>,
+    /// LIFO (Last-In-First-Out) tag/category.
+    /// Specifies which LIFO stack this job belongs to (e.g., "wheelchair", "stroller").
+    /// Different tags maintain separate stacks, so wheelchairs and strollers don't interfere.
+    /// The job ID is automatically used to link pickups to their deliveries within the stack.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoTag")]
+    pub lifo_tag: Option<String>,
 
     /// When true, enforces that pickups and deliveries must occur in the exact order specified.
     /// Without this, the solver may reorder pickups among themselves and deliveries among themselves.
@@ -519,12 +519,12 @@ pub struct VehicleType {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limits: Option<VehicleLimits>,
 
-    /// Indicates whether this vehicle requires LIFO (Last-In-First-Out) ordering for jobs.
-    /// When true, jobs marked with a LIFO group must follow stack-like ordering:
-    /// the last passenger/item picked up must be delivered first.
+    /// LIFO (Last-In-First-Out) tags that this vehicle enforces.
+    /// Jobs with matching lifoTag must follow stack-like ordering on this vehicle.
+    /// Different tags maintain separate stacks (e.g., ["wheelchair"] only enforces LIFO for wheelchair jobs).
     /// Useful for vehicles with limited maneuvering space (e.g., wheelchair minibuses, narrow cargo holds).
-    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoRequired")]
-    pub lifo_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lifoTags")]
+    pub lifo_tags: Option<Vec<String>>,
 }
 
 /// Specifies a vehicle profile.

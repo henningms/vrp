@@ -103,7 +103,7 @@ mod single {
                     capacity: vec![5],
                     skills: None,
                     limits: None,
-                    lifo_required: None,
+                    lifo_tags: None,
                 }],
                 ..create_default_fleet()
             },

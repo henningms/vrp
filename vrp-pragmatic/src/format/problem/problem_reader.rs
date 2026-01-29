@@ -157,8 +157,8 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
         .iter()
         .any(|v| v.limits.as_ref().is_some_and(|l| l.max_duration.or(l.max_distance).is_some()));
 
-    let has_lifo = api_problem.plan.jobs.iter().any(|job| job.lifo_group.is_some())
-        || api_problem.fleet.vehicles.iter().any(|v| v.lifo_required.unwrap_or(false));
+    let has_lifo = api_problem.plan.jobs.iter().any(|job| job.lifo_tag.is_some())
+        || api_problem.fleet.vehicles.iter().any(|v| v.lifo_tags.as_ref().is_some_and(|t| !t.is_empty()));
 
     let has_max_ride_duration = api_problem.plan.jobs.iter().any(|job| job.max_ride_duration.is_some());
 
