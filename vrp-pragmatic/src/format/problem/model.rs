@@ -74,6 +74,12 @@ pub struct JobPreferences {
     /// Example: `["shift:night", "vehicle:old"]` means avoid night shift and old vehicles.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avoid: Option<Vec<String>>,
+
+    /// Weight multiplier for preference penalties. Default is 1.0.
+    /// Higher values make this job's preferences more important.
+    /// Example: weight of 2.0 doubles the penalty for violating this job's preferences.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<Float>,
 }
 
 /// Specifies a place for sub job.
