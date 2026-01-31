@@ -36,7 +36,7 @@ fn can_use_two_strict_relations_with_two_vehicles_with_new_jobs() {
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 vehicle_ids: vec!["my_vehicle_1".to_string(), "my_vehicle_2".to_string()],
-                capacity: vec![5],
+                capacity: Some(vec![5]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

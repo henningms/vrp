@@ -134,6 +134,7 @@ fn check_jobs_impl(
                     requested_time: None,
                 }],
                 demand: if tgt != "service" { Some(vec![1]) } else { None },
+                named_demand: None,
                 order: None,
             })
             .collect()

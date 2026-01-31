@@ -36,7 +36,7 @@ prop_compose! {
 
         // set capacity to high and have only one vehicle of such type to have a higher probability
         // for recharge to be kicked in
-        vehicle.capacity = vec![10000];
+        vehicle.capacity = Some(vec![10000]);
         vehicle.vehicle_ids = vec![format!("{}_1", vehicle.type_id)];
 
         vehicle.shifts.first_mut().unwrap().end = None;

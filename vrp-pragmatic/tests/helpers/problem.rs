@@ -11,7 +11,7 @@ pub fn create_job_place(location: (f64, f64), tag: Option<String>) -> JobPlace {
 }
 
 pub fn create_task(location: (f64, f64), tag: Option<String>) -> JobTask {
-    JobTask { places: vec![create_job_place(location, tag)], demand: Some(vec![1]), order: None }
+    JobTask { places: vec![create_job_place(location, tag)], demand: Some(vec![1]), named_demand: None, order: None }
 }
 
 pub fn create_job(id: &str) -> Job {
@@ -41,6 +41,7 @@ pub fn create_delivery_job_with_order(id: &str, location: (f64, f64), order: i32
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
+named_demand: None,
             order: Some(order),
         }]),
         ..create_job(id)
@@ -52,6 +53,7 @@ pub fn create_delivery_job_with_group(id: &str, location: (f64, f64), group: &st
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
+named_demand: None,
             order: None,
         }]),
         group: Some(group.to_string()),
@@ -64,6 +66,7 @@ pub fn create_delivery_job_with_compatibility(id: &str, location: (f64, f64), co
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
+named_demand: None,
             order: None,
         }]),
         compatibility: Some(compatibility.to_string()),
@@ -84,6 +87,7 @@ pub fn create_delivery_job_with_duration(id: &str, location: (f64, f64), duratio
         deliveries: Some(vec![JobTask {
             places: vec![JobPlace { duration, ..create_job_place(location, None) }],
             demand: Some(vec![1]),
+named_demand: None,
             order: None,
         }]),
         ..create_job(id)
@@ -100,6 +104,7 @@ pub fn create_delivery_job_with_times(
         deliveries: Some(vec![JobTask {
             places: vec![JobPlace { duration, times: convert_times(&times), ..create_job_place(location, None) }],
             demand: Some(vec![1]),
+named_demand: None,
             order: None,
         }]),
         ..create_job(id)
@@ -148,6 +153,7 @@ pub fn create_pickup_delivery_job_with_params(
                 ..create_job_place(pickup.0, Some("p1".to_string()))
             }],
             demand: Some(demand.clone()),
+            named_demand: None,
             order: None,
         }]),
         deliveries: Some(vec![JobTask {
@@ -157,6 +163,7 @@ pub fn create_pickup_delivery_job_with_params(
                 ..create_job_place(delivery.0, Some("d1".to_string()))
             }],
             demand: Some(demand),
+            named_demand: None,
             order: None,
         }]),
 
@@ -175,6 +182,7 @@ pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
                 requested_time: None,
             }],
             demand: Some(vec![1]),
+named_demand: None,
             order: None,
         }]),
         ..create_job(id)
@@ -196,6 +204,7 @@ pub fn create_multi_job(
                     ..create_job_place((location.0, location.1), Some(format!("{}{}", prefix, i + 1)))
                 }],
                 demand: Some(demand),
+                named_demand: None,
                 order: None,
             })
             .collect::<Vec<_>>();
@@ -261,7 +270,8 @@ pub fn create_vehicle_with_capacity(id: &str, capacity: Vec<i32>) -> VehicleType
         profile: create_default_vehicle_profile(),
         costs: create_default_vehicle_costs(),
         shifts: vec![create_default_vehicle_shift()],
-        capacity,
+        capacity: Some(capacity),
+        capacity_configurations: None,
         skills: None,
         limits: None,
         lifo_tags: None,
@@ -269,7 +279,12 @@ pub fn create_vehicle_with_capacity(id: &str, capacity: Vec<i32>) -> VehicleType
 }
 
 pub fn create_default_fleet() -> Fleet {
-    Fleet { vehicles: vec![create_default_vehicle_type()], profiles: create_default_matrix_profiles(), resources: None }
+    Fleet {
+        vehicles: vec![create_default_vehicle_type()],
+        profiles: create_default_matrix_profiles(),
+        resources: None,
+        capacity_dimensions: None,
+    }
 }
 
 pub fn create_default_matrix_profiles() -> Vec<MatrixProfile> {
@@ -287,7 +302,7 @@ pub fn create_empty_plan() -> Plan {
 pub fn create_empty_problem() -> Problem {
     Problem {
         plan: create_empty_plan(),
-        fleet: Fleet { vehicles: vec![], profiles: vec![], resources: None },
+        fleet: Fleet { vehicles: vec![], profiles: vec![], resources: None, capacity_dimensions: None },
         objectives: None,
     }
 }

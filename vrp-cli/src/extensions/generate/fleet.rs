@@ -30,7 +30,8 @@ pub(crate) fn generate_fleet(problem_proto: &Problem, vehicle_types_size: usize)
                 },
                 costs: get_random_item(costs.as_slice(), &rnd).expect("cannot find any costs").clone(),
                 shifts: get_random_item(shifts.as_slice(), &rnd).expect("cannot find any shifts").clone(),
-                capacity: get_random_item(capacities.as_slice(), &rnd).expect("cannot find any capacity").clone(),
+                capacity: Some(get_random_item(capacities.as_slice(), &rnd).expect("cannot find any capacity").clone()),
+                capacity_configurations: None,
                 skills: get_random_item(skills.as_slice(), &rnd).expect("cannot find any skills").clone(),
                 limits: get_random_item(limits.as_slice(), &rnd).expect("cannot find any limits").clone(),
                 lifo_tags: None,
@@ -38,7 +39,7 @@ pub(crate) fn generate_fleet(problem_proto: &Problem, vehicle_types_size: usize)
         })
         .collect();
 
-    Fleet { vehicles, profiles, resources: None }
+    Fleet { vehicles, profiles, resources: None, capacity_dimensions: None }
 }
 
 fn get_from_vehicle<F, T>(problem_proto: &Problem, func: F) -> Vec<T>
@@ -57,7 +58,7 @@ fn get_vehicle_shifts(problem_proto: &Problem) -> Vec<Vec<VehicleShift>> {
 }
 
 fn get_vehicle_capacities(problem_proto: &Problem) -> Vec<Vec<i32>> {
-    get_from_vehicle(problem_proto, |vehicle| vehicle.capacity.clone())
+    get_from_vehicle(problem_proto, |vehicle| vehicle.capacity.clone().unwrap_or_default())
 }
 
 fn get_vehicle_skills(problem_proto: &Problem) -> Vec<Option<Vec<String>>> {

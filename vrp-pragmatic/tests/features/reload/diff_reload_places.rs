@@ -37,7 +37,7 @@ fn can_use_reloads_with_different_locations() {
                     ]),
                     recharges: None,
                 }],
-                capacity: vec![2],
+                capacity: Some(vec![2]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

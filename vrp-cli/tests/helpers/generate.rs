@@ -20,7 +20,7 @@ pub fn create_empty_job() -> Job {
 }
 
 pub fn create_empty_job_task() -> JobTask {
-    JobTask { places: vec![], demand: None, order: None }
+    JobTask { places: vec![], demand: None, named_demand: None, order: None }
 }
 
 pub fn create_empty_job_place() -> JobPlace {
@@ -54,7 +54,8 @@ pub fn create_test_vehicle_type() -> VehicleType {
             reloads: None,
             recharges: None,
         }],
-        capacity: vec![10],
+        capacity: Some(vec![10]),
+        capacity_configurations: None,
         skills: None,
         limits: None,
         lifo_tags: None,

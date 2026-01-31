@@ -15,7 +15,7 @@ fn can_use_two_dimensions() {
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 shifts: vec![create_default_open_vehicle_shift()],
-                capacity: vec![1, 1],
+                capacity: Some(vec![1, 1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()
@@ -64,7 +64,7 @@ fn can_unassign_due_to_dimension_mismatch() {
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 shifts: vec![create_default_open_vehicle_shift()],
-                capacity: vec![1],
+                capacity: Some(vec![1]),
                 ..create_default_vehicle_type()
             }],
             ..create_default_fleet()

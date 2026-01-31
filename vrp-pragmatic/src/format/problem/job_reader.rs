@@ -119,9 +119,21 @@ fn read_required_jobs(
     let mut jobs = vec![];
     let has_multi_dimens = props.has_multi_dimen_capacity;
 
+    // Create dimension mapping if capacityDimensions is defined
+    let dimension_mapping = api_problem
+        .fleet
+        .capacity_dimensions
+        .as_ref()
+        .map(|names| CapacityDimensionMapping::from_names(names));
+
     let get_single_from_task = |task: &JobTask, activity_type: &str, is_static_demand: bool| {
         let absent = (empty(), empty());
-        let capacity = task.demand.clone().map_or_else(empty, MultiDimLoad::new);
+        // Resolve demand from either positional array or named dimensions
+        let capacity = match (&task.demand, &task.named_demand, &dimension_mapping) {
+            (Some(demand), None, _) => MultiDimLoad::new(demand.clone()),
+            (None, Some(named), Some(mapping)) => MultiDimLoad::new(mapping.resolve_demand(named)),
+            _ => empty(),
+        };
         let demand = if is_static_demand { (capacity, empty()) } else { (empty(), capacity) };
 
         let demand = match activity_type {
@@ -141,7 +153,7 @@ fn read_required_jobs(
             })
             .collect();
 
-        get_single_with_dimens(places, demand, &task.order, activity_type, has_multi_dimens, coord_index)
+        get_single_with_dimens(places, demand, &task.order, activity_type, has_multi_dimens, props.has_configurable_capacity, coord_index)
     };
 
     api_problem.plan.jobs.iter().for_each(|job| {
@@ -410,12 +422,25 @@ fn get_single_with_dimens(
     order: &Option<i32>,
     activity_type: &str,
     has_multi_dimens: bool,
+    has_configurable_capacity: bool,
     coord_index: &CoordIndex,
 ) -> Single {
     let mut single = get_single(places, coord_index);
     let dimens = &mut single.dimens;
 
-    if has_multi_dimens {
+    if has_configurable_capacity {
+        // Use ConfigurableLoad for demand when vehicle uses configurable capacity
+        dimens.set_job_demand(Demand {
+            pickup: (
+                ConfigurableLoad::from_load(demand.pickup.0.as_vec()),
+                ConfigurableLoad::from_load(demand.pickup.1.as_vec()),
+            ),
+            delivery: (
+                ConfigurableLoad::from_load(demand.delivery.0.as_vec()),
+                ConfigurableLoad::from_load(demand.delivery.1.as_vec()),
+            ),
+        })
+    } else if has_multi_dimens {
         dimens.set_job_demand(demand)
     } else {
         dimens.set_job_demand(Demand {

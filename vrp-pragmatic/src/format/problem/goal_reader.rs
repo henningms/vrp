@@ -4,7 +4,7 @@ use vrp_core::algorithms::clustering::kmedoids::create_hierarchical_kmedoids;
 use vrp_core::construction::clustering::vicinity::ClusterInfoDimension;
 use vrp_core::construction::enablers::FeatureCombinator;
 use vrp_core::construction::features::*;
-use vrp_core::models::common::{Demand, LoadOps, MultiDimLoad, SingleDimLoad};
+use vrp_core::models::common::{ConfigurableLoad, Demand, LoadOps, MultiDimLoad, SingleDimLoad};
 use vrp_core::models::problem::{Actor, Single, TransportCost};
 use vrp_core::models::solution::Route;
 use vrp_core::models::{Feature, FeatureObjective, GoalBuilder, GoalContext, GoalContextBuilder};
@@ -360,6 +360,10 @@ fn get_capacity_feature(
 ) -> Result<Feature, GenericError> {
     // NOTE: reload uses capacity feature implicitly
     if props.has_reloads {
+        // Note: ConfigurableLoad with reloads is not yet supported
+        if props.has_configurable_capacity {
+            return Err("configurable capacity with reloads is not yet supported".into());
+        }
         if props.has_multi_dimen_capacity {
             create_capacity_with_reload_feature::<MultiDimLoad>(name, api_problem, blocks, MultiDimLoad::new)
         } else {
@@ -367,6 +371,8 @@ fn get_capacity_feature(
                 SingleDimLoad::new(capacity.first().cloned().unwrap_or_default())
             })
         }
+    } else if props.has_configurable_capacity {
+        CapacityFeatureBuilder::<ConfigurableLoad>::new(name).set_violation_code(CAPACITY_CONSTRAINT_CODE).build()
     } else if props.has_multi_dimen_capacity {
         CapacityFeatureBuilder::<MultiDimLoad>::new(name).set_violation_code(CAPACITY_CONSTRAINT_CODE).build()
     } else {
@@ -383,8 +389,12 @@ fn get_fast_service_feature(name: &str, blocks: &ProblemBlocks) -> GenericResult
         .set_demand_type_fn(|single| {
             let demand_single: Option<&Demand<SingleDimLoad>> = single.dimens.get_job_demand();
             let demand_multi: Option<&Demand<MultiDimLoad>> = single.dimens.get_job_demand();
+            let demand_configurable: Option<&Demand<ConfigurableLoad>> = single.dimens.get_job_demand();
 
-            demand_single.map(|d| d.get_type()).or_else(|| demand_multi.map(|d| d.get_type()))
+            demand_single
+                .map(|d| d.get_type())
+                .or_else(|| demand_multi.map(|d| d.get_type()))
+                .or_else(|| demand_configurable.map(|d| d.get_type()))
         })
         .set_is_filtered_job(|job| job.dimens().get_job_type().is_some_and(|job_type| job_type == "reload"))
         .build()
