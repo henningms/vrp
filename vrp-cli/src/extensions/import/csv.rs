@@ -131,6 +131,8 @@ mod actual {
                         breaks: None,
                         reloads: None,
                         recharges: None,
+                        required_stops: None,
+                        via: None,
                     }],
                     capacity: Some(vec![vehicle.capacity]),
                     capacity_configurations: None,

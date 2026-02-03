@@ -53,6 +53,8 @@ pub fn create_test_vehicle_type() -> VehicleType {
             breaks: None,
             reloads: None,
             recharges: None,
+            required_stops: None,
+            via: None,
         }],
         capacity: Some(vec![10]),
         capacity_configurations: None,
