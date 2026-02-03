@@ -86,6 +86,8 @@ fn can_check_breaks_impl(
                     }]),
                     reloads: None,
                     recharges: None,
+                    required_stops: None,
+                    via: None,
                 }],
                 capacity: Some(vec![5]),
                 ..create_default_vehicle_type()

@@ -1,0 +1,204 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "customer1",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52599,
+                  "lng": 13.45413
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [2]
+          }
+        ]
+      },
+      {
+        "id": "customer2",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52111,
+                  "lng": 13.41890
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      },
+      {
+        "id": "customer3",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.51167,
+                  "lng": 13.37930
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [2]
+          }
+        ]
+      },
+      {
+        "id": "customer4",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.50500,
+                  "lng": 13.36000
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "delivery_vehicle",
+        "vehicleIds": [
+          "vehicle_1"
+        ],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 50.0,
+          "distance": 0.002,
+          "time": 0.01
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2024-01-01T20:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "requiredStops": [
+              {
+                "location": {
+                  "lat": 52.52800,
+                  "lng": 13.43000
+                },
+                "duration": 600,
+                "tag": "mandatory_checkpoint_1",
+                "times": [
+                  [
+                    "2024-01-01T10:00:00Z",
+                    "2024-01-01T12:00:00Z"
+                  ]
+                ]
+              },
+              {
+                "location": {
+                  "lat": 52.51800,
+                  "lng": 13.40000
+                },
+                "duration": 600,
+                "tag": "mandatory_checkpoint_2",
+                "times": [
+                  [
+                    "2024-01-01T13:00:00Z",
+                    "2024-01-01T16:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "via": [
+              {
+                "location": {
+                  "lat": 52.52400,
+                  "lng": 13.44000
+                },
+                "duration": 180,
+                "tag": "optional_waypoint_1"
+              },
+              {
+                "location": {
+                  "lat": 52.52000,
+                  "lng": 13.41500
+                },
+                "duration": 180,
+                "tag": "optional_waypoint_2"
+              },
+              {
+                "location": {
+                  "lat": 52.51400,
+                  "lng": 13.38500
+                },
+                "duration": 180,
+                "tag": "optional_waypoint_3"
+              }
+            ]
+          }
+        ],
+        "capacity": [15]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  },
+  "objectives": [
+    {
+      "type": "minimize-unassigned"
+    },
+    {
+      "type": "minimize-cost"
+    }
+  ]
+}

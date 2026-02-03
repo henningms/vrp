@@ -31,6 +31,8 @@ fn can_serve_multi_job_and_delivery_with_reload() {
                         ..create_default_reload()
                     }]),
                     recharges: None,
+                    required_stops: None,
+                    via: None,
                 }],
                 capacity: Some(vec![2]),
                 ..create_default_vehicle_type()

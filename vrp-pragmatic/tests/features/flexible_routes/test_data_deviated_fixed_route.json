@@ -1,0 +1,228 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "ondemand_request_1",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52400,
+                  "lng": 13.44500
+                },
+                "duration": 120,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      },
+      {
+        "id": "ondemand_request_2",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.51900,
+                  "lng": 13.41500
+                },
+                "duration": 120,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      },
+      {
+        "id": "ondemand_request_3",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.51300,
+                  "lng": 13.38800
+                },
+                "duration": 120,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "flex_route_bus",
+        "vehicleIds": [
+          "bus_1"
+        ],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 100.0,
+          "distance": 0.005,
+          "time": 0.02
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2024-01-01T18:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "requiredStops": [
+              {
+                "location": {
+                  "lat": 52.5300,
+                  "lng": 13.4200
+                },
+                "duration": 180,
+                "tag": "fixed_stop_A",
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T09:30:00Z"
+                  ]
+                ],
+                "requestedTime": "2024-01-01T09:00:00Z"
+              },
+              {
+                "location": {
+                  "lat": 52.5250,
+                  "lng": 13.4300
+                },
+                "duration": 180,
+                "tag": "fixed_stop_B",
+                "times": [
+                  [
+                    "2024-01-01T10:00:00Z",
+                    "2024-01-01T10:30:00Z"
+                  ]
+                ],
+                "requestedTime": "2024-01-01T10:00:00Z"
+              },
+              {
+                "location": {
+                  "lat": 52.5200,
+                  "lng": 13.4100
+                },
+                "duration": 180,
+                "tag": "fixed_stop_C",
+                "times": [
+                  [
+                    "2024-01-01T11:00:00Z",
+                    "2024-01-01T11:30:00Z"
+                  ]
+                ],
+                "requestedTime": "2024-01-01T11:00:00Z"
+              },
+              {
+                "location": {
+                  "lat": 52.5150,
+                  "lng": 13.3950
+                },
+                "duration": 180,
+                "tag": "fixed_stop_D",
+                "times": [
+                  [
+                    "2024-01-01T12:00:00Z",
+                    "2024-01-01T12:30:00Z"
+                  ]
+                ],
+                "requestedTime": "2024-01-01T12:00:00Z"
+              },
+              {
+                "location": {
+                  "lat": 52.5100,
+                  "lng": 13.3800
+                },
+                "duration": 180,
+                "tag": "fixed_stop_E",
+                "times": [
+                  [
+                    "2024-01-01T13:00:00Z",
+                    "2024-01-01T13:30:00Z"
+                  ]
+                ],
+                "requestedTime": "2024-01-01T13:00:00Z"
+              }
+            ],
+            "via": [
+              {
+                "location": {
+                  "lat": 52.5280,
+                  "lng": 13.4250
+                },
+                "duration": 120,
+                "tag": "preferred_stop_1"
+              },
+              {
+                "location": {
+                  "lat": 52.5220,
+                  "lng": 13.4200
+                },
+                "duration": 120,
+                "tag": "preferred_stop_2"
+              },
+              {
+                "location": {
+                  "lat": 52.5170,
+                  "lng": 13.4000
+                },
+                "duration": 120,
+                "tag": "preferred_stop_3"
+              }
+            ]
+          }
+        ],
+        "capacity": [20]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  },
+  "objectives": [
+    {
+      "type": "minimize-unassigned"
+    },
+    {
+      "type": "minimize-cost"
+    }
+  ]
+}

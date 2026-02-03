@@ -353,6 +353,14 @@ pub struct VehicleShift {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end: Option<ShiftEnd>,
 
+    /// Ordered list of required stops which must be visited (in order).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "requiredStops")]
+    pub required_stops: Option<Vec<JobPlace>>,
+
+    /// Ordered list of preferred via stops (soft constraint).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub via: Option<Vec<JobPlace>>,
+
     /// Vehicle breaks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub breaks: Option<Vec<VehicleBreak>>,

@@ -113,6 +113,8 @@ prop_compose! {
           breaks,
           reloads,
           recharges,
+          required_stops: None,
+          via: None,
         }
     }
 }

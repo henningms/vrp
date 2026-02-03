@@ -10,6 +10,8 @@ use vrp_core::models::solution::Route;
 use vrp_core::models::{Feature, FeatureObjective, GoalBuilder, GoalContext, GoalContextBuilder};
 use vrp_core::rosomaxa::evolution::objectives::dominance_order;
 
+const VIA_UNASSIGNED_WEIGHT: Float = 0.1;
+
 pub(super) fn create_goal_context(
     api_problem: &ApiProblem,
     blocks: &ProblemBlocks,
@@ -110,10 +112,19 @@ fn get_objective_feature_layers(
 ) -> GenericResult<Vec<FeatureLayer>> {
     let objectives = get_objectives(api_problem, props);
 
-    objectives
+    let mut layers = objectives
         .iter()
         .map(|objective| get_objective_feature_layer(objective, blocks, props))
-        .collect::<GenericResult<_>>()
+        .collect::<GenericResult<Vec<_>>>()?;
+
+    if props.has_via {
+        layers.push(FeatureLayer::Single(create_tour_order_soft_feature(
+            "via_order",
+            get_via_order_fn(),
+        )?));
+    }
+
+    Ok(layers)
 }
 
 fn get_objective_feature_layer(
@@ -175,6 +186,7 @@ fn get_objective_feature_layer(
                     } else {
                         job.dimens().get_job_type().map_or(default_value, |job_type| match job_type.as_str() {
                             "break" => break_value.unwrap_or(default_value),
+                            "via" => VIA_UNASSIGNED_WEIGHT,
                             _ => default_value,
                         })
                     }
@@ -614,5 +626,16 @@ fn get_tour_order_fn() -> TourOrderFn {
                 }
             })
         })
+    }))
+}
+
+fn get_via_order_fn() -> TourOrderFn {
+    TourOrderFn::Left(Arc::new(|single| {
+        single
+            .dimens
+            .get_via_order()
+            .copied()
+            .map(|order| OrderResult::Value(order as Float))
+            .unwrap_or(OrderResult::Ignored)
     }))
 }

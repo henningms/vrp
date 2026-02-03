@@ -146,6 +146,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
     let has_breaks = shift_has_fn(|s| s.breaks.as_ref().is_some_and(|b| !b.is_empty()));
     let has_reloads = shift_has_fn(|s| s.reloads.as_ref().is_some_and(|r| !r.is_empty()));
     let has_recharges = shift_has_fn(|s| s.recharges.as_ref().is_some());
+    let has_via = shift_has_fn(|s| s.via.as_ref().is_some_and(|v| !v.is_empty()));
 
     let has_order = api_problem
         .plan
@@ -189,6 +190,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
         has_tour_travel_limits,
         has_lifo,
         has_max_ride_duration,
+        has_via,
     }
 }
 

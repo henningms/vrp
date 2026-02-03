@@ -68,7 +68,7 @@ pub(crate) fn try_match_point_job(
 
             Ok(Some(JobInfo(job.clone(), single.clone(), place, ctx.time)))
         }
-        "break" | "reload" | "recharge" => Ok(Some(
+        "break" | "reload" | "recharge" | "required" | "via" => Ok(Some(
             (1..)
                 .map(|idx| format!("{}_{}_{}_{}", tour.vehicle_id, activity.activity_type, tour.shift_index, idx))
                 .map(|job_id| job_index.get(&job_id))

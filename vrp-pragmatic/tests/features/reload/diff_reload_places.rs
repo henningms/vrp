@@ -36,6 +36,8 @@ fn can_use_reloads_with_different_locations() {
                         },
                     ]),
                     recharges: None,
+                    required_stops: None,
+                    via: None,
                 }],
                 capacity: Some(vec![2]),
                 ..create_default_vehicle_type()
