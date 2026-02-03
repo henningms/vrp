@@ -1,5 +1,4 @@
 use crate::format::problem::*;
-use crate::format::solution::Stop;
 use crate::format_time;
 use crate::helpers::*;
 

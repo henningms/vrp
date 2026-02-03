@@ -311,7 +311,7 @@ fn read_via_stops(
                             requested_time,
                         )],
                     );
-                    job.dimens.set_via_order(place_idx as i32);
+                    job.dimens.set_via_order(place_idx);
 
                     (job_id, job)
                 })

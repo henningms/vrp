@@ -81,7 +81,7 @@ fn can_visit_via_stops_in_preferred_order() {
         println!("Via stops visited: {:?}", via_tags);
 
         // Check that visited via stops maintain their relative order
-        let expected_order = vec!["via1", "via2", "via3"];
+        let expected_order = ["via1", "via2", "via3"];
         let mut last_expected_idx = -1i32;
 
         for tag in &via_tags {
