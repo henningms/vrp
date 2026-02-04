@@ -12,9 +12,9 @@ use crate::models::{Problem, Solution};
 use crate::prelude::ViolationCode;
 use rosomaxa::evolution::TelemetryMetrics;
 use rosomaxa::prelude::*;
-use rustc_hash::FxHasher;
+use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use std::any::{Any, TypeId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::BuildHasherDefault;
 use std::ops::Deref;
@@ -132,10 +132,10 @@ pub struct SolutionContext {
     pub ignored: Vec<Job>,
 
     /// Map of jobs which cannot be assigned and within reason code.
-    pub unassigned: HashMap<Job, UnassignmentInfo>,
+    pub unassigned: FxHashMap<Job, UnassignmentInfo>,
 
     /// Specifies jobs which should not be affected by ruin.
-    pub locked: HashSet<Job>,
+    pub locked: FxHashSet<Job>,
 
     /// Set of routes within their state.
     pub routes: Vec<RouteContext>,
