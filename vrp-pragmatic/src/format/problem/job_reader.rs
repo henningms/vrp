@@ -41,10 +41,13 @@ pub(super) fn read_jobs_with_extra_locks(
 
     let (mut jobs, locks) = read_required_jobs(api_problem, props, coord_index, job_index, random);
     let conditional_jobs = read_conditional_jobs(api_problem, coord_index, job_index);
+    let required_stop_locks = read_required_stop_locks(api_problem, job_index);
 
     jobs.extend(conditional_jobs);
 
-    (Jobs::new(fleet, jobs, transport, logger).unwrap(), locks)
+    let extra_locks = locks.into_iter().chain(required_stop_locks).collect();
+
+    (Jobs::new(fleet, jobs, transport, logger).unwrap(), extra_locks)
 }
 
 pub(super) fn read_locks(api_problem: &ApiProblem, job_index: &JobIndex) -> Vec<Arc<Lock>> {
@@ -107,6 +110,37 @@ pub(super) fn read_locks(api_problem: &ApiProblem, job_index: &JobIndex) -> Vec<
 
         acc
     })
+}
+
+fn read_required_stop_locks(api_problem: &ApiProblem, job_index: &JobIndex) -> Vec<Arc<Lock>> {
+    let mut locks = vec![];
+
+    api_problem.fleet.vehicles.iter().for_each(|vehicle| {
+        for (shift_index, shift) in vehicle.shifts.iter().enumerate() {
+            let Some(required_stops) = &shift.required_stops else { continue };
+            if required_stops.is_empty() {
+                continue;
+            }
+
+            for vehicle_id in &vehicle.vehicle_ids {
+                let jobs = (1..=required_stops.len())
+                    .map(|place_idx| {
+                        let job_id = format!("{vehicle_id}_required_{shift_index}_{place_idx}");
+                        job_index
+                            .get(&job_id)
+                            .cloned()
+                            .unwrap_or_else(|| panic!("cannot find job with id: '{job_id}'"))
+                    })
+                    .collect::<Vec<_>>();
+
+                let condition = create_condition(vehicle_id.clone(), shift_index);
+                let detail = LockDetail::new(LockOrder::Sequence, LockPosition::Any, jobs);
+                locks.push(Arc::new(Lock::new(condition, vec![detail], false)));
+            }
+        }
+    });
+
+    locks
 }
 
 fn read_required_jobs(
@@ -201,6 +235,14 @@ fn read_conditional_jobs(api_problem: &ApiProblem, coord_index: &CoordIndex, job
 
     api_problem.fleet.vehicles.iter().for_each(|vehicle| {
         for (shift_index, shift) in vehicle.shifts.iter().enumerate() {
+            if let Some(required_stops) = &shift.required_stops {
+                read_required_stops(coord_index, job_index, &mut jobs, vehicle, shift_index, required_stops);
+            }
+
+            if let Some(via_stops) = &shift.via {
+                read_via_stops(coord_index, job_index, &mut jobs, vehicle, shift_index, via_stops);
+            }
+
             if let Some(breaks) = &shift.breaks {
                 read_optional_breaks(coord_index, job_index, &mut jobs, vehicle, shift_index, breaks);
             }
@@ -216,6 +258,66 @@ fn read_conditional_jobs(api_problem: &ApiProblem, coord_index: &CoordIndex, job
     });
 
     jobs
+}
+
+fn read_required_stops(
+    coord_index: &CoordIndex,
+    job_index: &mut JobIndex,
+    jobs: &mut Vec<Job>,
+    vehicle: &VehicleType,
+    shift_index: usize,
+    required_stops: &[JobPlace],
+) {
+    read_specific_job_places(
+        "required",
+        coord_index,
+        job_index,
+        jobs,
+        vehicle,
+        shift_index,
+        required_stops.iter().cloned(),
+    )
+}
+
+fn read_via_stops(
+    coord_index: &CoordIndex,
+    job_index: &mut JobIndex,
+    jobs: &mut Vec<Job>,
+    vehicle: &VehicleType,
+    shift_index: usize,
+    via_stops: &[JobPlace],
+) {
+    (1..)
+        .zip(via_stops.iter().cloned())
+        .flat_map(|(place_idx, place)| {
+            vehicle
+                .vehicle_ids
+                .iter()
+                .map(move |vehicle_id| {
+                    let job_id = format!("{vehicle_id}_via_{shift_index}_{place_idx}");
+                    let times = parse_times(&place.times);
+                    let requested_time = place.requested_time.as_ref().map(|t| parse_time(t));
+                    let mut job = get_conditional_job(
+                        coord_index,
+                        vehicle_id.clone(),
+                        &job_id,
+                        "via",
+                        shift_index,
+                        vec![(
+                            Some(place.location.clone()),
+                            place.duration,
+                            times,
+                            place.tag.clone(),
+                            requested_time,
+                        )],
+                    );
+                    job.dimens.set_via_order(place_idx);
+
+                    (job_id, job)
+                })
+                .collect::<Vec<_>>()
+        })
+        .for_each(|(job_id, single)| add_conditional_job(job_index, jobs, job_id, single));
 }
 
 fn read_optional_breaks(

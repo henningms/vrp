@@ -27,6 +27,8 @@ fn can_use_vehicle_with_pickups_and_deliveries() {
                         ..create_default_reload()
                     }]),
                     recharges: None,
+                    required_stops: None,
+                    via: None,
                 }],
                 capacity: Some(vec![1]),
                 ..create_default_vehicle_type()

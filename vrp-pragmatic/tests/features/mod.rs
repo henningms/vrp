@@ -6,6 +6,7 @@ mod capacity;
 mod clustering;
 mod compatibility;
 mod fleet;
+mod flexible_routes;
 mod format;
 mod group;
 mod limits;

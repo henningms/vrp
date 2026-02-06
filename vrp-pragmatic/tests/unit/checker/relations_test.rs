@@ -99,6 +99,8 @@ mod single {
                             ..create_default_reload()
                         }]),
                         recharges: None,
+                    required_stops: None,
+                    via: None,
                     }],
                     capacity: Some(vec![5]),
                     capacity_configurations: None,

@@ -113,6 +113,7 @@ struct ProblemProperties {
     has_tour_travel_limits: bool,
     has_lifo: bool,
     has_max_ride_duration: bool,
+    has_via: bool,
 }
 
 /// Keeps track of materialized problem building blocks.

@@ -230,6 +230,8 @@ pub fn create_default_open_vehicle_shift() -> VehicleShift {
         breaks: None,
         reloads: None,
         recharges: None,
+        required_stops: None,
+        via: None,
     }
 }
 
@@ -240,6 +242,8 @@ pub fn create_default_vehicle_shift_with_locations(start: (f64, f64), end: (f64,
         breaks: None,
         reloads: None,
         recharges: None,
+        required_stops: None,
+        via: None,
     }
 }
 

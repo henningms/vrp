@@ -1,0 +1,147 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "job1",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52599,
+                  "lng": 13.45413
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      },
+      {
+        "id": "job2",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.52111,
+                  "lng": 13.41890
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      },
+      {
+        "id": "job3",
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.51167,
+                  "lng": 13.37930
+                },
+                "duration": 300,
+                "times": [
+                  [
+                    "2024-01-01T09:00:00Z",
+                    "2024-01-01T18:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "vehicle",
+        "vehicleIds": [
+          "vehicle_1"
+        ],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 25.0,
+          "distance": 0.001,
+          "time": 0.005
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "end": {
+              "latest": "2024-01-01T20:00:00Z",
+              "location": {
+                "lat": 52.5316,
+                "lng": 13.3884
+              }
+            },
+            "requiredStops": [
+              {
+                "location": {
+                  "lat": 52.52800,
+                  "lng": 13.43000
+                },
+                "duration": 600,
+                "tag": "checkpoint_1",
+                "times": [
+                  [
+                    "2024-01-01T10:00:00Z",
+                    "2024-01-01T12:00:00Z"
+                  ]
+                ]
+              },
+              {
+                "location": {
+                  "lat": 52.51800,
+                  "lng": 13.40000
+                },
+                "duration": 600,
+                "tag": "checkpoint_2",
+                "times": [
+                  [
+                    "2024-01-01T13:00:00Z",
+                    "2024-01-01T15:00:00Z"
+                  ]
+                ]
+              }
+            ]
+          }
+        ],
+        "capacity": [10]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  }
+}
