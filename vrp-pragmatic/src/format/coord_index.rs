@@ -70,6 +70,14 @@ impl CoordIndex {
                 if let Some(recharges) = &shift.recharges {
                     recharges.stations.iter().for_each(|station| index.add(&station.location));
                 }
+
+                if let Some(required_stops) = &shift.required_stops {
+                    required_stops.iter().for_each(|stop| index.add(&stop.location));
+                }
+
+                if let Some(via) = &shift.via {
+                    via.iter().for_each(|stop| index.add(&stop.location));
+                }
             });
         });
 
