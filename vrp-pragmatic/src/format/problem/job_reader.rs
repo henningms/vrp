@@ -313,15 +313,13 @@ pub(crate) fn convert_api_job_to_core(
 
     assert!(!singles.is_empty());
 
-    let problem_job = if singles.len() > 1 {
+    if singles.len() > 1 {
         let deliveries_start_index = api_job.pickups.as_ref().map_or(0, |p| p.len());
         let random: Arc<dyn Random> = Arc::new(DefaultRandom::default());
         get_multi_job(api_job, singles, deliveries_start_index, &random)
     } else {
         get_single_job(api_job, singles.into_iter().next().unwrap())
-    };
-
-    problem_job
+    }
 }
 
 fn read_conditional_jobs(api_problem: &ApiProblem, coord_index: &CoordIndex, job_index: &mut JobIndex) -> Vec<Job> {

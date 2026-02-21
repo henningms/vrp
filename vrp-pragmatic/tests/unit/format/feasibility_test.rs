@@ -445,6 +445,128 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
     assert!(check_duration.as_millis() < 5000, "check_job took too long: {:?}", check_duration);
 }
 
+#[test]
+fn can_accept_job_and_update_state() {
+    // One vehicle with capacity 10, one job already assigned
+    let (problem, matrix) = build_problem_and_matrix(
+        vec![create_vehicle_with_capacity("my_vehicle", vec![10])],
+        vec![create_delivery_job("job1", (1.0, 0.0))],
+    );
+
+    let solution_json = build_solution_json(
+        "my_vehicle_1",
+        "my_vehicle",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        10,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+        .expect("cannot build context");
+
+    // Accept a new job — should succeed
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    let result = ctx.accept_job(&candidate).expect("accept_job failed");
+
+    assert!(result.is_feasible);
+    assert_eq!(result.vehicle_id, "my_vehicle_1");
+    assert!(result.cost_delta.is_some());
+
+    // Now check another job against the updated state — should still fit (8 remaining)
+    let candidate2 = create_delivery_job("candidate2", (3.0, 0.0));
+    let check = ctx.check_job(&candidate2).expect("check_job failed");
+    assert!(check.is_feasible);
+}
+
+#[test]
+fn can_reject_infeasible_accept() {
+    // One vehicle with capacity 1, already full
+    let (problem, matrix) = build_problem_and_matrix(
+        vec![create_vehicle_with_capacity("my_vehicle", vec![1])],
+        vec![create_delivery_job("job1", (1.0, 0.0))],
+    );
+
+    let solution_json = build_solution_json(
+        "my_vehicle_1",
+        "my_vehicle",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        1,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+        .expect("cannot build context");
+
+    // Try to accept — should fail
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    let result = ctx.accept_job(&candidate);
+    assert!(result.is_err());
+}
+
+#[test]
+fn can_serialize_solution_after_accept() {
+    let (problem, matrix) = build_problem_and_matrix(
+        vec![create_vehicle_with_capacity("my_vehicle", vec![10])],
+        vec![create_delivery_job("job1", (1.0, 0.0))],
+    );
+
+    let solution_json = build_solution_json(
+        "my_vehicle_1",
+        "my_vehicle",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        10,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+        .expect("cannot build context");
+
+    // Accept a job
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    ctx.accept_job(&candidate).expect("accept_job failed");
+
+    // Serialize the solution
+    let json = ctx.to_solution_json().expect("to_solution_json failed");
+
+    // The JSON should contain the new job
+    assert!(json.contains("candidate1"), "serialized solution should contain the accepted job");
+    // And also the original job
+    assert!(json.contains("job1"), "serialized solution should contain the original job");
+}
+
+#[test]
+fn can_accept_multiple_jobs_sequentially() {
+    // One vehicle with capacity 3, one job already assigned (2 remaining)
+    let (problem, matrix) = build_problem_and_matrix(
+        vec![create_vehicle_with_capacity("my_vehicle", vec![3])],
+        vec![create_delivery_job("job1", (1.0, 0.0))],
+    );
+
+    let solution_json = build_solution_json(
+        "my_vehicle_1",
+        "my_vehicle",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        3,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+        .expect("cannot build context");
+
+    // Accept first — should succeed (1 remaining)
+    let c1 = create_delivery_job("c1", (2.0, 0.0));
+    ctx.accept_job(&c1).expect("first accept should succeed");
+
+    // Accept second — should succeed (0 remaining)
+    let c2 = create_delivery_job("c2", (3.0, 0.0));
+    ctx.accept_job(&c2).expect("second accept should succeed");
+
+    // Accept third — should fail (no capacity)
+    let c3 = create_delivery_job("c3", (4.0, 0.0));
+    let result = ctx.accept_job(&c3);
+    assert!(result.is_err(), "third accept should fail due to capacity");
+}
+
 /// Compares feasibility check vs solver re-optimization at scale.
 ///
 /// 1. Builds a 500-job / 50-vehicle problem, solves from scratch to get a baseline

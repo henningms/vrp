@@ -372,7 +372,8 @@ pub(crate) fn finalize_insertion_ctx(insertion_ctx: &mut InsertionContext) {
     insertion_ctx.problem.goal.accept_solution_state(&mut insertion_ctx.solution);
 }
 
-pub(crate) fn apply_insertion_success(insertion_ctx: &mut InsertionContext, success: InsertionSuccess) {
+/// Applies a successful insertion to the given insertion context, updating routes and job assignments.
+pub fn apply_insertion_success(insertion_ctx: &mut InsertionContext, success: InsertionSuccess) {
     let route_index = match insertion_ctx.solution.registry.get_route(&success.actor) {
         Some(new_route_ctx) => {
             insertion_ctx.solution.routes.push(new_route_ctx);

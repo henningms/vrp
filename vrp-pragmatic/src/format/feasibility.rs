@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::sync::Arc;
 use vrp_core::construction::heuristics::{
-    eval_job_insertion_in_route, BestResultSelector, EvaluationContext, InsertionPosition, InsertionResult,
-    LegSelection,
+    apply_insertion_success, eval_job_insertion_in_route, BestResultSelector, EvaluationContext, InsertionPosition,
+    InsertionResult, LegSelection, ResultSelector, UnassignmentInfo,
 };
 use vrp_core::models::problem::VehicleIdDimension;
 use vrp_core::prelude::*;
@@ -197,6 +197,141 @@ impl FeasibilityContext {
         let is_feasible = vehicles.iter().any(|v| v.is_feasible);
 
         Ok(FeasibilityResult { is_feasible, vehicles })
+    }
+
+    /// Finds the best feasible insertion for the candidate job and applies it to the internal state.
+    ///
+    /// After this call the insertion context is updated as if the job had been assigned,
+    /// so subsequent `check_job` / `accept_job` calls see the new state.
+    pub fn accept_job(&mut self, candidate: &ApiJob) -> Result<VehicleFeasibility, GenericError> {
+        let coord_index = self
+            .problem
+            .extras
+            .get_coord_index()
+            .ok_or_else(|| GenericError::from("cannot get coord index"))?;
+
+        let core_job =
+            convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
+
+        let result_selector = BestResultSelector::default();
+        let goal = &self.problem.goal;
+
+        let mut best = InsertionResult::make_failure();
+
+        for route_ctx in &self.insertion_ctx.solution.routes {
+            let eval_ctx = EvaluationContext {
+                goal,
+                job: &core_job,
+                leg_selection: &LegSelection::Exhaustive,
+                result_selector: &result_selector,
+            };
+
+            best = result_selector.select_insertion(
+                &self.insertion_ctx,
+                best,
+                eval_job_insertion_in_route(
+                    &self.insertion_ctx,
+                    &eval_ctx,
+                    route_ctx,
+                    InsertionPosition::Any,
+                    InsertionResult::make_failure(),
+                ),
+            );
+        }
+
+        match best {
+            InsertionResult::Success(success) => {
+                let actor = &success.actor;
+                let vehicle_id = actor
+                    .vehicle
+                    .dimens
+                    .get_vehicle_id()
+                    .cloned()
+                    .unwrap_or_default();
+                let type_id = actor
+                    .vehicle
+                    .dimens
+                    .get_vehicle_type()
+                    .cloned()
+                    .unwrap_or_default();
+                let shift_index = actor
+                    .vehicle
+                    .dimens
+                    .get_shift_index()
+                    .copied()
+                    .unwrap_or_default();
+                let cost_delta: Float = success.cost.iter().sum();
+
+                apply_insertion_success(&mut self.insertion_ctx, success);
+                self.problem.goal.accept_solution_state(&mut self.insertion_ctx.solution);
+
+                Ok(VehicleFeasibility {
+                    vehicle_id,
+                    type_id,
+                    shift_index,
+                    is_feasible: true,
+                    cost_delta: Some(cost_delta),
+                    violations: vec![],
+                })
+            }
+            InsertionResult::Failure(_) => {
+                Err("no feasible insertion found for candidate job".into())
+            }
+        }
+    }
+
+    /// Serializes the current solution state to a JSON string.
+    ///
+    /// Builds a domain `Solution` from the internal `InsertionContext` and converts it
+    /// to the pragmatic API format. Useful for persisting state or rebuilding the context later.
+    pub fn to_solution_json(&self) -> Result<String, GenericError> {
+        use crate::format::solution::{create_solution, PragmaticOutputType, serialize_solution};
+        use std::io::BufWriter;
+
+        let cost = self.insertion_ctx.get_total_cost().unwrap_or(0.);
+
+        let routes: Vec<vrp_core::models::solution::Route> = self
+            .insertion_ctx
+            .solution
+            .routes
+            .iter()
+            .map(|rc| rc.route().deep_copy())
+            .collect();
+
+        let registry = self.insertion_ctx.solution.registry.resources().deep_copy();
+
+        let unassigned: Vec<(vrp_core::prelude::Job, UnassignmentInfo)> = self
+            .insertion_ctx
+            .solution
+            .unassigned
+            .iter()
+            .chain(
+                self.insertion_ctx
+                    .solution
+                    .required
+                    .iter()
+                    .map(|job| (job, &UnassignmentInfo::Unknown)),
+            )
+            .map(|(job, info)| (job.clone(), info.clone()))
+            .collect();
+
+        let domain_solution = vrp_core::models::Solution {
+            cost,
+            registry,
+            routes,
+            unassigned,
+            telemetry: None,
+        };
+
+        let api_solution =
+            create_solution(&self.problem, &domain_solution, &PragmaticOutputType::OnlyPragmatic);
+
+        let mut writer = BufWriter::new(Vec::new());
+        serialize_solution(&api_solution, &mut writer)
+            .map_err(|e| GenericError::from(e.to_string()))?;
+
+        String::from_utf8(writer.into_inner().map_err(|e| GenericError::from(e.to_string()))?)
+            .map_err(|e| GenericError::from(e.to_string()))
     }
 }
 
