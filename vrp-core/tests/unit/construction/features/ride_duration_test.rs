@@ -1,7 +1,7 @@
 use super::*;
 use crate::construction::heuristics::ActivityContext;
 use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
-use crate::helpers::models::problem::{test_driver, test_vehicle_with_id, FleetBuilder, TestSingleBuilder};
+use crate::helpers::models::problem::{FleetBuilder, TestSingleBuilder, test_driver, test_vehicle_with_id};
 use crate::helpers::models::solution::{RouteBuilder, RouteContextBuilder};
 use crate::models::common::{Demand, Distance, Location, Profile, Schedule};
 use crate::models::problem::{Multi, TransportCost, TravelTime};

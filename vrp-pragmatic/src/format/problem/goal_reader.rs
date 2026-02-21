@@ -52,6 +52,10 @@ pub(super) fn create_goal_context(
         features.push(create_compatibility_feature("compatibility", COMPATIBILITY_CONSTRAINT_CODE)?);
     }
 
+    if props.has_solo_riding {
+        features.push(create_solo_riding_feature("solo_riding", SOLO_RIDING_CONSTRAINT_CODE)?);
+    }
+
     if props.has_group {
         features.push(create_group_feature("group", blocks.jobs.size(), GROUP_CONSTRAINT_CODE)?);
     }
@@ -118,10 +122,7 @@ fn get_objective_feature_layers(
         .collect::<GenericResult<Vec<_>>>()?;
 
     if props.has_via {
-        layers.push(FeatureLayer::Single(create_tour_order_soft_feature(
-            "via_order",
-            get_via_order_fn(),
-        )?));
+        layers.push(FeatureLayer::Single(create_tour_order_soft_feature("via_order", get_via_order_fn())?));
     }
 
     Ok(layers)
@@ -228,10 +229,7 @@ fn get_objective_feature_layer(
         Objective::TourOrder => create_tour_order_soft_feature("tour_order", get_tour_order_fn()),
         Objective::FastService => get_fast_service_feature("fast_service", blocks),
         Objective::MatchRequestedTime { early_penalty, late_penalty } => {
-            let penalty = RequestedTimePenalty::new(
-                early_penalty.unwrap_or(1.0),
-                late_penalty.unwrap_or(1.0),
-            );
+            let penalty = RequestedTimePenalty::new(early_penalty.unwrap_or(1.0), late_penalty.unwrap_or(1.0));
             create_requested_time_feature("match_requested_time", penalty, blocks.transport.clone())
         }
         Objective::HierarchicalAreas { levels } => get_hierarchical_areas_feature(blocks, *levels),

@@ -188,8 +188,8 @@ fn test_valid_lifo_tour_accepts_correct_delivery_order() {
         .with_route(
             RouteBuilder::default()
                 .with_vehicle(&fleet, "v1")
-                .add_activity(create_lifo_pickup(10, "wheelchair", 1))   // idx 1: W1 pickup
-                .add_activity(create_lifo_pickup(20, "wheelchair", 2))   // idx 2: W2 pickup
+                .add_activity(create_lifo_pickup(10, "wheelchair", 1)) // idx 1: W1 pickup
+                .add_activity(create_lifo_pickup(20, "wheelchair", 2)) // idx 2: W2 pickup
                 .add_activity(create_lifo_delivery(30, "wheelchair", 2)) // idx 3: W2 delivery
                 .build(),
         )
@@ -247,7 +247,7 @@ fn test_separate_stacks_for_different_tags() {
             RouteBuilder::default()
                 .with_vehicle(&fleet, "v1")
                 .add_activity(create_lifo_pickup(10, "wheelchair", 1)) // idx 1: W1 pickup
-                .add_activity(create_lifo_pickup(20, "stroller", 2))   // idx 2: S1 pickup
+                .add_activity(create_lifo_pickup(20, "stroller", 2)) // idx 2: S1 pickup
                 .build(),
         )
         .build();
@@ -334,7 +334,7 @@ fn test_regular_jobs_interleave_without_affecting_lifo() {
             RouteBuilder::default()
                 .with_vehicle(&fleet, "v1")
                 .add_activity(create_lifo_pickup(10, "wheelchair", 1)) // idx 1: W1 pickup
-                .add_activity(create_regular_activity(15))             // idx 2: Regular job
+                .add_activity(create_regular_activity(15)) // idx 2: Regular job
                 .add_activity(create_lifo_pickup(20, "wheelchair", 2)) // idx 3: W2 pickup
                 .build(),
         )
@@ -363,7 +363,7 @@ fn test_inserting_pickup_that_would_cause_downstream_violation() {
         .with_route(
             RouteBuilder::default()
                 .with_vehicle(&fleet, "v1")
-                .add_activity(create_lifo_pickup(10, "wheelchair", 1))   // idx 1: W1 pickup
+                .add_activity(create_lifo_pickup(10, "wheelchair", 1)) // idx 1: W1 pickup
                 .add_activity(create_lifo_delivery(20, "wheelchair", 1)) // idx 2: W1 delivery
                 .build(),
         )
@@ -391,11 +391,11 @@ fn test_multiple_valid_lifo_sequence() {
         .with_route(
             RouteBuilder::default()
                 .with_vehicle(&fleet, "v1")
-                .add_activity(create_lifo_pickup(10, "wheelchair", 1))    // idx 1: P1
-                .add_activity(create_lifo_pickup(20, "wheelchair", 2))    // idx 2: P2
-                .add_activity(create_lifo_pickup(30, "wheelchair", 3))    // idx 3: P3
-                .add_activity(create_lifo_delivery(40, "wheelchair", 3))  // idx 4: D3
-                .add_activity(create_lifo_delivery(50, "wheelchair", 2))  // idx 5: D2
+                .add_activity(create_lifo_pickup(10, "wheelchair", 1)) // idx 1: P1
+                .add_activity(create_lifo_pickup(20, "wheelchair", 2)) // idx 2: P2
+                .add_activity(create_lifo_pickup(30, "wheelchair", 3)) // idx 3: P3
+                .add_activity(create_lifo_delivery(40, "wheelchair", 3)) // idx 4: D3
+                .add_activity(create_lifo_delivery(50, "wheelchair", 2)) // idx 5: D2
                 .build(),
         )
         .build();

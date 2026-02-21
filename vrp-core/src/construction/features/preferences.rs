@@ -63,7 +63,12 @@ impl JobPreferences {
         let map: fn(Option<Vec<_>>) -> Option<HashSet<_>> =
             |attrs| attrs.and_then(|v| if v.is_empty() { None } else { Some(v.into_iter().collect()) });
 
-        Self { preferred: map(preferred), acceptable: map(acceptable), avoid: map(avoid), weight: weight.unwrap_or(1.0) }
+        Self {
+            preferred: map(preferred),
+            acceptable: map(acceptable),
+            avoid: map(avoid),
+            weight: weight.unwrap_or(1.0),
+        }
     }
 
     /// Check if any preferred attribute matches the vehicle attributes.
@@ -115,9 +120,9 @@ pub struct PreferencePenalty {
 impl Default for PreferencePenalty {
     fn default() -> Self {
         Self {
-            no_preferred_match: 100.0,   // High penalty for missing preferred
-            no_acceptable_match: 30.0,   // Lower additional penalty for missing acceptable
-            per_avoided_present: 75.0,   // High penalty per unwanted attribute
+            no_preferred_match: 100.0, // High penalty for missing preferred
+            no_acceptable_match: 30.0, // Lower additional penalty for missing acceptable
+            per_avoided_present: 75.0, // High penalty per unwanted attribute
         }
     }
 }

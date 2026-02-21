@@ -1,0 +1,6 @@
+{
+  "termination": {
+    "maxTime": 1,
+    "maxGenerations": 20
+  }
+}

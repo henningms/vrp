@@ -101,6 +101,7 @@ mod actual {
                 value: None,
                 group: None,
                 compatibility: None,
+                solo_riding: None,
                 lifo_tag: None,
                 fixed_order: None,
                 max_ride_duration: None,

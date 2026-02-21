@@ -17,6 +17,7 @@ mod recharge;
 mod relations;
 mod reload;
 mod skills;
+mod solo_riding;
 mod timing;
 mod tour_shape;
 mod unassigned;

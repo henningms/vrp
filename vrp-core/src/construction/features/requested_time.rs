@@ -84,9 +84,7 @@ impl FeatureObjective for RequestedTimeObjective {
             .routes
             .iter()
             .flat_map(|route_ctx| {
-                route_ctx.route().tour.all_activities().filter_map(|activity| {
-                    self.calculate_activity_penalty(activity)
-                })
+                route_ctx.route().tour.all_activities().filter_map(|activity| self.calculate_activity_penalty(activity))
             })
             .sum()
     }
@@ -99,8 +97,7 @@ impl FeatureObjective for RequestedTimeObjective {
                 let (_, (prev_to_tar_dur, _)) = calculate_travel(route_ctx, activity_ctx, self.transport.as_ref());
                 let arrival = activity_ctx.prev.schedule.departure + prev_to_tar_dur;
 
-                self.calculate_activity_penalty_with_arrival(activity_ctx.target, arrival)
-                    .unwrap_or_default()
+                self.calculate_activity_penalty_with_arrival(activity_ctx.target, arrival).unwrap_or_default()
             }
         }
     }
@@ -113,11 +110,7 @@ impl RequestedTimeObjective {
     }
 
     /// Calculates penalty for an activity with a given arrival time.
-    fn calculate_activity_penalty_with_arrival(
-        &self,
-        activity: &Activity,
-        arrival: Timestamp,
-    ) -> Option<Cost> {
+    fn calculate_activity_penalty_with_arrival(&self, activity: &Activity, arrival: Timestamp) -> Option<Cost> {
         let single = activity.job.as_ref()?;
         let requested_times = single.dimens.get_job_requested_times()?;
         let requested_time = requested_times.get(&activity.place.idx)?;

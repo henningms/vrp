@@ -222,7 +222,7 @@ impl CheckerContext {
                     // Match by tag only - location can vary based on routing
                     stops.iter().find(|s| s.tag == activity.job_tag)
                 })
-                .map(|_| ActivityType::Terminal)  // Treat required stops as terminal activities for checking
+                .map(|_| ActivityType::Terminal) // Treat required stops as terminal activities for checking
                 .ok_or_else(|| format!("cannot find required stop for tour '{}'", tour.vehicle_id).into()),
 
             "via" => shift
@@ -232,7 +232,7 @@ impl CheckerContext {
                     // Match by tag only - location can vary based on routing
                     stops.iter().find(|s| s.tag == activity.job_tag)
                 })
-                .map(|_| ActivityType::Terminal)  // Treat via stops as terminal activities for checking
+                .map(|_| ActivityType::Terminal) // Treat via stops as terminal activities for checking
                 .ok_or_else(|| format!("cannot find via stop for tour '{}'", tour.vehicle_id).into()),
 
             _ => Err(format!("unknown activity type: '{}'", activity.activity_type).into()),

@@ -28,6 +28,11 @@ pub mod regression;
 
 pub use vrp_core as core;
 
+pub use self::format::feasibility::{
+    check_insertion_feasibility, ConstraintViolationInfo, FeasibilityContext, FeasibilityResult,
+    VehicleFeasibility,
+};
+
 mod utils;
 
 pub mod checker;

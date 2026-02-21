@@ -26,6 +26,7 @@ pub fn create_job(id: &str) -> Job {
         value: None,
         group: None,
         compatibility: None,
+        solo_riding: None,
         lifo_tag: None,
         fixed_order: None,
         max_ride_duration: None,
@@ -41,7 +42,7 @@ pub fn create_delivery_job_with_order(id: &str, location: (f64, f64), order: i32
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: Some(order),
         }]),
         ..create_job(id)
@@ -53,7 +54,7 @@ pub fn create_delivery_job_with_group(id: &str, location: (f64, f64), group: &st
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: None,
         }]),
         group: Some(group.to_string()),
@@ -66,7 +67,7 @@ pub fn create_delivery_job_with_compatibility(id: &str, location: (f64, f64), co
         deliveries: Some(vec![JobTask {
             places: vec![create_job_place(location, None)],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: None,
         }]),
         compatibility: Some(compatibility.to_string()),
@@ -87,7 +88,7 @@ pub fn create_delivery_job_with_duration(id: &str, location: (f64, f64), duratio
         deliveries: Some(vec![JobTask {
             places: vec![JobPlace { duration, ..create_job_place(location, None) }],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: None,
         }]),
         ..create_job(id)
@@ -104,7 +105,7 @@ pub fn create_delivery_job_with_times(
         deliveries: Some(vec![JobTask {
             places: vec![JobPlace { duration, times: convert_times(&times), ..create_job_place(location, None) }],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: None,
         }]),
         ..create_job(id)
@@ -182,7 +183,7 @@ pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
                 requested_time: None,
             }],
             demand: Some(vec![1]),
-named_demand: None,
+            named_demand: None,
             order: None,
         }]),
         ..create_job(id)

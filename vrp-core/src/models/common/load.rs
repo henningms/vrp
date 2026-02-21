@@ -402,12 +402,7 @@ impl ConfigurableLoad {
             }
         }
 
-        Self {
-            load: [0; LOAD_DIMENSION_SIZE],
-            configurations: configs,
-            config_count: configurations.len(),
-            size,
-        }
+        Self { load: [0; LOAD_DIMENSION_SIZE], configurations: configs, config_count: configurations.len(), size }
     }
 
     /// Creates a load value (for job demand) without configurations.
@@ -424,12 +419,7 @@ impl ConfigurableLoad {
         let mut configs = [[0; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS];
         configs[0] = [i32::MAX; LOAD_DIMENSION_SIZE];
 
-        Self {
-            load,
-            configurations: configs,
-            config_count: 1,
-            size: data.len(),
-        }
+        Self { load, configurations: configs, config_count: 1, size: data.len() }
     }
 
     /// Converts to vector representation.
@@ -439,9 +429,7 @@ impl ConfigurableLoad {
 
     /// Returns the configurations as vectors.
     pub fn configurations_as_vec(&self) -> Vec<Vec<i32>> {
-        (0..self.config_count)
-            .map(|i| self.configurations[i][..self.size].to_vec())
-            .collect()
+        (0..self.config_count).map(|i| self.configurations[i][..self.size].to_vec()).collect()
     }
 
     fn get(&self, idx: usize) -> i32 {
@@ -502,12 +490,7 @@ impl Default for ConfigurableLoad {
         let mut configs = [[0; LOAD_DIMENSION_SIZE]; MAX_CONFIGURATIONS];
         configs[0] = [i32::MAX; LOAD_DIMENSION_SIZE];
 
-        Self {
-            load: [0; LOAD_DIMENSION_SIZE],
-            configurations: configs,
-            config_count: 1,
-            size: 0,
-        }
+        Self { load: [0; LOAD_DIMENSION_SIZE], configurations: configs, config_count: 1, size: 0 }
     }
 }
 

@@ -15,11 +15,11 @@ use crate::common::define_routing_data;
 
 use std::collections::HashSet;
 use std::sync::Arc;
-use vrp_core::prelude::*;
 use vrp_core::construction::features::{
     JobPreferences, JobPreferencesDimension, PreferencePenalty, VehicleAttributesDimension, create_preferences_feature,
 };
 use vrp_core::models::problem::{JobIdDimension, VehicleIdDimension};
+use vrp_core::prelude::*;
 
 /// Defines a ride-sharing problem with passenger preferences.
 ///
@@ -38,9 +38,9 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
             .dimension(|dimens| {
                 dimens.set_job_preferences(JobPreferences::new(
                     Some(vec!["driver:alice".to_string()]), // Preferred: Alice
-                    None,                                    // Acceptable: none specified
-                    None,                                    // Avoid: none
-                    None,                                    // Weight: default
+                    None,                                   // Acceptable: none specified
+                    None,                                   // Avoid: none
+                    None,                                   // Weight: default
                 ));
             })
             .build_as_job()?,
@@ -73,11 +73,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
             })
             .build_as_job()?,
         // Passenger 4: No preferences (flexible)
-        SingleBuilder::default()
-            .id("passenger4")
-            .demand(Demand::delivery(1))
-            .location(4)?
-            .build_as_job()?,
+        SingleBuilder::default().id("passenger4").demand(Demand::delivery(1)).location(4)?.build_as_job()?,
     ];
 
     // Create 2 drivers with different attributes
@@ -85,12 +81,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
         // Alice with SUV
         VehicleBuilder::default()
             .id("alice")
-            .add_detail(
-                VehicleDetailBuilder::default()
-                    .set_start_location(0)
-                    .set_end_location(0)
-                    .build()?,
-            )
+            .add_detail(VehicleDetailBuilder::default().set_start_location(0).set_end_location(0).build()?)
             .dimension(|dimens| {
                 dimens.set_vehicle_attributes(
                     vec!["driver:alice".to_string(), "vehicle:suv".to_string(), "shift:day".to_string()]
@@ -103,12 +94,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
         // Bob with Sedan
         VehicleBuilder::default()
             .id("bob")
-            .add_detail(
-                VehicleDetailBuilder::default()
-                    .set_start_location(0)
-                    .set_end_location(0)
-                    .build()?,
-            )
+            .add_detail(VehicleDetailBuilder::default().set_start_location(0).set_end_location(0).build()?)
             .dimension(|dimens| {
                 dimens.set_vehicle_attributes(
                     vec!["driver:bob".to_string(), "vehicle:sedan".to_string(), "shift:day".to_string()]
@@ -164,8 +150,11 @@ fn main() -> GenericResult<()> {
     println!("  - Passenger 4: No preferences (flexible)\n");
 
     // Solve
-    let config =
-        VrpConfigBuilder::new(problem.clone()).prebuild()?.with_max_time(Some(5)).with_max_generations(Some(10)).build()?;
+    let config = VrpConfigBuilder::new(problem.clone())
+        .prebuild()?
+        .with_max_time(Some(5))
+        .with_max_generations(Some(10))
+        .build()?;
 
     println!("Solving...\n");
     let solution = Solver::new(problem.clone(), config).solve()?;

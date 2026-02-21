@@ -72,6 +72,7 @@ pub(crate) fn generate_plan(
                 value: job_proto.value,
                 group: job_proto.group.clone(),
                 compatibility: job_proto.compatibility.clone(),
+                solo_riding: job_proto.solo_riding,
                 lifo_tag: job_proto.lifo_tag.clone(),
                 fixed_order: job_proto.fixed_order,
                 max_ride_duration: job_proto.max_ride_duration,

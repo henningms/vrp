@@ -154,8 +154,7 @@ pub(super) fn read_fleet(api_problem: &ApiProblem, props: &ProblemProperties, co
 
                 if props.has_configurable_capacity {
                     if let Some(configs) = &vehicle.capacity_configurations {
-                        let configurations: Vec<Vec<i32>> =
-                            configs.iter().map(|c| c.capacities.clone()).collect();
+                        let configurations: Vec<Vec<i32>> = configs.iter().map(|c| c.capacities.clone()).collect();
                         dimens.set_vehicle_capacity(ConfigurableLoad::new(configurations));
                     }
                 } else if props.has_multi_dimen_capacity {

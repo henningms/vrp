@@ -23,9 +23,7 @@ fn check_vehicle_load_assignment(context: &CheckerContext) -> GenericResult<()> 
         let intervals = get_intervals(context, tour);
 
         // Helper to check if load fits any of the capacity configurations
-        let load_fits = |load: &MultiDimLoad| {
-            capacities.iter().any(|cap| cap.can_fit(load))
-        };
+        let load_fits = |load: &MultiDimLoad| capacities.iter().any(|cap| cap.can_fit(load));
 
         intervals
             .iter()

@@ -21,6 +21,8 @@ consists of the following properties:
 - **group** (optional): a group name. Jobs with the same groups are scheduled in the same tour or left unassigned.
 - **compatibility** (optional): compatibility class. Jobs with different compatibility classes cannot be assigned in
   the same tour. This is useful to avoid mixing cargo, such as hazardous goods and food.
+- **soloRiding** (optional): when `true`, ensures this pickup-delivery job rides alone in vehicle:
+  no other pickup-delivery job can be onboard between its pickup and delivery.
 
 A job should have at least one task property specified.
 

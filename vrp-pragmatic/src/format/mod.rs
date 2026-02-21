@@ -23,6 +23,7 @@ pub use self::dimensions::*;
 mod location_fallback;
 pub use self::location_fallback::*;
 
+pub mod feasibility;
 pub mod problem;
 pub mod solution;
 
@@ -197,6 +198,7 @@ const RELOAD_RESOURCE_CONSTRAINT_CODE: ViolationCode = ViolationCode(14);
 const RECHARGE_CONSTRAINT_CODE: ViolationCode = ViolationCode(15);
 const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(16);
 const MAX_RIDE_DURATION_CONSTRAINT_CODE: ViolationCode = ViolationCode(17);
+const SOLO_RIDING_CONSTRAINT_CODE: ViolationCode = ViolationCode(18);
 
 /// An job id to job index.
 pub type JobIndex = HashMap<String, CoreJob>;

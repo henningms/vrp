@@ -30,6 +30,19 @@ pub(super) fn map_to_problem(
     matrices: Vec<Matrix>,
     coord_index: CoordIndex,
 ) -> Result<CoreProblem, MultiFormatError> {
+    let props = None;
+    map_to_problem_with_props(api_problem, matrices, coord_index, props)
+}
+
+/// Like `map_to_problem`, but accepts optional pre-computed properties.
+/// When `props_override` is `Some`, those properties are used instead of
+/// auto-detecting them from the problem definition.
+pub(crate) fn map_to_problem_with_props(
+    api_problem: ApiProblem,
+    matrices: Vec<Matrix>,
+    coord_index: CoordIndex,
+    props_override: Option<ProblemProperties>,
+) -> Result<CoreProblem, MultiFormatError> {
     ValidationContext::new(&api_problem, Some(&matrices), &coord_index).validate()?;
 
     let mut extras = Extras::default();
@@ -39,7 +52,7 @@ pub(super) fn map_to_problem(
     let coord_index = extras.get_coord_index().expect("cannot get coord index");
     let mut job_index = JobIndex::default();
 
-    let props = get_problem_properties(&api_problem, &matrices);
+    let props = props_override.unwrap_or_else(|| get_problem_properties(&api_problem, &matrices));
     let mut blocks = get_problem_blocks(&api_problem, matrices, coord_index, &mut job_index, &props)?;
 
     let job_index = Arc::new(job_index);
@@ -118,15 +131,11 @@ fn to_multi_format_error(error: GenericError) -> MultiFormatError {
     .into()
 }
 
-fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> ProblemProperties {
+pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> ProblemProperties {
     let has_unreachable_locations = matrices.iter().any(|m| m.error_codes.is_some());
 
     // Check for configurable capacity (mutually exclusive configurations)
-    let has_configurable_capacity = api_problem
-        .fleet
-        .vehicles
-        .iter()
-        .any(|v| v.capacity_configurations.is_some());
+    let has_configurable_capacity = api_problem.fleet.vehicles.iter().any(|v| v.capacity_configurations.is_some());
 
     // Check for multi-dimensional capacity (only if not using configurable capacity)
     let has_multi_dimen_capacity = !has_configurable_capacity
@@ -159,6 +168,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
     let has_group = api_problem.plan.jobs.iter().any(|job| job.group.is_some());
     let has_value = api_problem.plan.jobs.iter().filter_map(|job| job.value).any(|value| value != 0.);
     let has_compatibility = api_problem.plan.jobs.iter().any(|job| job.compatibility.is_some());
+    let has_solo_riding = api_problem.plan.jobs.iter().any(|job| job.solo_riding == Some(true));
     let has_tour_size_limits =
         api_problem.fleet.vehicles.iter().any(|v| v.limits.as_ref().is_some_and(|l| l.tour_size.is_some()));
 
@@ -186,6 +196,7 @@ fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matrix]) -> Prob
         has_group,
         has_value,
         has_compatibility,
+        has_solo_riding,
         has_tour_size_limits,
         has_tour_travel_limits,
         has_lifo,

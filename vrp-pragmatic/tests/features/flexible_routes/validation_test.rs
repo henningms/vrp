@@ -6,24 +6,13 @@ use crate::helpers::*;
 fn handles_empty_required_stops_array() {
     // Empty array should be treated as if the field is not present
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (5., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (5., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -45,22 +34,14 @@ fn handles_empty_required_stops_array() {
     let tour = &solution.tours[0];
 
     // Should deliver the job without any required stops
-    let job_count = tour
-        .stops
-        .iter()
-        .flat_map(|stop| stop.activities().iter())
-        .filter(|a| a.activity_type == "delivery")
-        .count();
+    let job_count =
+        tour.stops.iter().flat_map(|stop| stop.activities().iter()).filter(|a| a.activity_type == "delivery").count();
 
     assert_eq!(job_count, 1, "Job should be delivered");
 
     // No required stops should be present
-    let required_count = tour
-        .stops
-        .iter()
-        .flat_map(|stop| stop.activities().iter())
-        .filter(|a| a.activity_type == "required")
-        .count();
+    let required_count =
+        tour.stops.iter().flat_map(|stop| stop.activities().iter()).filter(|a| a.activity_type == "required").count();
 
     assert_eq!(required_count, 0, "No required stops should be present");
 }
@@ -69,24 +50,13 @@ fn handles_empty_required_stops_array() {
 fn handles_empty_via_array() {
     // Empty via array should work without issues
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (5., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (5., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -119,24 +89,13 @@ fn handles_empty_via_array() {
 fn handles_required_stops_without_tags() {
     // Required stops without tags should still work (matched by location/time)
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (5., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (5., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -176,26 +135,13 @@ fn handles_required_stops_without_tags() {
 fn handles_via_stops_with_tight_time_windows() {
     // Via stops with very tight time windows that might not be feasible
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![
-                create_delivery_job("job1", (10., 0.)),
-            ],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (10., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -239,24 +185,13 @@ fn handles_via_stops_with_tight_time_windows() {
 fn handles_conflicting_required_and_via_stops() {
     // Test where required and via stops might conflict
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (10., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (10., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -276,15 +211,13 @@ fn handles_conflicting_required_and_via_stops() {
                             requested_time: None,
                         },
                     ]),
-                    via: Some(vec![
-                        JobPlace {
-                            location: (5., 0.).to_loc(), // Between required stops
-                            duration: 1.,
-                            times: None,
-                            tag: Some("via1".to_string()),
-                            requested_time: None,
-                        },
-                    ]),
+                    via: Some(vec![JobPlace {
+                        location: (5., 0.).to_loc(), // Between required stops
+                        duration: 1.,
+                        times: None,
+                        tag: Some("via1".to_string()),
+                        requested_time: None,
+                    }]),
                 }],
                 ..create_default_vehicle_type()
             }],
@@ -325,24 +258,13 @@ fn handles_conflicting_required_and_via_stops() {
 fn handles_many_required_stops() {
     // Test with several required stops to verify sequence handling
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (12., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (12., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
@@ -399,39 +321,26 @@ fn handles_via_stops_far_from_route() {
     // Via stops very far from optimal route should be skipped
     let problem = Problem {
         plan: Plan {
-            jobs: vec![
-                create_delivery_job("job1", (5., 0.)),
-                create_delivery_job("job2", (10., 0.)),
-            ],
+            jobs: vec![create_delivery_job("job1", (5., 0.)), create_delivery_job("job2", (10., 0.))],
             ..create_empty_plan()
         },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,
                     required_stops: None,
-                    via: Some(vec![
-                        JobPlace {
-                            location: (100., 100.).to_loc(), // Very far
-                            duration: 1.,
-                            times: None,
-                            tag: Some("via_far".to_string()),
-                            requested_time: None,
-                        },
-                    ]),
+                    via: Some(vec![JobPlace {
+                        location: (100., 100.).to_loc(), // Very far
+                        duration: 1.,
+                        times: None,
+                        tag: Some("via_far".to_string()),
+                        requested_time: None,
+                    }]),
                 }],
                 ..create_default_vehicle_type()
             }],
@@ -471,24 +380,13 @@ fn handles_via_stops_far_from_route() {
 fn handles_single_required_stop() {
     // Edge case: single required stop
     let problem = Problem {
-        plan: Plan {
-            jobs: vec![create_delivery_job("job1", (10., 0.))],
-            ..create_empty_plan()
-        },
+        plan: Plan { jobs: vec![create_delivery_job("job1", (10., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![VehicleType {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![VehicleShift {
-                    start: ShiftStart {
-                        earliest: format_time(0.),
-                        latest: None,
-                        location: (0., 0.).to_loc(),
-                    },
-                    end: Some(ShiftEnd {
-                        earliest: None,
-                        latest: format_time(1000.),
-                        location: (0., 0.).to_loc(),
-                    }),
+                    start: ShiftStart { earliest: format_time(0.), latest: None, location: (0., 0.).to_loc() },
+                    end: Some(ShiftEnd { earliest: None, latest: format_time(1000.), location: (0., 0.).to_loc() }),
                     breaks: None,
                     reloads: None,
                     recharges: None,

@@ -76,11 +76,7 @@ fn check_e1102_multiple_pickups_deliveries_demand(ctx: &ValidationContext) -> Re
     };
 
     let get_demand = |tasks: &Option<Vec<JobTask>>| -> MultiDimLoad {
-        if let Some(tasks) = tasks {
-            tasks.iter().map(get_task_demand).sum()
-        } else {
-            MultiDimLoad::default()
-        }
+        if let Some(tasks) = tasks { tasks.iter().map(get_task_demand).sum() } else { MultiDimLoad::default() }
     };
 
     let ids = ctx
@@ -211,9 +207,7 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
 fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids: Vec<String> = ctx
         .jobs()
-        .filter(|job| {
-            ctx.tasks(job).iter().any(|task| task.demand.is_some() && task.named_demand.is_some())
-        })
+        .filter(|job| ctx.tasks(job).iter().any(|task| task.demand.is_some() && task.named_demand.is_some()))
         .map(|job| job.id.clone())
         .collect();
 
@@ -230,13 +224,8 @@ fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> 
 
 /// Checks that namedDemand keys exist in capacityDimensions.
 fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<(), FormatError> {
-    let dimension_names: std::collections::HashSet<_> = ctx
-        .problem
-        .fleet
-        .capacity_dimensions
-        .as_ref()
-        .map(|names| names.iter().cloned().collect())
-        .unwrap_or_default();
+    let dimension_names: std::collections::HashSet<_> =
+        ctx.problem.fleet.capacity_dimensions.as_ref().map(|names| names.iter().cloned().collect()).unwrap_or_default();
 
     // Check if any job uses namedDemand without capacityDimensions defined
     if dimension_names.is_empty() {
@@ -259,9 +248,9 @@ fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
             .jobs()
             .filter(|job| {
                 ctx.tasks(job).iter().any(|task| {
-                    task.named_demand.as_ref().is_some_and(|named| {
-                        named.keys().any(|key| !dimension_names.contains(key))
-                    })
+                    task.named_demand
+                        .as_ref()
+                        .is_some_and(|named| named.keys().any(|key| !dimension_names.contains(key)))
                 })
             })
             .map(|job| job.id.clone())

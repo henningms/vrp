@@ -70,7 +70,7 @@ pub fn write_pragmatic<W: Write>(
     Ok(())
 }
 
-fn map_code_reason(code: ViolationCode) -> (&'static str, &'static str) {
+pub(crate) fn map_code_reason(code: ViolationCode) -> (&'static str, &'static str) {
     match code {
         SKILL_CONSTRAINT_CODE => ("SKILL_CONSTRAINT", "cannot serve required skill"),
         TIME_CONSTRAINT_CODE => ("TIME_WINDOW_CONSTRAINT", "cannot be visited within time window"),
@@ -97,12 +97,11 @@ fn map_code_reason(code: ViolationCode) -> (&'static str, &'static str) {
             ("RELOAD_RESOURCE_CONSTRAINT", "cannot be assigned due to reload resource constraint")
         }
         RECHARGE_CONSTRAINT_CODE => ("RECHARGE_CONSTRAINT_CODE", "cannot be assigned due to recharge constraint"),
-        LIFO_CONSTRAINT_CODE => {
-            ("LIFO_CONSTRAINT", "cannot be assigned due to LIFO ordering constraint of vehicle")
-        }
+        LIFO_CONSTRAINT_CODE => ("LIFO_CONSTRAINT", "cannot be assigned due to LIFO ordering constraint of vehicle"),
         MAX_RIDE_DURATION_CONSTRAINT_CODE => {
             ("MAX_RIDE_DURATION_CONSTRAINT", "cannot be assigned due to max ride duration constraint")
         }
+        SOLO_RIDING_CONSTRAINT_CODE => ("SOLO_RIDING_CONSTRAINT", "cannot be assigned due to solo riding constraint"),
         _ => ("NO_REASON_FOUND", "unknown"),
     }
 }
@@ -126,6 +125,7 @@ fn map_reason_code(reason: &str) -> ViolationCode {
         "RECHARGE_CONSTRAINT_CODE" => RECHARGE_CONSTRAINT_CODE,
         "LIFO_CONSTRAINT" => LIFO_CONSTRAINT_CODE,
         "MAX_RIDE_DURATION_CONSTRAINT" => MAX_RIDE_DURATION_CONSTRAINT_CODE,
+        "SOLO_RIDING_CONSTRAINT" => SOLO_RIDING_CONSTRAINT_CODE,
         _ => ViolationCode::unknown(),
     }
 }

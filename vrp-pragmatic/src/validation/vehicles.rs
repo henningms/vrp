@@ -341,17 +341,13 @@ fn check_e1311_capacity_dimensions_count(ctx: &ValidationContext) -> Result<(), 
         let type_ids: Vec<String> = ctx
             .vehicles()
             .filter(|vehicle| {
-                let actual_size = vehicle
-                    .capacity
-                    .as_ref()
-                    .map(|c| c.len())
-                    .or_else(|| {
-                        vehicle
-                            .capacity_configurations
-                            .as_ref()
-                            .and_then(|configs| configs.first())
-                            .map(|c| c.capacities.len())
-                    });
+                let actual_size = vehicle.capacity.as_ref().map(|c| c.len()).or_else(|| {
+                    vehicle
+                        .capacity_configurations
+                        .as_ref()
+                        .and_then(|configs| configs.first())
+                        .map(|c| c.capacities.len())
+                });
 
                 actual_size.is_some_and(|size| size != expected_size)
             })
@@ -387,10 +383,7 @@ fn check_e1312_vehicle_has_capacity(ctx: &ValidationContext) -> Result<(), Forma
         Err(FormatError::new(
             "E1312".to_string(),
             "vehicle has no capacity defined".to_string(),
-            format!(
-                "specify either capacity or capacityConfigurations for vehicle types: '{}'",
-                type_ids.join(", ")
-            ),
+            format!("specify either capacity or capacityConfigurations for vehicle types: '{}'", type_ids.join(", ")),
         ))
     }
 }

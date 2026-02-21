@@ -233,9 +233,10 @@ fn can_use_named_demand_with_capacity_dimensions() {
                 costs: create_default_vehicle_costs(),
                 shifts: vec![create_default_vehicle_shift()],
                 capacity: None,
-                capacity_configurations: Some(vec![
-                    CapacityConfiguration { name: Some("with_wheelchair".to_string()), capacities: vec![4, 1] },
-                ]),
+                capacity_configurations: Some(vec![CapacityConfiguration {
+                    name: Some("with_wheelchair".to_string()),
+                    capacities: vec![4, 1],
+                }]),
                 skills: None,
                 limits: None,
                 lifo_tags: None,
@@ -338,10 +339,7 @@ fn can_handle_multiple_accessibility_features() {
                     CapacityConfiguration { name: Some("all_seated".to_string()), capacities: vec![10, 0, 0] },
                     CapacityConfiguration { name: Some("one_wheelchair".to_string()), capacities: vec![6, 1, 0] },
                     CapacityConfiguration { name: Some("two_strollers".to_string()), capacities: vec![6, 0, 2] },
-                    CapacityConfiguration {
-                        name: Some("mixed".to_string()),
-                        capacities: vec![4, 1, 1],
-                    },
+                    CapacityConfiguration { name: Some("mixed".to_string()), capacities: vec![4, 1, 1] },
                 ]),
                 skills: None,
                 limits: None,

@@ -170,6 +170,11 @@ pub struct Job {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compatibility: Option<String>,
 
+    /// When true, ensures this pickup-delivery job rides alone in vehicle:
+    /// no other pickup-delivery job can be onboard between its pickup and delivery.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "soloRiding")]
+    pub solo_riding: Option<bool>,
+
     /// LIFO (Last-In-First-Out) tag/category.
     /// Specifies which LIFO stack this job belongs to (e.g., "wheelchair", "stroller").
     /// Different tags maintain separate stacks, so wheelchairs and strollers don't interfere.

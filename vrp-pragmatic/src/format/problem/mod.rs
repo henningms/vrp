@@ -24,9 +24,10 @@ mod fleet_reader;
 pub use self::fleet_reader::create_approx_matrices;
 
 mod goal_reader;
-mod job_reader;
+pub(crate) mod job_reader;
 
 mod problem_reader;
+pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props};
 use self::problem_reader::{map_to_problem_with_approx, map_to_problem_with_matrices};
 
 /// Reads specific problem definition from various sources.
@@ -96,24 +97,50 @@ impl PragmaticProblem for (ApiProblem, Option<Vec<Matrix>>) {
 }
 
 /// Keeps track of problem properties (e.g. features).
-struct ProblemProperties {
-    has_multi_dimen_capacity: bool,
-    has_configurable_capacity: bool,
-    has_breaks: bool,
-    has_skills: bool,
-    has_preferences: bool,
-    has_unreachable_locations: bool,
-    has_reloads: bool,
-    has_recharges: bool,
-    has_order: bool,
-    has_group: bool,
-    has_value: bool,
-    has_compatibility: bool,
-    has_tour_size_limits: bool,
-    has_tour_travel_limits: bool,
-    has_lifo: bool,
-    has_max_ride_duration: bool,
-    has_via: bool,
+#[derive(Clone)]
+pub(crate) struct ProblemProperties {
+    pub(crate) has_multi_dimen_capacity: bool,
+    pub(crate) has_configurable_capacity: bool,
+    pub(crate) has_breaks: bool,
+    pub(crate) has_skills: bool,
+    pub(crate) has_preferences: bool,
+    pub(crate) has_unreachable_locations: bool,
+    pub(crate) has_reloads: bool,
+    pub(crate) has_recharges: bool,
+    pub(crate) has_order: bool,
+    pub(crate) has_group: bool,
+    pub(crate) has_value: bool,
+    pub(crate) has_compatibility: bool,
+    pub(crate) has_solo_riding: bool,
+    pub(crate) has_tour_size_limits: bool,
+    pub(crate) has_tour_travel_limits: bool,
+    pub(crate) has_lifo: bool,
+    pub(crate) has_max_ride_duration: bool,
+    pub(crate) has_via: bool,
+}
+
+impl ProblemProperties {
+    /// Returns a copy with all pure-constraint features force-enabled.
+    ///
+    /// This is used by the feasibility checker so that constraints like skills,
+    /// compatibility, etc. are active even if no existing job in the problem
+    /// uses them — a candidate job might be the first to require them.
+    ///
+    /// Capacity-related flags (`has_multi_dimen_capacity`, `has_configurable_capacity`)
+    /// are NOT changed because they affect how demand values are interpreted.
+    pub(crate) fn with_all_constraints_enabled(mut self) -> Self {
+        self.has_skills = true;
+        self.has_preferences = true;
+        self.has_order = true;
+        self.has_group = true;
+        self.has_compatibility = true;
+        self.has_solo_riding = true;
+        self.has_tour_size_limits = true;
+        self.has_tour_travel_limits = true;
+        self.has_lifo = true;
+        self.has_max_ride_duration = true;
+        self
+    }
 }
 
 /// Keeps track of materialized problem building blocks.
@@ -138,11 +165,7 @@ pub struct CapacityDimensionMapping {
 impl CapacityDimensionMapping {
     /// Creates a mapping from a list of dimension names.
     pub fn from_names(names: &[String]) -> Self {
-        let name_to_index = names
-            .iter()
-            .enumerate()
-            .map(|(idx, name)| (name.clone(), idx))
-            .collect();
+        let name_to_index = names.iter().enumerate().map(|(idx, name)| (name.clone(), idx)).collect();
         Self { name_to_index, names: names.to_vec() }
     }
 

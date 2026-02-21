@@ -62,12 +62,7 @@ fn test_job_preferences_new() {
 
 #[test]
 fn test_job_preferences_with_weight() {
-    let prefs = JobPreferences::new(
-        Some(vec!["driver:alice".to_string()]),
-        None,
-        None,
-        Some(2.5),
-    );
+    let prefs = JobPreferences::new(Some(vec!["driver:alice".to_string()]), None, None, Some(2.5));
 
     assert_eq!(prefs.weight, 2.5);
 }
@@ -108,8 +103,7 @@ fn test_count_avoided() {
     let prefs = JobPreferences::new(None, None, Some(vec!["shift:night".to_string(), "vehicle:old".to_string()]), None);
 
     let attrs_night: HashSet<String> = vec!["shift:night".to_string()].into_iter().collect();
-    let attrs_both: HashSet<String> =
-        vec!["shift:night".to_string(), "vehicle:old".to_string()].into_iter().collect();
+    let attrs_both: HashSet<String> = vec!["shift:night".to_string(), "vehicle:old".to_string()].into_iter().collect();
     let attrs_none: HashSet<String> = vec!["shift:day".to_string()].into_iter().collect();
 
     assert_eq!(prefs.count_avoided(Some(&attrs_night)), 1);

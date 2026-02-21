@@ -1,6 +1,6 @@
 use crate::format::coord_index::CoordIndex;
-use crate::format::problem::JobSkills as ApiJobSkills;
 use crate::format::problem::JobPreferences as ApiJobPreferences;
+use crate::format::problem::JobSkills as ApiJobSkills;
 use crate::format::problem::*;
 use crate::format::{JobIndex, Location};
 use crate::parse_time;
@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
-        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension,
-        JobMaxRideDurationDimension, JobPreferences as FeatureJobPreferences, JobPreferencesDimension,
-        JobRequestedTimesDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
-        LifoGroupDimension, LifoGroupId, LifoTagDimension,
+        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
+        JobPreferences as FeatureJobPreferences, JobPreferencesDimension, JobRequestedTimesDimension,
+        JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
+        LifoTagDimension,
     },
     models::common::*,
     models::problem::{
@@ -126,10 +126,7 @@ fn read_required_stop_locks(api_problem: &ApiProblem, job_index: &JobIndex) -> V
                 let jobs = (1..=required_stops.len())
                     .map(|place_idx| {
                         let job_id = format!("{vehicle_id}_required_{shift_index}_{place_idx}");
-                        job_index
-                            .get(&job_id)
-                            .cloned()
-                            .unwrap_or_else(|| panic!("cannot find job with id: '{job_id}'"))
+                        job_index.get(&job_id).cloned().unwrap_or_else(|| panic!("cannot find job with id: '{job_id}'"))
                     })
                     .collect::<Vec<_>>();
 
@@ -154,11 +151,8 @@ fn read_required_jobs(
     let has_multi_dimens = props.has_multi_dimen_capacity;
 
     // Create dimension mapping if capacityDimensions is defined
-    let dimension_mapping = api_problem
-        .fleet
-        .capacity_dimensions
-        .as_ref()
-        .map(|names| CapacityDimensionMapping::from_names(names));
+    let dimension_mapping =
+        api_problem.fleet.capacity_dimensions.as_ref().map(|names| CapacityDimensionMapping::from_names(names));
 
     let get_single_from_task = |task: &JobTask, activity_type: &str, is_static_demand: bool| {
         let absent = (empty(), empty());
@@ -187,7 +181,15 @@ fn read_required_jobs(
             })
             .collect();
 
-        get_single_with_dimens(places, demand, &task.order, activity_type, has_multi_dimens, props.has_configurable_capacity, coord_index)
+        get_single_with_dimens(
+            places,
+            demand,
+            &task.order,
+            activity_type,
+            has_multi_dimens,
+            props.has_configurable_capacity,
+            coord_index,
+        )
     };
 
     api_problem.plan.jobs.iter().for_each(|job| {
@@ -228,6 +230,98 @@ fn read_required_jobs(
     });
 
     (jobs, vec![])
+}
+
+/// Converts a single API job to a core Job, using the same logic as `read_required_jobs`.
+/// This is useful for converting candidate jobs (e.g. for feasibility checking) outside
+/// the normal problem-building pipeline.
+pub(crate) fn convert_api_job_to_core(
+    api_job: &ApiJob,
+    api_problem: &ApiProblem,
+    props: &ProblemProperties,
+    coord_index: &CoordIndex,
+) -> Job {
+    let has_multi_dimens = props.has_multi_dimen_capacity;
+
+    let dimension_mapping =
+        api_problem.fleet.capacity_dimensions.as_ref().map(|names| CapacityDimensionMapping::from_names(names));
+
+    let get_single_from_task = |task: &JobTask, activity_type: &str, is_static_demand: bool| {
+        let absent = (empty(), empty());
+        let capacity = match (&task.demand, &task.named_demand, &dimension_mapping) {
+            (Some(demand), None, _) => MultiDimLoad::new(demand.clone()),
+            (None, Some(named), Some(mapping)) => MultiDimLoad::new(mapping.resolve_demand(named)),
+            _ => empty(),
+        };
+        let demand = if is_static_demand { (capacity, empty()) } else { (empty(), capacity) };
+
+        let demand = match activity_type {
+            "pickup" => Demand { pickup: demand, delivery: absent },
+            "delivery" => Demand { pickup: absent, delivery: demand },
+            "replacement" => Demand { pickup: demand, delivery: demand },
+            "service" => Demand { pickup: absent, delivery: absent },
+            _ => panic!("invalid activity type."),
+        };
+
+        let places = task
+            .places
+            .iter()
+            .map(|p| {
+                let requested_time = p.requested_time.as_ref().map(|t| parse_time(t));
+                (Some(p.location.clone()), p.duration, parse_times(&p.times), p.tag.clone(), requested_time)
+            })
+            .collect();
+
+        get_single_with_dimens(
+            places,
+            demand,
+            &task.order,
+            activity_type,
+            has_multi_dimens,
+            props.has_configurable_capacity,
+            coord_index,
+        )
+    };
+
+    let pickups = api_job.pickups.as_ref().map_or(0, |p| p.len());
+    let deliveries = api_job.deliveries.as_ref().map_or(0, |p| p.len());
+    let is_static_demand = pickups == 0 || deliveries == 0;
+
+    let singles = api_job
+        .pickups
+        .iter()
+        .flat_map(|tasks| tasks.iter().map(|task| get_single_from_task(task, "pickup", is_static_demand)))
+        .chain(
+            api_job
+                .deliveries
+                .iter()
+                .flat_map(|tasks| tasks.iter().map(|task| get_single_from_task(task, "delivery", is_static_demand))),
+        )
+        .chain(
+            api_job
+                .replacements
+                .iter()
+                .flat_map(|tasks| tasks.iter().map(|task| get_single_from_task(task, "replacement", true))),
+        )
+        .chain(
+            api_job
+                .services
+                .iter()
+                .flat_map(|tasks| tasks.iter().map(|task| get_single_from_task(task, "service", false))),
+        )
+        .collect::<Vec<_>>();
+
+    assert!(!singles.is_empty());
+
+    let problem_job = if singles.len() > 1 {
+        let deliveries_start_index = api_job.pickups.as_ref().map_or(0, |p| p.len());
+        let random: Arc<dyn Random> = Arc::new(DefaultRandom::default());
+        get_multi_job(api_job, singles, deliveries_start_index, &random)
+    } else {
+        get_single_job(api_job, singles.into_iter().next().unwrap())
+    };
+
+    problem_job
 }
 
 fn read_conditional_jobs(api_problem: &ApiProblem, coord_index: &CoordIndex, job_index: &mut JobIndex) -> Vec<Job> {
@@ -303,13 +397,7 @@ fn read_via_stops(
                         &job_id,
                         "via",
                         shift_index,
-                        vec![(
-                            Some(place.location.clone()),
-                            place.duration,
-                            times,
-                            place.tag.clone(),
-                            requested_time,
-                        )],
+                        vec![(Some(place.location.clone()), place.duration, times, place.tag.clone(), requested_time)],
                     );
                     job.dimens.set_via_order(place_idx);
 
@@ -493,9 +581,7 @@ fn get_single(places: Vec<PlaceData>, coord_index: &CoordIndex) -> Single {
     let requested_times: HashMap<usize, Timestamp> = places
         .iter()
         .enumerate()
-        .filter_map(|(idx, (_, _, _, _, requested_time))| {
-            requested_time.map(|t| (idx, t))
-        })
+        .filter_map(|(idx, (_, _, _, _, requested_time))| requested_time.map(|t| (idx, t)))
         .collect();
 
     let places = places
@@ -574,6 +660,10 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
         dimens.set_job_compatibility(compat);
     }
 
+    if let Some(solo_riding) = job.solo_riding {
+        dimens.set_job_solo_riding(solo_riding);
+    }
+
     if let Some(skills) = get_skills(&job.skills) {
         dimens.set_job_skills(skills);
     }
@@ -590,7 +680,12 @@ fn get_single_job(job: &ApiJob, single: Single) -> Job {
     Job::Single(Arc::new(single))
 }
 
-fn get_multi_job(job: &ApiJob, mut singles: Vec<Single>, deliveries_start_index: usize, random: &Arc<dyn Random>) -> Job {
+fn get_multi_job(
+    job: &ApiJob,
+    mut singles: Vec<Single>,
+    deliveries_start_index: usize,
+    random: &Arc<dyn Random>,
+) -> Job {
     let mut dimens: Dimensions = Default::default();
     fill_dimens(job, &mut dimens);
 

@@ -1,0 +1,106 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "vip_solo",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0010, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "vip_pickup"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0090, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "vip_delivery"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "soloRiding": true
+      },
+      {
+        "id": "regular_passenger",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0080, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "regular_pickup"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0090, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "regular_delivery"
+              }
+            ],
+            "demand": [1]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "vehicle",
+        "vehicleIds": ["vehicle_1"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 20.0,
+          "distance": 0.001,
+          "time": 0.002
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": { "lat": 0.0, "lng": 0.0 }
+            },
+            "end": {
+              "latest": "2024-01-01T20:00:00Z",
+              "location": { "lat": 0.0, "lng": 0.0 }
+            }
+          }
+        ],
+        "capacity": [2]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  },
+  "objectives": [
+    {
+      "type": "minimize-unassigned"
+    },
+    {
+      "type": "minimize-tours"
+    },
+    {
+      "type": "minimize-cost"
+    }
+  ]
+}

@@ -32,10 +32,7 @@ pub fn create_max_ride_duration_feature(
     code: ViolationCode,
     transport: Arc<dyn TransportCost>,
 ) -> Result<Feature, GenericError> {
-    FeatureBuilder::default()
-        .with_name(name)
-        .with_constraint(MaxRideDurationConstraint { code, transport })
-        .build()
+    FeatureBuilder::default().with_name(name).with_constraint(MaxRideDurationConstraint { code, transport }).build()
 }
 
 struct MaxRideDurationConstraint {
@@ -46,20 +43,14 @@ struct MaxRideDurationConstraint {
 impl FeatureConstraint for MaxRideDurationConstraint {
     fn evaluate(&self, move_ctx: &MoveContext<'_>) -> Option<ConstraintViolation> {
         match move_ctx {
-            MoveContext::Activity { route_ctx, activity_ctx, .. } => {
-                self.check_ride_duration(route_ctx, activity_ctx)
-            }
+            MoveContext::Activity { route_ctx, activity_ctx, .. } => self.check_ride_duration(route_ctx, activity_ctx),
             MoveContext::Route { .. } => None,
         }
     }
 
     fn merge(&self, source: Job, _candidate: Job) -> Result<Job, ViolationCode> {
         // Don't allow merging jobs with max ride duration
-        if source.dimens().get_job_max_ride_duration().is_some() {
-            Err(self.code)
-        } else {
-            Ok(source)
-        }
+        if source.dimens().get_job_max_ride_duration().is_some() { Err(self.code) } else { Ok(source) }
     }
 }
 
@@ -127,8 +118,7 @@ impl MaxRideDurationConstraint {
                 && self.is_delivery(delivery_single)
             {
                 // Found the delivery - recalculate its arrival time considering the insertion
-                let delivery_arrival =
-                    self.estimate_arrival_at_activity_after_insertion(route_ctx, activity_ctx, idx);
+                let delivery_arrival = self.estimate_arrival_at_activity_after_insertion(route_ctx, activity_ctx, idx);
 
                 let ride_duration = delivery_arrival - pickup_departure;
                 if ride_duration > max_ride_duration {
@@ -181,11 +171,7 @@ impl MaxRideDurationConstraint {
     }
 
     /// Estimates the arrival time at the target activity.
-    fn estimate_arrival_time(
-        &self,
-        route_ctx: &RouteContext,
-        activity_ctx: &ActivityContext,
-    ) -> Timestamp {
+    fn estimate_arrival_time(&self, route_ctx: &RouteContext, activity_ctx: &ActivityContext) -> Timestamp {
         let prev = activity_ctx.prev;
         let target = &activity_ctx.target;
 
@@ -200,11 +186,7 @@ impl MaxRideDurationConstraint {
     }
 
     /// Estimates the departure time from the target activity after insertion.
-    fn estimate_departure_time(
-        &self,
-        route_ctx: &RouteContext,
-        activity_ctx: &ActivityContext,
-    ) -> Timestamp {
+    fn estimate_departure_time(&self, route_ctx: &RouteContext, activity_ctx: &ActivityContext) -> Timestamp {
         let arrival = self.estimate_arrival_time(route_ctx, activity_ctx);
         let target = &activity_ctx.target;
 

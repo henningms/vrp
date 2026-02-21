@@ -72,8 +72,7 @@ pub use self::transport::*;
 
 mod lifo_ordering;
 pub use self::lifo_ordering::{
-    LifoGroupDimension, LifoGroupId, LifoTagDimension, VehicleLifoTagsDimension,
-    create_lifo_ordering_feature,
+    LifoGroupDimension, LifoGroupId, LifoTagDimension, VehicleLifoTagsDimension, create_lifo_ordering_feature,
 };
 
 mod requested_time;
@@ -83,6 +82,9 @@ pub use self::requested_time::{
 
 mod ride_duration;
 pub use self::ride_duration::{JobMaxRideDurationDimension, create_max_ride_duration_feature};
+
+mod solo_riding;
+pub use self::solo_riding::{JobSoloRidingDimension, create_solo_riding_feature};
 
 mod work_balance;
 pub use self::work_balance::{

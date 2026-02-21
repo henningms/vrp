@@ -78,10 +78,7 @@ pub struct LifoGroupId(pub usize);
 /// vehicle.dimens.set_vehicle_lifo_tags(tags);
 /// ```
 pub fn create_lifo_ordering_feature(code: ViolationCode) -> Result<Feature, GenericError> {
-    FeatureBuilder::default()
-        .with_name("lifo_ordering")
-        .with_constraint(LifoOrderingConstraint { code })
-        .build()
+    FeatureBuilder::default().with_name("lifo_ordering").with_constraint(LifoOrderingConstraint { code }).build()
 }
 
 struct LifoOrderingConstraint {
@@ -104,11 +101,7 @@ impl FeatureConstraint for LifoOrderingConstraint {
                 // Simulate the tour with the new activity inserted
                 let would_violate = self.check_lifo_violation(route_ctx, activity_ctx, vehicle_lifo_tags);
 
-                if would_violate {
-                    Some(ConstraintViolation { code: self.code, stopped: false })
-                } else {
-                    None
-                }
+                if would_violate { Some(ConstraintViolation { code: self.code, stopped: false }) } else { None }
             }
             MoveContext::Route { .. } => None,
         }
@@ -117,11 +110,7 @@ impl FeatureConstraint for LifoOrderingConstraint {
     fn merge(&self, source: Job, _candidate: Job) -> Result<Job, ViolationCode> {
         // Don't allow merging jobs with LIFO tags
         // This is conservative but safe - we'd need to verify LIFO compatibility
-        if source.dimens().get_lifo_tag().is_some() {
-            Err(self.code)
-        } else {
-            Ok(source)
-        }
+        if source.dimens().get_lifo_tag().is_some() { Err(self.code) } else { Ok(source) }
     }
 }
 
