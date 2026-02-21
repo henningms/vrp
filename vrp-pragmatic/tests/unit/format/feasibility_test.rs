@@ -183,8 +183,8 @@ fn can_check_multi_vehicle_mixed_results() {
     let (problem, matrix) = build_problem_and_matrix(vehicles, jobs);
 
     // Small vehicle is full (1 delivery assigned), large has one delivery too
-    let small_depot_loc = format!(r#"{{ "lat": 0.0, "lng": 0.0 }}"#);
-    let large_depot_loc = format!(r#"{{ "lat": 0.0, "lng": 0.0 }}"#);
+    let small_depot_loc = r#"{ "lat": 0.0, "lng": 0.0 }"#;
+    let large_depot_loc = r#"{ "lat": 0.0, "lng": 0.0 }"#;
 
     let solution_json = format!(
         r#"{{
