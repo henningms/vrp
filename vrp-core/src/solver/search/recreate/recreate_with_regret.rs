@@ -76,8 +76,8 @@ impl InsertionEvaluator for RegretInsertionEvaluator {
                 _ => None,
             })
             .collect_group_by_key::<Job, InsertionSuccess, _>(|success| success.job.clone())
-            .into_iter()
-            .filter_map(|(_, mut successes)| {
+            .into_values()
+            .filter_map(|mut successes| {
                 if successes.len() < regret_index {
                     return None;
                 }
