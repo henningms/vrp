@@ -369,11 +369,11 @@ fn test_inserting_pickup_that_would_cause_downstream_violation() {
         )
         .build();
 
-    // Try inserting W2 pickup at position 2 (between W1 pickup and W1 delivery)
-    // insertion_idx=2, prev_idx=1, next_idx=2 (W1 delivery)
-    // This would require W2 delivery to come before W1 delivery, but W1 delivery is already there
+    // Try inserting W2 pickup between W1 pickup and W1 delivery.
+    // The real evaluator passes leg index = prev's index = 1 here.
+    // This would require W2 delivery to come before W1 delivery, but W1 delivery is already there.
     let w2_pickup = create_lifo_pickup(15, "wheelchair", 2);
-    let result = evaluate_insertion(&route_ctx, &w2_pickup, 2, 1, Some(2));
+    let result = evaluate_insertion(&route_ctx, &w2_pickup, 1, 1, Some(2));
 
     assert!(result.is_some(), "Pickup insertion causing downstream LIFO violation should be rejected");
 }

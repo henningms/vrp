@@ -129,8 +129,9 @@ impl LifoOrderingConstraint {
         // Separate stack per tag
         let mut stacks: FxHashMap<String, Vec<LifoGroupId>> = FxHashMap::default();
 
-        // Process activities up to insertion point
-        for idx in 0..activity_ctx.index {
+        // `activity_ctx.index` is the leg index, which equals the index of `activity_ctx.prev`.
+        // The target is inserted AFTER prev, so prev must be processed BEFORE target.
+        for idx in 0..=activity_ctx.index {
             if let Some(activity) = tour.get(idx)
                 && self.process_activity(activity, &mut stacks, vehicle_lifo_tags).is_err()
             {
@@ -144,7 +145,7 @@ impl LifoOrderingConstraint {
         }
 
         // Process remaining activities
-        for idx in activity_ctx.index..tour.total() {
+        for idx in activity_ctx.index + 1..tour.total() {
             if let Some(activity) = tour.get(idx)
                 && self.process_activity(activity, &mut stacks, vehicle_lifo_tags).is_err()
             {
