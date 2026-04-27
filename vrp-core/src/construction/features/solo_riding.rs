@@ -64,7 +64,9 @@ impl SoloRidingConstraint {
         let mut active_solo_job: Option<Job> = None;
         let tour = &route_ctx.route().tour;
 
-        for idx in 0..activity_ctx.index {
+        // `activity_ctx.index` is the leg index, which equals the index of `activity_ctx.prev`.
+        // The target is inserted AFTER prev, so prev must be processed BEFORE target.
+        for idx in 0..=activity_ctx.index {
             if let Some(activity) = tour.get(idx)
                 && self.process_activity(activity, &mut onboard, &mut active_solo_job).is_err()
             {
@@ -76,7 +78,7 @@ impl SoloRidingConstraint {
             return true;
         }
 
-        for idx in activity_ctx.index..tour.total() {
+        for idx in activity_ctx.index + 1..tour.total() {
             if let Some(activity) = tour.get(idx)
                 && self.process_activity(activity, &mut onboard, &mut active_solo_job).is_err()
             {

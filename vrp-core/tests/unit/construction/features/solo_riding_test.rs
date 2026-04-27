@@ -135,6 +135,25 @@ fn allows_other_job_after_solo_job_is_completed() {
 }
 
 #[test]
+fn allows_other_job_after_solo_job_is_completed_real_leg_index() {
+    // Mirrors `allows_other_job_after_solo_job_is_completed` but uses the real evaluator
+    // convention where `activity_ctx.index` equals `prev`'s index in the tour
+    // (see `ride_duration.rs` for documentation of this convention).
+    let (_solo, solo_pickup, solo_delivery) = create_pudo_job_activities("solo", true, 1, 10);
+    let (_other, other_pickup, _) = create_pudo_job_activities("other", false, 2, 11);
+
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(RouteBuilder::with_default_vehicle().add_activity(solo_pickup).add_activity(solo_delivery).build())
+        .build();
+
+    // Tour: [start(0), solo_pickup(1), solo_delivery(2), end(3)].
+    // Real evaluator passes leg index = prev's index = 2 when inserting between sd and end.
+    let result = evaluate_insertion(&route_ctx, &other_pickup, 2, 2, Some(3));
+
+    assert!(result.is_none(), "should allow other job after solo job is completed");
+}
+
+#[test]
 fn allows_solo_job_after_other_job_is_completed() {
     let (_solo, solo_pickup, _) = create_pudo_job_activities("solo", true, 1, 10);
     let (_other, other_pickup, other_delivery) = create_pudo_job_activities("other", false, 2, 11);
