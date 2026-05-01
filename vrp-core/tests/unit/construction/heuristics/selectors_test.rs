@@ -5,6 +5,170 @@ use crate::helpers::utils::random::FakeRandom;
 use crate::models::common::Cost;
 use std::sync::Arc;
 
+mod unassigned_job_selector {
+    use super::*;
+    use crate::construction::heuristics::{InsertionContext, JobSelector, UnassignedJobSelector, UnassignmentInfo};
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::helpers::models::problem::TestSingleBuilder;
+
+    #[test]
+    fn select_returns_only_unassigned_jobs() {
+        let assigned = TestSingleBuilder::default().id("assigned").build_as_job_ref();
+        let unassigned1 = TestSingleBuilder::default().id("unassigned1").build_as_job_ref();
+        let unassigned2 = TestSingleBuilder::default().id("unassigned2").build_as_job_ref();
+
+        let mut ctx: InsertionContext = TestInsertionContextBuilder::default().build();
+        ctx.solution.required = vec![assigned.clone(), unassigned1.clone(), unassigned2.clone()];
+        ctx.solution.unassigned.insert(unassigned1.clone(), UnassignmentInfo::Unknown);
+        ctx.solution.unassigned.insert(unassigned2.clone(), UnassignmentInfo::Unknown);
+
+        let selector = UnassignedJobSelector::default();
+        let selected: Vec<_> = selector.select(&ctx).cloned().collect();
+
+        assert_eq!(selected.len(), 2);
+        assert!(selected.iter().any(|job| job == &unassigned1));
+        assert!(selected.iter().any(|job| job == &unassigned2));
+        assert!(selected.iter().all(|job| job != &assigned));
+    }
+}
+
+mod any_feasible_result_selector {
+    use super::*;
+    use crate::construction::heuristics::{AnyFeasibleResultSelector, ResultSelector};
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::helpers::models::problem::TestSingleBuilder;
+
+    fn make_success(id: &str, cost: Cost) -> InsertionResult {
+        InsertionResult::make_success(
+            InsertionCost::new(&[cost]),
+            TestSingleBuilder::default().id(id).build_as_job_ref(),
+            vec![],
+            &RouteContextBuilder::default().build(),
+        )
+    }
+
+    #[test]
+    fn returns_first_success_regardless_of_cost() {
+        // lhs is intentionally MORE expensive than rhs — Best would pick rhs;
+        // AnyFeasible must pick lhs because it appears first.
+        let lhs = make_success("lhs", 1000.);
+        let rhs = make_success("rhs", 1.);
+        let ctx = TestInsertionContextBuilder::default().build();
+
+        let result = AnyFeasibleResultSelector::default().select_insertion(&ctx, lhs, rhs);
+
+        match result {
+            InsertionResult::Success(success) => assert_eq!(success.cost, InsertionCost::new(&[1000.])),
+            _ => panic!("expected Success"),
+        }
+    }
+
+    #[test]
+    fn prefers_success_over_failure() {
+        let success = make_success("ok", 100.);
+        let failure = InsertionResult::make_failure();
+        let ctx = TestInsertionContextBuilder::default().build();
+
+        let result = AnyFeasibleResultSelector::default().select_insertion(&ctx, failure, success);
+
+        match result {
+            InsertionResult::Success(success) => assert_eq!(success.cost, InsertionCost::new(&[100.])),
+            _ => panic!("expected Success"),
+        }
+    }
+}
+
+mod solo_aware_result_selector {
+    use super::*;
+    use crate::construction::features::JobSoloRidingDimension;
+    use crate::construction::heuristics::{ResultSelector, SoloAwareResultSelector};
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::helpers::models::problem::TestSingleBuilder;
+
+    fn solo_job(id: &str) -> Job {
+        let mut builder = TestSingleBuilder::default();
+        builder.id(id);
+        builder.dimens_mut().set_job_solo_riding(true);
+        Job::Single(builder.build_shared())
+    }
+
+    fn pooled_job(id: &str) -> Job {
+        let mut builder = TestSingleBuilder::default();
+        builder.id(id);
+        Job::Single(builder.build_shared())
+    }
+
+    fn success_for_job(job: Job, cost: Cost, route_ctx: &RouteContext) -> InsertionResult {
+        InsertionResult::make_success(InsertionCost::new(&[cost]), job, vec![], route_ctx)
+    }
+
+    #[test]
+    fn defers_to_best_when_jobs_differ() {
+        // Different jobs — empty-route preference is incoherent, fall back to cost.
+        let lhs = success_for_job(solo_job("solo_a"), 100., &RouteContextBuilder::default().build());
+        let rhs = success_for_job(solo_job("solo_b"), 1., &RouteContextBuilder::default().build());
+        let ctx = TestInsertionContextBuilder::default().build();
+
+        let result = SoloAwareResultSelector::default().select_insertion(&ctx, lhs, rhs);
+
+        match result {
+            InsertionResult::Success(success) => {
+                assert_eq!(success.cost, InsertionCost::new(&[1.]), "should pick cost-cheaper across different jobs");
+            }
+            _ => panic!("expected Success"),
+        }
+    }
+
+    #[test]
+    fn defers_to_best_for_non_solo_jobs() {
+        let job = pooled_job("pooled");
+        let lhs = success_for_job(job.clone(), 100., &RouteContextBuilder::default().build());
+        let rhs = success_for_job(job, 1., &RouteContextBuilder::default().build());
+        let ctx = TestInsertionContextBuilder::default().build();
+
+        let result = SoloAwareResultSelector::default().select_insertion(&ctx, lhs, rhs);
+
+        match result {
+            InsertionResult::Success(success) => {
+                assert_eq!(success.cost, InsertionCost::new(&[1.]), "non-solo: should pick cost-cheaper");
+            }
+            _ => panic!("expected Success"),
+        }
+    }
+
+    // Note: the empty-vs-in-use preference relies on `routes.iter().any(|rc|
+    // rc.route().actor == lhs.actor && rc.route().tour.job_count() > 0)`. That
+    // behaviour is exercised end-to-end by the integration test in
+    // `vrp-pragmatic` and by the existing solo_riding feature tests; building
+    // a stand-alone unit here would require fabricating a fully-populated
+    // InsertionContext + Actor identity that matches across the assertion. Left
+    // as integration-level coverage on purpose.
+    //
+    // The two negative tests above guard against the most common regression:
+    // accidentally applying empty-route preference to non-solo jobs or across
+    // different jobs — both of which would silently distort cost-optimal
+    // placements.
+    #[test]
+    fn falls_through_when_no_route_is_in_use() {
+        // Both target the same default-empty route, neither is in-use → defer
+        // to BestResultSelector → cheaper wins.
+        let job = solo_job("solo");
+        let route_ctx = RouteContextBuilder::default().build();
+        let lhs = success_for_job(job.clone(), 100., &route_ctx);
+        let rhs = success_for_job(job, 1., &route_ctx);
+        let ctx = TestInsertionContextBuilder::default().build();
+
+        let result = SoloAwareResultSelector::default().select_insertion(&ctx, lhs, rhs);
+
+        match result {
+            InsertionResult::Success(success) => {
+                assert_eq!(success.cost, InsertionCost::new(&[1.]));
+            }
+            _ => panic!("expected Success"),
+        }
+    }
+}
+
 mod noise_checks {
     use super::*;
     use crate::helpers::construction::heuristics::TestInsertionContextBuilder;

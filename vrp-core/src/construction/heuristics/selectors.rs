@@ -65,6 +65,33 @@ pub struct AllJobSelector {}
 
 impl JobSelector for AllJobSelector {}
 
+/// Returns only jobs that are currently unassigned in the solution.
+///
+/// Used by the [`UnassignedRepair`] recreate operator to focus a repair pass on
+/// the jobs that the cost-aware construction or refinement could not place. Skips
+/// the default `prepare` shuffle since membership filtering preserves correctness
+/// regardless of order and the shuffle is wasted work.
+///
+/// [`UnassignedRepair`]: crate::solver::search::recreate::RecreateWithRepair
+#[derive(Default)]
+pub struct UnassignedJobSelector {}
+
+impl JobSelector for UnassignedJobSelector {
+    fn prepare(&self, _insertion_ctx: &mut InsertionContext) {
+        // Intentionally no-op: ordering is irrelevant when we filter to a single set.
+    }
+
+    fn select<'a>(&'a self, insertion_ctx: &'a InsertionContext) -> Box<dyn Iterator<Item = &'a Job> + 'a> {
+        Box::new(
+            insertion_ctx
+                .solution
+                .required
+                .iter()
+                .filter(|job| insertion_ctx.solution.unassigned.contains_key(*job)),
+        )
+    }
+}
+
 /// Evaluates insertion.
 pub trait InsertionEvaluator: Send + Sync {
     /// Evaluates insertion of a job collection into the given collection of routes.
@@ -177,6 +204,92 @@ pub struct BestResultSelector {}
 impl ResultSelector for BestResultSelector {
     fn select_insertion(&self, _: &InsertionContext, left: InsertionResult, right: InsertionResult) -> InsertionResult {
         InsertionResult::choose_best_result(left, right)
+    }
+}
+
+/// Returns any feasible insertion regardless of cost ranking.
+///
+/// Designed for use by the [`UnassignedRepair`] recreate operator. Where
+/// [`BestResultSelector`] picks the lex-cheapest [`InsertionResult::Success`] from a
+/// `(routes × jobs)` reduction, this selector accepts the first `Success` it sees
+/// and only falls back to cost comparison when both sides are failures.
+///
+/// Lex-strict `minimize-unassigned` at the solution level guarantees that any
+/// successful insertion is a strict improvement on the primary objective; the
+/// metaheuristic's selection step rejects the move if its cost regresses harder
+/// than is worth the placement.
+///
+/// `select_cost` keeps the default cost-min behaviour so within-route leg pruning
+/// remains optimal — we only flip the cross-(route, job) reduction.
+///
+/// [`UnassignedRepair`]: crate::solver::search::recreate::RecreateWithRepair
+#[derive(Default)]
+pub struct AnyFeasibleResultSelector {}
+
+impl ResultSelector for AnyFeasibleResultSelector {
+    fn select_insertion(&self, _: &InsertionContext, left: InsertionResult, right: InsertionResult) -> InsertionResult {
+        match (&left, &right) {
+            (InsertionResult::Success(_), InsertionResult::Failure(_)) => left,
+            (InsertionResult::Failure(_), InsertionResult::Success(_)) => right,
+            (InsertionResult::Success(_), InsertionResult::Success(_)) => left,
+            _ => InsertionResult::choose_best_result(left, right),
+        }
+    }
+}
+
+/// Prefers placing a solo-riding job onto an empty route over an in-use route.
+///
+/// `evaluate_all` reduces over `(route × job)` pairs and may compare two
+/// [`InsertionResult::Success`] values that target *different* jobs. This selector
+/// only flips the cost comparison when:
+///
+/// 1. both sides are `Success`,
+/// 2. they target the **same** job (otherwise empty-route preference across job
+///    boundaries would incoherently prefer an expensive solo placement over a
+///    cheap pooled one),
+/// 3. that job is solo-riding (`is_solo_job(&lhs.job) == true`), and
+/// 4. exactly one of `(lhs, rhs)` targets a route that already carries jobs.
+///
+/// In every other case it falls through to [`BestResultSelector::select_insertion`].
+/// `select_cost` keeps the default — within-route leg-position pruning is unrelated
+/// to whether we want to open a fresh tour for a solo.
+///
+/// "Empty" is binary: a route is empty iff `route_ctx.route.tour.job_count() == 0`.
+/// This matches `create_minimize_tours_feature`'s definition.
+#[derive(Default)]
+pub struct SoloAwareResultSelector {}
+
+impl ResultSelector for SoloAwareResultSelector {
+    fn select_insertion(
+        &self,
+        insertion_ctx: &InsertionContext,
+        left: InsertionResult,
+        right: InsertionResult,
+    ) -> InsertionResult {
+        match (&left, &right) {
+            (InsertionResult::Success(_), InsertionResult::Failure(_)) => left,
+            (InsertionResult::Failure(_), InsertionResult::Success(_)) => right,
+            (InsertionResult::Success(lhs), InsertionResult::Success(rhs)) => {
+                if lhs.job != rhs.job || !crate::construction::features::is_solo_job(&lhs.job) {
+                    return InsertionResult::choose_best_result(left, right);
+                }
+
+                let routes = &insertion_ctx.solution.routes;
+                let lhs_in_use = routes
+                    .iter()
+                    .any(|rc| rc.route().actor == lhs.actor && rc.route().tour.job_count() > 0);
+                let rhs_in_use = routes
+                    .iter()
+                    .any(|rc| rc.route().actor == rhs.actor && rc.route().tour.job_count() > 0);
+
+                match (lhs_in_use, rhs_in_use) {
+                    (false, true) => left,
+                    (true, false) => right,
+                    _ => InsertionResult::choose_best_result(left, right),
+                }
+            }
+            _ => InsertionResult::choose_best_result(left, right),
+        }
     }
 }
 
