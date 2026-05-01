@@ -303,8 +303,11 @@ mod builder {
             |recreate| Box::new(RecreateInitialOperator::new(recreate));
 
         std::iter::once({
-            // main stable constructive heuristics
-            (wrap(Arc::new(RecreateWithCheapest::new(random.clone()))), 1)
+            // main stable constructive heuristics — solo-aware variant prefers
+            // empty routes for solo-riding jobs at construction time so the
+            // greedy gen-0 pass does not commit cost-cheapest placements that
+            // later block solo-riders from finding feasible insertions.
+            (wrap(Arc::new(RecreateWithSoloAwareCheapest::new(random.clone()))), 1)
         })
         .chain(
             // alternative constructive heuristics
@@ -505,6 +508,11 @@ mod dynamic {
                 1.,
             ),
             (Arc::new(RecreateWithSlice::new(random.clone())), "slice".to_string(), 1.),
+            (
+                Arc::new(RecreateWithRepair::default_phased(cheapest.clone(), random.clone())),
+                "repair".to_string(),
+                1.,
+            ),
         ]
         .into_iter()
         .chain(

@@ -44,6 +44,12 @@ pub use self::recreate_with_skip_random::RecreateWithSkipRandom;
 mod recreate_with_slice;
 pub use self::recreate_with_slice::RecreateWithSlice;
 
+mod recreate_with_repair;
+pub use self::recreate_with_repair::RecreateWithRepair;
+
+mod recreate_with_solo_aware;
+pub use self::recreate_with_solo_aware::RecreateWithSoloAwareCheapest;
+
 /// Provides the way to run one of multiple recreate methods.
 pub struct WeightedRecreate {
     recreates: Vec<Arc<dyn Recreate>>,
