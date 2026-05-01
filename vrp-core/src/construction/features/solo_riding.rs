@@ -22,6 +22,14 @@ use rustc_hash::FxHashMap;
 
 custom_dimension!(pub JobSoloRiding typeof bool);
 
+/// Returns `true` if `job` is marked as solo-riding via the `JobSoloRiding` dimension.
+///
+/// Free function so other modules (selectors, search operators) can branch on solo
+/// status without depending on the `SoloRidingConstraint` type.
+pub fn is_solo_job(job: &Job) -> bool {
+    job.dimens().get_job_solo_riding().copied().unwrap_or(false)
+}
+
 /// Creates a solo riding feature as a hard constraint.
 pub fn create_solo_riding_feature(name: &str, code: ViolationCode) -> Result<Feature, GenericError> {
     FeatureBuilder::default().with_name(name).with_constraint(SoloRidingConstraint { code }).build()
@@ -152,7 +160,7 @@ impl SoloRidingConstraint {
     }
 
     fn is_solo_job(&self, job: &Job) -> bool {
-        job.dimens().get_job_solo_riding().copied().unwrap_or(false)
+        is_solo_job(job)
     }
 
     fn is_dynamic_pickup(&self, single: &Single) -> bool {

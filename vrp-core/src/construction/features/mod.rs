@@ -84,7 +84,7 @@ mod ride_duration;
 pub use self::ride_duration::{JobMaxRideDurationDimension, create_max_ride_duration_feature};
 
 mod solo_riding;
-pub use self::solo_riding::{JobSoloRidingDimension, create_solo_riding_feature};
+pub use self::solo_riding::{JobSoloRidingDimension, create_solo_riding_feature, is_solo_job};
 
 mod work_balance;
 pub use self::work_balance::{
