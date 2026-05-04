@@ -24,10 +24,16 @@ pub struct RecreateWithSoloAwareCheapest {
 
 impl RecreateWithSoloAwareCheapest {
     /// Creates a new instance of `RecreateWithSoloAwareCheapest`.
+    ///
+    /// The per-iteration job pool is configurable via the
+    /// [`CONSTRUCTION_JOB_CAP_ENV`] environment variable. Default is uncapped
+    /// (matches upstream cheapest-insertion behaviour); set
+    /// `SOLVER_CONSTRUCTION_JOB_CAP=N` to cap to K=N for construction-time
+    /// speedup at the cost of "best of K" quality.
     pub fn new(random: Arc<dyn Random>) -> Self {
         Self {
             recreate: ConfigurableRecreate::new(
-                Box::<AllJobSelector>::default(),
+                construction_job_selector_from_env(),
                 Box::<AllRouteSelector>::default(),
                 LegSelection::Stochastic(random),
                 ResultSelection::Concrete(Box::<SoloAwareResultSelector>::default()),

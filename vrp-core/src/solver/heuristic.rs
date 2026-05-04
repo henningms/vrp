@@ -310,10 +310,14 @@ mod builder {
             (wrap(Arc::new(RecreateWithSoloAwareCheapest::new(random.clone()))), 1)
         })
         .chain(
-            // alternative constructive heuristics
+            // alternative constructive heuristics — same per-iteration job-pool
+            // policy as SoloAwareCheapest. Both are construction-only operators
+            // configured via SOLVER_CONSTRUCTION_JOB_CAP env var (default
+            // uncapped). The dynamic refinement pool (`mod dynamic`) keeps the
+            // uncapped Cheapest for full quality.
             get_recreate_with_alternative_goal(problem.goal.as_ref(), {
                 let random = random.clone();
-                move || RecreateWithCheapest::new(random.clone())
+                move || RecreateWithCheapest::with_cap_from_env(random.clone())
             })
             .map(|recreate| (wrap(recreate), 1)),
         )

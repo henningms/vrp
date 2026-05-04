@@ -94,6 +94,69 @@ pub struct AllJobSelector {}
 
 impl JobSelector for AllJobSelector {}
 
+/// Returns at most `cap` jobs from the unassigned set per iteration. Pairs with
+/// the default `prepare` shuffle so each call gets a fresh random sample.
+///
+/// Construction-time speedup: vrp's cost-cheapest insertion evaluates all
+/// (job × route × position) candidates per outer iteration but only commits one.
+/// On DRT-scale problems (~1900 jobs × ~300 routes) the cartesian product
+/// dominates wall time. Capping the per-iteration job pool to a small constant
+/// (e.g. 50) reduces the per-iteration evaluator work proportionally — quality
+/// only suffers if "best of K" is materially worse than "best of N" for the
+/// chosen K.
+pub struct CappedJobSelector {
+    cap: usize,
+}
+
+impl CappedJobSelector {
+    /// Creates a new instance capped at `cap` jobs per iteration.
+    pub fn new(cap: usize) -> Self {
+        Self { cap }
+    }
+}
+
+impl JobSelector for CappedJobSelector {
+    fn select<'a>(&'a self, insertion_ctx: &'a InsertionContext) -> Box<dyn Iterator<Item = &'a Job> + 'a> {
+        Box::new(insertion_ctx.solution.required.iter().take(self.cap))
+    }
+}
+
+/// Env var that controls the construction-phase per-iteration job-pool cap.
+///
+/// Read by [`construction_job_selector_from_env`] each time a construction-time
+/// Cheapest variant is constructed. Unset or set to one of `0`, `off`, `none`,
+/// `unlimited` (case-insensitive) → uncapped (default behaviour matches the
+/// upstream cheapest-insertion algorithm). Any positive integer → cap to that K.
+///
+/// Recommended values for tuning DRT-scale Skoleskyss problems on a
+/// 900 s wall budget: try 100, 200, 300, 500. cap=300 is the empirically
+/// observed Pareto knee on Øvre Romerike (1908 trips).
+pub const CONSTRUCTION_JOB_CAP_ENV: &str = "SOLVER_CONSTRUCTION_JOB_CAP";
+
+/// Returns the JobSelector to use for the construction-phase Cheapest variants,
+/// configured from the [`CONSTRUCTION_JOB_CAP_ENV`] environment variable.
+///
+/// Returns [`AllJobSelector`] (uncapped) when the env var is unset / 0 / off /
+/// none / unlimited. Returns [`CappedJobSelector`] with the parsed value
+/// otherwise. Falls back to uncapped on parse error (with a stderr warning).
+pub fn construction_job_selector_from_env() -> Box<dyn JobSelector> {
+    let raw = std::env::var(CONSTRUCTION_JOB_CAP_ENV).unwrap_or_default();
+    let v = raw.trim().to_lowercase();
+    if v.is_empty() || v == "0" || v == "off" || v == "none" || v == "unlimited" {
+        return Box::<AllJobSelector>::default();
+    }
+    match v.parse::<usize>() {
+        Ok(k) if k > 0 => Box::new(CappedJobSelector::new(k)),
+        _ => {
+            eprintln!(
+                "WARN: {} value {:?} is not a positive integer; using uncapped",
+                CONSTRUCTION_JOB_CAP_ENV, raw
+            );
+            Box::<AllJobSelector>::default()
+        }
+    }
+}
+
 /// Returns only jobs that are currently unassigned in the solution.
 ///
 /// Used by the [`UnassignedRepair`] recreate operator to focus a repair pass on
