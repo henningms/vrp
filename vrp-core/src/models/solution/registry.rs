@@ -58,6 +58,17 @@ impl Registry {
         })
     }
 
+    /// Returns all available actors (no per-type-group sampling).
+    ///
+    /// Where `next()` returns a random representative per actor-type group — fast
+    /// for cost-aware operators that don't need to consider every alternative —
+    /// `next_all()` exposes the full unused fleet. Used by repair-style operators
+    /// that need exhaustive coverage so a feasible insertion is guaranteed to be
+    /// found if one exists.
+    pub fn next_all(&'_ self) -> impl Iterator<Item = Arc<Actor>> + '_ {
+        self.available.values().flat_map(|set| set.iter().cloned())
+    }
+
     /// Creates a deep copy of registry.
     pub fn deep_copy(&self) -> Self {
         Self {

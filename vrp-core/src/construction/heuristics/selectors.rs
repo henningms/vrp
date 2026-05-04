@@ -43,6 +43,35 @@ impl RouteSelector for AllRouteSelector {
     }
 }
 
+/// Returns active routes plus every unused vehicle in the fleet, exhaustively.
+///
+/// Differs from [`AllRouteSelector`] only in that the unused-vehicle iterator is
+/// not sampled — every available actor is yielded, not a random representative
+/// per actor-type group. Pair with [`UnassignedJobSelector`] +
+/// [`AnyFeasibleResultSelector`] in the [`RecreateWithRepair`] operator so that
+/// any unassigned job whose feasibility region includes *any* unused vehicle is
+/// guaranteed to find it within a single repair pass.
+///
+/// Performance trade-off: each repair pass evaluates `(active + total unused) ×
+/// unassigned` insertion candidates instead of `(active + groups) × unassigned`.
+/// Worth it for the repair operator since the entire purpose is exhaustive
+/// coverage; cost-aware operators (cheapest, regret, etc.) keep using the
+/// sampling [`AllRouteSelector`].
+///
+/// [`RecreateWithRepair`]: crate::solver::search::recreate::RecreateWithRepair
+#[derive(Default)]
+pub struct ExhaustiveRouteSelector {}
+
+impl RouteSelector for ExhaustiveRouteSelector {
+    fn select<'a>(
+        &'a self,
+        insertion_ctx: &'a InsertionContext,
+        _: &[&'a Job],
+    ) -> Box<dyn Iterator<Item = &'a RouteContext> + 'a> {
+        Box::new(insertion_ctx.solution.routes.iter().chain(insertion_ctx.solution.registry.next_route_all()))
+    }
+}
+
 /// On each insertion step, selects a list of jobs to be inserted.
 /// It is up to implementation to decide whether list consists of all jobs or just some subset.
 pub trait JobSelector: Send + Sync {

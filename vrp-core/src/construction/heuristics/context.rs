@@ -424,6 +424,16 @@ impl RegistryContext {
         self.registry.next().map(move |actor| self.index[&actor].as_ref())
     }
 
+    /// Returns every unused route, exhaustively.
+    ///
+    /// Like `next_route` but skips the per-type-group sampling. Repair operators
+    /// that aim to drive `unassigned == 0` need to see every candidate vehicle so
+    /// no feasible insertion is missed. Cost-aware operators should prefer
+    /// `next_route` to keep insertion-evaluation work bounded.
+    pub fn next_route_all(&self) -> impl Iterator<Item = &RouteContext> {
+        self.registry.next_all().map(move |actor| self.index[&actor].as_ref())
+    }
+
     /// Gets route for given actor and marks it as used.
     /// Returns None if actor is already in use.
     /// NOTE: you need to call free route to make it to be available again.

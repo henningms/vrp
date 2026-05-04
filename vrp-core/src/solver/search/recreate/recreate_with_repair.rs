@@ -7,15 +7,21 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A recreate strategy that re-attempts unassigned jobs with cost-blind first-fit
-/// insertion. Intended as a safety net inside `PhasedRecreate` for the exploration
-/// and exploitation phases — never used during construction (Initial), where the
-/// cost-aware default produces the seed solution.
+/// insertion against the *exhaustive* unused fleet. Intended as a safety net
+/// inside `PhasedRecreate` for the exploration and exploitation phases — never
+/// used during construction (Initial), where the cost-aware default produces the
+/// seed solution.
 ///
-/// This operator pairs the [`UnassignedJobSelector`] with [`AnyFeasibleResultSelector`]
-/// so that any unassigned job whose feasibility region is non-empty is reinserted
-/// regardless of whether the resulting tour is cost-best. Lex-strict
-/// `minimize-unassigned` at the solution level guarantees the move is accepted only
-/// if it genuinely reduces unassigned count.
+/// Pairs [`UnassignedJobSelector`] with [`ExhaustiveRouteSelector`] and
+/// [`AnyFeasibleResultSelector`] so that any unassigned job whose feasibility
+/// region intersects any vehicle (active or unused) is reinserted in a single
+/// pass. The default [`AllRouteSelector`] samples one unused vehicle per
+/// actor-type group; for fleets with many small groups (typical of DRT) that
+/// sampling drops feasible insertions, leaving trips unassigned even though a
+/// feasible vehicle exists. The exhaustive selector closes that gap.
+///
+/// Lex-strict `minimize-unassigned` at the solution level guarantees the move is
+/// accepted only if it genuinely reduces unassigned count.
 pub struct RecreateWithRepair {
     recreate: ConfigurableRecreate,
 }
@@ -26,7 +32,7 @@ impl RecreateWithRepair {
         Self {
             recreate: ConfigurableRecreate::new(
                 Box::<UnassignedJobSelector>::default(),
-                Box::<AllRouteSelector>::default(),
+                Box::<ExhaustiveRouteSelector>::default(),
                 LegSelection::Stochastic(random),
                 ResultSelection::Concrete(Box::<AnyFeasibleResultSelector>::default()),
                 Default::default(),
