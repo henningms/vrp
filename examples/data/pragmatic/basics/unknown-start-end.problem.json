@@ -1,0 +1,140 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "trip_1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5208,
+                  "lng": 13.4095
+                },
+                "duration": 120.0,
+                "tag": "trip_1_pickup",
+                "times": [
+                  [
+                    "2024-01-01T08:00:00Z",
+                    "2024-01-01T10:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [
+              1
+            ]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5280,
+                  "lng": 13.4210
+                },
+                "duration": 120.0,
+                "tag": "trip_1_delivery",
+                "times": [
+                  [
+                    "2024-01-01T08:00:00Z",
+                    "2024-01-01T11:00:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "id": "trip_2",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5260,
+                  "lng": 13.3975
+                },
+                "duration": 120.0,
+                "tag": "trip_2_pickup",
+                "times": [
+                  [
+                    "2024-01-01T08:00:00Z",
+                    "2024-01-01T10:30:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [
+              1
+            ]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": {
+                  "lat": 52.5185,
+                  "lng": 13.3920
+                },
+                "duration": 120.0,
+                "tag": "trip_2_delivery",
+                "times": [
+                  [
+                    "2024-01-01T08:00:00Z",
+                    "2024-01-01T11:30:00Z"
+                  ]
+                ]
+              }
+            ],
+            "demand": [
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "free_start_end_vehicle",
+        "vehicleIds": [
+          "vehicle_1"
+        ],
+        "profile": {
+          "matrix": "normal_car"
+        },
+        "costs": {
+          "fixed": 0.0,
+          "distance": 0.0002,
+          "time": 0.004806
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": {
+                "type": "unknown"
+              }
+            }
+          }
+        ],
+        "capacity": [
+          2
+        ]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "normal_car"
+      }
+    ]
+  }
+}
