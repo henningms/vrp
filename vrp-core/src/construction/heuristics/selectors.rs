@@ -121,42 +121,6 @@ impl JobSelector for CappedJobSelector {
     }
 }
 
-/// Env var that controls the construction-phase per-iteration job-pool cap.
-///
-/// Read by [`construction_job_selector_from_env`] each time a construction-time
-/// Cheapest variant is constructed. Unset or set to one of `0`, `off`, `none`,
-/// `unlimited` (case-insensitive) → uncapped (default behaviour matches the
-/// upstream cheapest-insertion algorithm). Any positive integer → cap to that K.
-///
-/// Recommended values for tuning DRT-scale Skoleskyss problems on a
-/// 900 s wall budget: try 100, 200, 300, 500. cap=300 is the empirically
-/// observed Pareto knee on Øvre Romerike (1908 trips).
-pub const CONSTRUCTION_JOB_CAP_ENV: &str = "SOLVER_CONSTRUCTION_JOB_CAP";
-
-/// Returns the JobSelector to use for the construction-phase Cheapest variants,
-/// configured from the [`CONSTRUCTION_JOB_CAP_ENV`] environment variable.
-///
-/// Returns [`AllJobSelector`] (uncapped) when the env var is unset / 0 / off /
-/// none / unlimited. Returns [`CappedJobSelector`] with the parsed value
-/// otherwise. Falls back to uncapped on parse error (with a stderr warning).
-pub fn construction_job_selector_from_env() -> Box<dyn JobSelector> {
-    let raw = std::env::var(CONSTRUCTION_JOB_CAP_ENV).unwrap_or_default();
-    let v = raw.trim().to_lowercase();
-    if v.is_empty() || v == "0" || v == "off" || v == "none" || v == "unlimited" {
-        return Box::<AllJobSelector>::default();
-    }
-    match v.parse::<usize>() {
-        Ok(k) if k > 0 => Box::new(CappedJobSelector::new(k)),
-        _ => {
-            eprintln!(
-                "WARN: {} value {:?} is not a positive integer; using uncapped",
-                CONSTRUCTION_JOB_CAP_ENV, raw
-            );
-            Box::<AllJobSelector>::default()
-        }
-    }
-}
-
 /// Returns only jobs that are currently unassigned in the solution.
 ///
 /// Used by the [`UnassignedRepair`] recreate operator to focus a repair pass on

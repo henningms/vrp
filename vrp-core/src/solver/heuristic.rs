@@ -57,18 +57,33 @@ pub type HeuristicFilterFn = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
 custom_extra_property!(pub HeuristicFilter typeof HeuristicFilterFn);
 
+/// Default value for [`VrpConfigBuilder::set_initial_max_size`] — matches
+/// upstream `with_initial(4, …)` behaviour. The simulator builds at most
+/// this many initial solutions before transitioning to refinement, stopping
+/// earlier if the elapsed-time-fraction exceeds the initial-quota.
+pub const DEFAULT_INITIAL_MAX_SIZE: usize = 4;
+
 /// Provides the way to get [ProblemConfigBuilder] with reasonable defaults for VRP domain.
 pub struct VrpConfigBuilder {
     problem: Arc<Problem>,
     environment: Option<Arc<Environment>>,
     heuristic: Option<TargetHeuristic>,
     telemetry_mode: Option<TelemetryMode>,
+    initial_max_size: Option<usize>,
+    construction_job_cap: Option<usize>,
 }
 
 impl VrpConfigBuilder {
     /// Creates a new instance of `VrpConfigBuilder`.
     pub fn new(problem: Arc<Problem>) -> Self {
-        Self { problem, environment: None, heuristic: None, telemetry_mode: None }
+        Self {
+            problem,
+            environment: None,
+            heuristic: None,
+            telemetry_mode: None,
+            initial_max_size: None,
+            construction_job_cap: None,
+        }
     }
 
     /// Sets [Environment] instance to be used.
@@ -90,6 +105,33 @@ impl VrpConfigBuilder {
         self
     }
 
+    /// Sets the maximum number of initial solutions the simulator will build
+    /// before transitioning to refinement. Defaults to
+    /// [`DEFAULT_INITIAL_MAX_SIZE`] when unset. Setting `1` skips secondary
+    /// init operators entirely — useful when paired with
+    /// [`Self::set_construction_job_cap`] on large problems where the
+    /// construction-time speedup brings the first init close to the
+    /// simulator's 5%-budget initial-quota.
+    pub fn set_initial_max_size(mut self, n: usize) -> Self {
+        self.initial_max_size = Some(n);
+        self
+    }
+
+    /// Sets the per-iteration job-pool cap for the construction-time
+    /// Cheapest variants (`RecreateWithSoloAwareCheapest` and the
+    /// alternative-goal `RecreateWithCheapest`). `None` (default) → uncapped
+    /// (matches upstream cheapest-insertion). `Some(K)` → cap to K random
+    /// jobs per outer iteration via [`CappedJobSelector`].
+    ///
+    /// Refinement-time recreate operators are unaffected and keep the
+    /// uncapped `AllJobSelector`.
+    ///
+    /// [`CappedJobSelector`]: crate::construction::heuristics::CappedJobSelector
+    pub fn set_construction_job_cap(mut self, cap: Option<usize>) -> Self {
+        self.construction_job_cap = cap;
+        self
+    }
+
     /// Builds a preconfigured instance of [ProblemConfigBuilder] for further usage.
     pub fn prebuild(self) -> GenericResult<ProblemConfigBuilder> {
         let problem = self.problem;
@@ -103,11 +145,18 @@ impl VrpConfigBuilder {
         let footprint = Footprint::new(problem.as_ref());
         let population = get_default_population(problem.goal.clone(), footprint, environment.clone(), selection_size);
 
+        let initial_max_size = self.initial_max_size.unwrap_or(DEFAULT_INITIAL_MAX_SIZE);
+        let construction_job_cap = self.construction_job_cap;
+
         Ok(ProblemConfigBuilder::default()
             .with_heuristic(heuristic)
             .with_context(RefinementContext::new(problem.clone(), population, telemetry_mode, environment.clone()))
             .with_processing(create_default_processing())
-            .with_initial(4, 0.05, create_default_init_operators(problem, environment)))
+            .with_initial(
+                initial_max_size,
+                0.05,
+                create_default_init_operators(problem, environment, construction_job_cap),
+            ))
     }
 }
 
@@ -290,9 +339,18 @@ mod builder {
     use crate::solver::processing::*;
 
     /// Creates default init operators.
+    ///
+    /// `construction_job_cap` controls the per-iteration job-pool cap for the
+    /// two construction-time Cheapest variants (the main solo-aware operator
+    /// and the alternative-goal Cheapest). `None` → uncapped (matches upstream
+    /// cheapest-insertion). `Some(K)` → cap to K random jobs per outer
+    /// iteration via [`crate::construction::heuristics::CappedJobSelector`].
+    /// The dynamic refinement pool (`mod dynamic`) keeps the uncapped Cheapest
+    /// for full quality regardless of this setting.
     pub fn create_default_init_operators(
         problem: Arc<Problem>,
         environment: Arc<Environment>,
+        construction_job_cap: Option<usize>,
     ) -> InitialOperators<RefinementContext, GoalContext, InsertionContext> {
         type VrpInitialOperator = dyn InitialOperator<Context = RefinementContext, Objective = GoalContext, Solution = InsertionContext>
             + Send
@@ -302,22 +360,29 @@ mod builder {
         let wrap: fn(Arc<dyn Recreate>) -> Box<VrpInitialOperator> =
             |recreate| Box::new(RecreateInitialOperator::new(recreate));
 
+        let solo_aware: Arc<dyn Recreate> = match construction_job_cap {
+            Some(cap) => Arc::new(RecreateWithSoloAwareCheapest::with_cap(random.clone(), cap)),
+            None => Arc::new(RecreateWithSoloAwareCheapest::new(random.clone())),
+        };
+
         std::iter::once({
             // main stable constructive heuristics — solo-aware variant prefers
             // empty routes for solo-riding jobs at construction time so the
             // greedy gen-0 pass does not commit cost-cheapest placements that
             // later block solo-riders from finding feasible insertions.
-            (wrap(Arc::new(RecreateWithSoloAwareCheapest::new(random.clone()))), 1)
+            (wrap(solo_aware), 1)
         })
         .chain(
             // alternative constructive heuristics — same per-iteration job-pool
-            // policy as SoloAwareCheapest. Both are construction-only operators
-            // configured via SOLVER_CONSTRUCTION_JOB_CAP env var (default
-            // uncapped). The dynamic refinement pool (`mod dynamic`) keeps the
-            // uncapped Cheapest for full quality.
+            // policy as SoloAwareCheapest. Both are construction-only operators.
+            // The dynamic refinement pool (`mod dynamic`) keeps the uncapped
+            // Cheapest for full quality.
             get_recreate_with_alternative_goal(problem.goal.as_ref(), {
                 let random = random.clone();
-                move || RecreateWithCheapest::with_cap_from_env(random.clone())
+                move || match construction_job_cap {
+                    Some(cap) => RecreateWithCheapest::with_cap(random.clone(), cap),
+                    None => RecreateWithCheapest::new(random.clone()),
+                }
             })
             .map(|recreate| (wrap(recreate), 1)),
         )

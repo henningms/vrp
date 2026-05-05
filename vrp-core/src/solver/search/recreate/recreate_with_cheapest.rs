@@ -44,24 +44,6 @@ impl RecreateWithCheapest {
             ),
         }
     }
-
-    /// Creates a new instance with the per-iteration job pool configured from
-    /// the [`CONSTRUCTION_JOB_CAP_ENV`] env var. Default is uncapped (matches
-    /// [`RecreateWithCheapest::new`]); set `SOLVER_CONSTRUCTION_JOB_CAP=N` to
-    /// cap to K=N. Intended for the construction-phase init operator chain
-    /// only — refinement-time call sites should use `new()` to keep full
-    /// cheapest-of-N quality.
-    pub fn with_cap_from_env(random: Arc<dyn Random>) -> Self {
-        Self {
-            recreate: ConfigurableRecreate::new(
-                construction_job_selector_from_env(),
-                Box::<AllRouteSelector>::default(),
-                LegSelection::Stochastic(random),
-                ResultSelection::Concrete(Box::<BestResultSelector>::default()),
-                Default::default(),
-            ),
-        }
-    }
 }
 
 impl Recreate for RecreateWithCheapest {

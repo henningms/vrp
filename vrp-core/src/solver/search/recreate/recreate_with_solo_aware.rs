@@ -23,17 +23,32 @@ pub struct RecreateWithSoloAwareCheapest {
 }
 
 impl RecreateWithSoloAwareCheapest {
-    /// Creates a new instance of `RecreateWithSoloAwareCheapest`.
-    ///
-    /// The per-iteration job pool is configurable via the
-    /// [`CONSTRUCTION_JOB_CAP_ENV`] environment variable. Default is uncapped
-    /// (matches upstream cheapest-insertion behaviour); set
-    /// `SOLVER_CONSTRUCTION_JOB_CAP=N` to cap to K=N for construction-time
-    /// speedup at the cost of "best of K" quality.
+    /// Creates a new instance of `RecreateWithSoloAwareCheapest` with the
+    /// upstream uncapped per-iteration job pool. Matches the standard
+    /// cheapest-insertion algorithm's `O(jobs × routes × positions)` cost
+    /// per outer iteration.
     pub fn new(random: Arc<dyn Random>) -> Self {
         Self {
             recreate: ConfigurableRecreate::new(
-                construction_job_selector_from_env(),
+                Box::<AllJobSelector>::default(),
+                Box::<AllRouteSelector>::default(),
+                LegSelection::Stochastic(random),
+                ResultSelection::Concrete(Box::<SoloAwareResultSelector>::default()),
+                Default::default(),
+            ),
+        }
+    }
+
+    /// Creates a new instance with the per-iteration job pool capped at `cap`.
+    ///
+    /// Construction-time speedup variant — analogous to
+    /// [`RecreateWithCheapest::with_cap`]. See its docs for the trade-off.
+    /// Pairs with the default `prepare()` shuffle so each call gets a fresh
+    /// random sample of K jobs from the unassigned set.
+    pub fn with_cap(random: Arc<dyn Random>, cap: usize) -> Self {
+        Self {
+            recreate: ConfigurableRecreate::new(
+                Box::new(CappedJobSelector::new(cap)),
                 Box::<AllRouteSelector>::default(),
                 LegSelection::Stochastic(random),
                 ResultSelection::Concrete(Box::<SoloAwareResultSelector>::default()),
