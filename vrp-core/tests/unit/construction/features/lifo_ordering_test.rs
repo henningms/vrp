@@ -146,6 +146,53 @@ fn test_regular_job_not_pickup_or_delivery() {
     assert!(!constraint.is_delivery(&regular));
 }
 
+// Regression test for the multi-dim demand path.
+//
+// Production fleets (e.g. wheelchair-accessible minibuses with passenger + WC
+// dimensions) store demand as `Demand<MultiDimLoad>`. The `get_job_demand`
+// API is type-keyed, so a `get_job_demand::<SingleDimLoad>()` probe on a
+// multi-dim job returns `None`. Prior to fix this caused `is_pickup` /
+// `is_delivery` to silently return `false` for every wheelchair activity,
+// turning the entire LIFO constraint into a no-op.
+
+fn multi_dim_pudo_pickup_demand(value: i32) -> Demand<MultiDimLoad> {
+    Demand {
+        pickup: (MultiDimLoad::default(), MultiDimLoad::new(vec![value])),
+        delivery: (MultiDimLoad::default(), MultiDimLoad::default()),
+    }
+}
+
+fn multi_dim_pudo_delivery_demand(value: i32) -> Demand<MultiDimLoad> {
+    Demand {
+        pickup: (MultiDimLoad::default(), MultiDimLoad::default()),
+        delivery: (MultiDimLoad::default(), MultiDimLoad::new(vec![value])),
+    }
+}
+
+#[test]
+fn test_is_pickup_detection_with_multi_dim_demand() {
+    let constraint = LifoOrderingConstraint { code: LIFO_VIOLATION_CODE };
+
+    let mut pickup_builder = TestSingleBuilder::default();
+    pickup_builder.demand(multi_dim_pudo_pickup_demand(1));
+    let pickup = pickup_builder.build();
+
+    assert!(constraint.is_pickup(&pickup));
+    assert!(!constraint.is_delivery(&pickup));
+}
+
+#[test]
+fn test_is_delivery_detection_with_multi_dim_demand() {
+    let constraint = LifoOrderingConstraint { code: LIFO_VIOLATION_CODE };
+
+    let mut delivery_builder = TestSingleBuilder::default();
+    delivery_builder.demand(multi_dim_pudo_delivery_demand(1));
+    let delivery = delivery_builder.build();
+
+    assert!(!constraint.is_pickup(&delivery));
+    assert!(constraint.is_delivery(&delivery));
+}
+
 // =============================================================================
 // Integration Tests - LIFO Ordering Constraint Evaluation
 // =============================================================================

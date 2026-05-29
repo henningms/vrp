@@ -34,7 +34,7 @@
 mod lifo_ordering_test;
 
 use super::*;
-use crate::models::common::SingleDimLoad;
+use crate::models::common::{MultiDimLoad, SingleDimLoad};
 use crate::models::problem::Single;
 use crate::models::solution::Activity;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -202,14 +202,33 @@ impl LifoOrderingConstraint {
     }
 
     /// Checks if a job activity is a pickup.
-    /// For PUDO (pickup-delivery) jobs, the dynamic pickup demand is stored in pickup.1
+    /// For PUDO (pickup-delivery) jobs, the dynamic pickup demand is stored in `pickup.1`.
+    /// Demand is stored type-keyed, so we must probe the same load type the job was created
+    /// with — try multi-dim first (the production path), then fall back to single-dim.
     fn is_pickup(&self, single: &Single) -> bool {
+        if let Some(d) = single.dimens.get_job_demand::<MultiDimLoad>() {
+            return multi_dim_has_load(&d.pickup.1);
+        }
         single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
     }
 
     /// Checks if a job activity is a delivery.
-    /// For PUDO (pickup-delivery) jobs, the dynamic delivery demand is stored in delivery.1
+    /// For PUDO (pickup-delivery) jobs, the dynamic delivery demand is stored in `delivery.1`.
+    /// Probes multi-dim first, then single-dim — see `is_pickup` for rationale.
     fn is_delivery(&self, single: &Single) -> bool {
+        if let Some(d) = single.dimens.get_job_demand::<MultiDimLoad>() {
+            return multi_dim_has_load(&d.delivery.1);
+        }
         single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.delivery.1.is_not_empty())
     }
+}
+
+/// Returns `true` iff the load carries any actual demand on a defined dimension.
+///
+/// We can't reuse `Load::is_not_empty()` here because `MultiDimLoad::is_not_empty()`
+/// treats `size == 0` (the "no demand declared" sentinel produced by `empty()` /
+/// `Default::default()`) as **not empty**, which would mis-classify a delivery's
+/// `pickup.1` (size 0) as a pickup. Inspecting the load slice directly avoids that.
+fn multi_dim_has_load(load: &MultiDimLoad) -> bool {
+    load.size > 0 && load.load[..load.size].iter().any(|v| *v != 0)
 }
