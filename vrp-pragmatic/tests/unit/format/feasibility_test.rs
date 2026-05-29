@@ -769,3 +769,139 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
     assert!(feas_result.is_feasible, "new job should be feasible");
     assert_eq!(solver_unassigned, 0, "solver should assign all jobs");
 }
+
+/// A candidate that only fits on an *idle* vehicle (one present in the fleet but
+/// with no tour in the saved solution) must still be reported feasible.
+///
+/// Regression guard: `new_from_solution`/`restore` drops empty routes from
+/// `solution.routes`, but the idle vehicle's actor stays available in the
+/// registry. `check_job` must consider registry-available routes — otherwise
+/// idle shifts are invisible and the fast path can never fill them.
+#[test]
+fn check_job_considers_idle_vehicle_with_no_tour() {
+    // busy vehicle (cap 1, already full) + idle vehicle (cap 10, no tour)
+    let vehicles = vec![
+        VehicleType {
+            type_id: "busy".to_string(),
+            vehicle_ids: vec!["busy_1".to_string()],
+            capacity: Some(vec![1]),
+            ..create_default_vehicle("busy")
+        },
+        VehicleType {
+            type_id: "idle".to_string(),
+            vehicle_ids: vec!["idle_1".to_string()],
+            capacity: Some(vec![10]),
+            ..create_default_vehicle("idle")
+        },
+    ];
+
+    let (problem, matrix) = build_problem_and_matrix(vehicles, vec![create_delivery_job("job1", (1.0, 0.0))]);
+
+    // Only the busy vehicle has a tour; the idle vehicle is absent (no route).
+    let solution_json = build_solution_json(
+        "busy_1",
+        "busy",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        1,
+    );
+
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    let result = ctx.check_job(&candidate).expect("check_job failed");
+
+    assert!(result.is_feasible, "candidate should be feasible on the idle vehicle");
+    let idle = result
+        .vehicles
+        .iter()
+        .find(|v| v.vehicle_id == "idle_1")
+        .expect("idle vehicle should be evaluated");
+    assert!(idle.is_feasible, "idle vehicle should accept the candidate");
+}
+
+/// `accept_job` must be able to commit an insertion onto an idle vehicle and
+/// serialize the newly-opened tour.
+#[test]
+fn accept_job_places_candidate_on_idle_vehicle() {
+    let vehicles = vec![
+        VehicleType {
+            type_id: "busy".to_string(),
+            vehicle_ids: vec!["busy_1".to_string()],
+            capacity: Some(vec![1]),
+            ..create_default_vehicle("busy")
+        },
+        VehicleType {
+            type_id: "idle".to_string(),
+            vehicle_ids: vec!["idle_1".to_string()],
+            capacity: Some(vec![10]),
+            ..create_default_vehicle("idle")
+        },
+    ];
+
+    let (problem, matrix) = build_problem_and_matrix(vehicles, vec![create_delivery_job("job1", (1.0, 0.0))]);
+
+    let solution_json = build_solution_json(
+        "busy_1",
+        "busy",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        1,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    let result = ctx.accept_job(&candidate).expect("accept_job should place candidate on idle vehicle");
+
+    assert!(result.is_feasible);
+    assert_eq!(result.vehicle_id, "idle_1", "candidate should be placed on the idle vehicle");
+
+    let json = ctx.to_solution_json().expect("to_solution_json failed");
+    assert!(json.contains("candidate1"), "serialized solution should contain the accepted job");
+    assert!(json.contains("idle_1"), "serialized solution should contain the newly-opened idle tour");
+}
+
+/// When a candidate fits both an active route and an idle vehicle, `accept_job`
+/// must prefer extending the active route (cheaper — no fixed cost) over opening
+/// the idle vehicle. Guards against the fix making the fast path open shifts
+/// unnecessarily. Relies on the default non-zero vehicle fixed cost.
+#[test]
+fn accept_job_prefers_active_route_over_opening_idle_vehicle() {
+    let vehicles = vec![
+        VehicleType {
+            type_id: "active".to_string(),
+            vehicle_ids: vec!["active_1".to_string()],
+            capacity: Some(vec![10]),
+            ..create_default_vehicle("active")
+        },
+        VehicleType {
+            type_id: "idle".to_string(),
+            vehicle_ids: vec!["idle_1".to_string()],
+            capacity: Some(vec![10]),
+            ..create_default_vehicle("idle")
+        },
+    ];
+
+    let (problem, matrix) = build_problem_and_matrix(vehicles, vec![create_delivery_job("job1", (1.0, 0.0))]);
+
+    // active_1 has room; idle_1 has no tour.
+    let solution_json = build_solution_json(
+        "active_1",
+        "active",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        10,
+    );
+
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+
+    let candidate = create_delivery_job("candidate1", (2.0, 0.0));
+    let result = ctx.accept_job(&candidate).expect("accept_job failed");
+
+    assert!(result.is_feasible);
+    assert_eq!(
+        result.vehicle_id, "active_1",
+        "candidate should extend the active route rather than open the idle vehicle"
+    );
+}

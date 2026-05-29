@@ -127,7 +127,20 @@ impl FeasibilityContext {
 
         let mut vehicles = Vec::new();
 
-        for route_ctx in &self.insertion_ctx.solution.routes {
+        // Evaluate existing routes AND idle vehicles still available in the
+        // registry. `new_from_solution`/`restore` removes empty routes from
+        // `solution.routes`, but the corresponding actors remain available in
+        // the registry. Chaining them in mirrors the core solver's route
+        // selector (`construction::heuristics::selectors`) so a candidate can be
+        // placed onto an idle shift instead of being reported infeasible.
+        let routes = self
+            .insertion_ctx
+            .solution
+            .routes
+            .iter()
+            .chain(self.insertion_ctx.solution.registry.next_route_all());
+
+        for route_ctx in routes {
             let actor = &route_ctx.route().actor;
             let vehicle_id = actor
                 .vehicle
@@ -218,7 +231,19 @@ impl FeasibilityContext {
 
         let mut best = InsertionResult::make_failure();
 
-        for route_ctx in &self.insertion_ctx.solution.routes {
+        // Consider existing routes AND idle vehicles available in the registry
+        // (see `check_job` for why). `BestResultSelector` picks the globally
+        // cheapest insertion, and `apply_insertion_success` pulls a chosen
+        // registry route into `solution.routes`, so committing onto an idle
+        // vehicle works with the existing core machinery.
+        let routes = self
+            .insertion_ctx
+            .solution
+            .routes
+            .iter()
+            .chain(self.insertion_ctx.solution.registry.next_route_all());
+
+        for route_ctx in routes {
             let eval_ctx = EvaluationContext {
                 goal,
                 job: &core_job,
