@@ -6,7 +6,6 @@ use crate::models::common::Cost;
 use std::sync::Arc;
 
 mod unassigned_job_selector {
-    use super::*;
     use crate::construction::heuristics::{InsertionContext, JobSelector, UnassignedJobSelector, UnassignmentInfo};
     use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
     use crate::helpers::models::problem::TestSingleBuilder;
