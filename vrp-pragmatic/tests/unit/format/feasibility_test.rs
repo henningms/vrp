@@ -1,6 +1,6 @@
-use crate::format::feasibility::FeasibilityContext;
+use crate::format::feasibility::{job_locations, FeasibilityContext};
 use crate::format::problem::*;
-use crate::format::Location;
+use crate::format::{CoordIndex, Location};
 use crate::helpers::*;
 use std::sync::Arc;
 use std::time::Instant;
@@ -112,7 +112,7 @@ fn can_check_feasible_insertion_with_capacity() {
         10,
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Candidate: a delivery job with demand=1 — should fit (9 remaining capacity)
@@ -142,7 +142,7 @@ fn can_detect_infeasible_capacity_constraint() {
         1,
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Candidate: another delivery with demand=1 — should NOT fit
@@ -217,7 +217,7 @@ fn can_check_multi_vehicle_mixed_results() {
         }}"#
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     let candidate = create_delivery_job("candidate1", (3.0, 0.0));
@@ -251,7 +251,7 @@ fn can_check_pickup_delivery_job_insertion() {
         10,
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Candidate: a pickup-delivery (multi) job
@@ -286,7 +286,7 @@ fn can_detect_skills_constraint_violation() {
         10,
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Candidate requires skill "electronics" which vehicle doesn't have
@@ -411,7 +411,7 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
 
     // Build context (one-time cost)
     let ctx_start = Instant::now();
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
     let ctx_duration = ctx_start.elapsed();
 
@@ -461,7 +461,7 @@ fn can_accept_job_and_update_state() {
         10,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Accept a new job — should succeed
@@ -494,7 +494,7 @@ fn can_reject_infeasible_accept() {
         1,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Try to accept — should fail
@@ -518,7 +518,7 @@ fn can_serialize_solution_after_accept() {
         10,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Accept a job
@@ -550,7 +550,7 @@ fn can_accept_multiple_jobs_sequentially() {
         3,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json)
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[])
         .expect("cannot build context");
 
     // Accept first — should succeed (1 remaining)
@@ -668,7 +668,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
     let candidate = create_delivery_job_with_index("new_job", 1); // reuse existing location
 
     let feas_ctx_start = Instant::now();
-    let feas_ctx = FeasibilityContext::new(base_problem.clone(), vec![base_matrix.clone()], &solution_json)
+    let feas_ctx = FeasibilityContext::new(base_problem.clone(), vec![base_matrix.clone()], &solution_json, &[])
         .expect("cannot build feasibility context");
     let feas_ctx_duration = feas_ctx_start.elapsed();
 
@@ -806,7 +806,7 @@ fn check_job_considers_idle_vehicle_with_no_tour() {
         1,
     );
 
-    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[]).expect("cannot build context");
 
     let candidate = create_delivery_job("candidate1", (2.0, 0.0));
     let result = ctx.check_job(&candidate).expect("check_job failed");
@@ -849,7 +849,7 @@ fn accept_job_places_candidate_on_idle_vehicle() {
         1,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[]).expect("cannot build context");
 
     let candidate = create_delivery_job("candidate1", (2.0, 0.0));
     let result = ctx.accept_job(&candidate).expect("accept_job should place candidate on idle vehicle");
@@ -894,7 +894,7 @@ fn accept_job_prefers_active_route_over_opening_idle_vehicle() {
         10,
     );
 
-    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json).expect("cannot build context");
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[]).expect("cannot build context");
 
     let candidate = create_delivery_job("candidate1", (2.0, 0.0));
     let result = ctx.accept_job(&candidate).expect("accept_job failed");
@@ -903,5 +903,57 @@ fn accept_job_prefers_active_route_over_opening_idle_vehicle() {
     assert_eq!(
         result.vehicle_id, "active_1",
         "candidate should extend the active route rather than open the idle vehicle"
+    );
+}
+
+#[test]
+fn check_job_resolves_candidate_coordinate_absent_from_problem() {
+    // Regression: a candidate at a coordinate NOT present in the stored problem
+    // must be registered via `extra_locations` so it resolves to a real matrix
+    // entry. Before the fix it resolved to `None`, yielding a bogus verdict;
+    // building a matrix that covers the candidate without registering it also
+    // fails with E1504 (matrix/coord-index dimension mismatch).
+    let (problem, _) = build_problem_and_matrix(
+        vec![create_vehicle_with_capacity("my_vehicle", vec![10])],
+        vec![create_delivery_job("job1", (1.0, 0.0))],
+    );
+
+    // Candidate delivery at a brand-new coordinate (not the depot or job1).
+    let candidate = create_delivery_job("candidate_new_coord", (5.0, 0.0));
+    let extra = job_locations(&candidate);
+    assert_eq!(extra.len(), 1, "candidate has a single delivery place");
+
+    // Build a matrix covering problem coords + the candidate coord, in the same
+    // problem-then-extras order the solver's CoordIndex assigns.
+    let unique = CoordIndex::new_with_extra_locations(&problem, &extra).unique();
+    let data: Vec<i64> = unique
+        .iter()
+        .cloned()
+        .flat_map(|a| {
+            let (a_lat, a_lng) = a.to_lat_lng();
+            unique.iter().map(move |b| {
+                let (b_lat, b_lng) = b.to_lat_lng();
+                ((a_lat - b_lat).powf(2.) + (a_lng - b_lng).powf(2.)).sqrt().round() as i64
+            })
+        })
+        .collect();
+    let matrix = create_matrix(data);
+
+    let solution_json = build_solution_json(
+        "my_vehicle_1",
+        "my_vehicle",
+        (0.0, 0.0),
+        vec![("job1", "delivery", (1.0, 0.0))],
+        10,
+    );
+
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &extra)
+        .expect("cannot build context");
+    let result = ctx.check_job(&candidate).expect("check_job failed");
+
+    assert!(
+        result.is_feasible,
+        "candidate at a coordinate absent from the problem should be feasible when reachable; got {:?}",
+        result.vehicles
     );
 }

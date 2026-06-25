@@ -21,6 +21,21 @@ pub struct CoordIndex {
 impl CoordIndex {
     /// Creates a new instance of `CoordIndex`.
     pub fn new(problem: &Problem) -> Self {
+        Self::new_with_extra_locations(problem, &[])
+    }
+
+    /// Creates a `CoordIndex` from a problem plus additional locations that are
+    /// not part of the stored problem.
+    ///
+    /// `extra_locations` are appended AFTER all problem (plan + fleet)
+    /// coordinates, so they receive the highest matrix indices. This is used by
+    /// `FeasibilityContext` to register the coordinates of a candidate job being
+    /// tested for insertion: the candidate is not in the problem, so without
+    /// this its coordinates would resolve to `None` and produce a bogus
+    /// infeasible verdict. The caller MUST build the routing matrix with the
+    /// same problem-then-extras coordinate ordering so matrix indices stay
+    /// aligned (see `vrp-api`'s `matrix_builder`).
+    pub fn new_with_extra_locations(problem: &Problem, extra_locations: &[Location]) -> Self {
         let mut index = Self {
             direct_index: Default::default(),
             reverse_index: Default::default(),
@@ -80,6 +95,11 @@ impl CoordIndex {
                 }
             });
         });
+
+        // Append extra (candidate) locations after all problem coordinates so
+        // they receive the highest matrix indices. `add` deduplicates, so a
+        // location already present in the problem keeps its existing index.
+        extra_locations.iter().for_each(|location| index.add(location));
 
         index.max_matrix_index = index.direct_index.len().max(1) - 1;
 

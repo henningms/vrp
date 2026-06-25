@@ -60,3 +60,34 @@ fn can_use_index_with_coordinate_an_unknown_location_types() {
     assert_eq!(index.get_by_idx(10), None);
     assert!(!index.is_special_index(3));
 }
+
+#[test]
+fn new_with_extra_locations_registers_candidate_coordinates() {
+    // Problem: one delivery job at (1,0); default fleet depot at (0,0).
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (1., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ..create_empty_problem()
+    };
+
+    let problem_coord_count = CoordIndex::new(&problem).max_matrix_index() + 1;
+    let candidate_loc = (5., 0.).to_loc();
+
+    // Without registration the candidate coordinate is unknown — this is what
+    // silently produced bogus infeasible verdicts for new booking coordinates.
+    assert_eq!(CoordIndex::new(&problem).get_by_loc(&candidate_loc), None);
+
+    // Registered as an extra location, it resolves to the next free index,
+    // appended AFTER all problem coordinates, and grows the matrix dimension.
+    let index = CoordIndex::new_with_extra_locations(&problem, &[candidate_loc.clone()]);
+    assert_eq!(index.get_by_loc(&candidate_loc), Some(problem_coord_count));
+    assert_eq!(index.max_matrix_index(), problem_coord_count);
+
+    // A coordinate already present in the problem keeps its original index
+    // (dedup), so passing it as an extra does not create a phantom column.
+    let existing = (1., 0.).to_loc();
+    let plain_existing = CoordIndex::new(&problem).get_by_loc(&existing);
+    let dedup = CoordIndex::new_with_extra_locations(&problem, &[existing.clone()]);
+    assert_eq!(dedup.get_by_loc(&existing), plain_existing);
+    assert_eq!(dedup.max_matrix_index() + 1, problem_coord_count);
+}

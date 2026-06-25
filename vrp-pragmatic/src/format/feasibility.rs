@@ -15,7 +15,7 @@ use crate::format::problem::{
 };
 use crate::format::solution::map_code_reason;
 use crate::format::solution::read_init_solution;
-use crate::format::{CoordIndexExtraProperty, CoreProblem, ShiftIndexDimension, VehicleTypeDimension};
+use crate::format::{CoordIndexExtraProperty, CoreProblem, Location, ShiftIndexDimension, VehicleTypeDimension};
 use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::sync::Arc;
@@ -27,6 +27,21 @@ use vrp_core::models::problem::VehicleIdDimension;
 use vrp_core::prelude::*;
 
 type ApiJob = crate::format::problem::Job;
+
+/// Collects every place location referenced by a candidate job, in the same
+/// task order `CoordIndex` uses (pickups → deliveries → replacements →
+/// services). Pass the result as `extra_locations` to [`FeasibilityContext::new`]
+/// (and append the same coordinates, in this order, when building the routing
+/// matrix) so a candidate that introduces new coordinates is index-aligned.
+pub fn job_locations(job: &ApiJob) -> Vec<Location> {
+    [job.pickups.as_ref(), job.deliveries.as_ref(), job.replacements.as_ref(), job.services.as_ref()]
+        .into_iter()
+        .flatten()
+        .flat_map(|tasks| tasks.iter())
+        .flat_map(|task| task.places.iter())
+        .map(|place| place.location.clone())
+        .collect()
+}
 
 /// Information about a constraint violation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,15 +97,24 @@ impl FeasibilityContext {
     ///
     /// All constraint features (skills, compatibility, order, etc.) are force-enabled
     /// so that a candidate job introducing a new constraint type is still checked correctly.
+    /// `extra_locations` are coordinates referenced by the candidate job(s) that
+    /// will be passed to [`check_job`]/[`accept_job`] but are NOT present in the
+    /// stored problem (e.g. a brand-new booking pickup/dropoff). They are
+    /// registered in the `CoordIndex` so the candidate's locations resolve to
+    /// valid matrix indices instead of `None`. The caller MUST build `matrices`
+    /// with the same problem-then-extras coordinate ordering (see
+    /// [`job_locations`]); pass `&[]` when every candidate coordinate is already
+    /// part of the problem.
     pub fn new(
         api_problem: ApiProblem,
         matrices: Vec<Matrix>,
         solution_json: &str,
+        extra_locations: &[Location],
     ) -> Result<Self, GenericError> {
         let properties = get_problem_properties(&api_problem, &matrices)
             .with_all_constraints_enabled();
 
-        let coord_index = crate::format::CoordIndex::new(&api_problem);
+        let coord_index = crate::format::CoordIndex::new_with_extra_locations(&api_problem, extra_locations);
         let core_problem: CoreProblem =
             map_to_problem_with_props(api_problem.clone(), matrices, coord_index, Some(properties.clone()))
                 .map_err(|e: crate::format::MultiFormatError| e.to_string())?;
@@ -385,7 +409,8 @@ pub fn check_insertion_feasibility(
     let candidate: ApiJob =
         serde_json::from_str(candidate_job_json).map_err(|e: serde_json::Error| e.to_string())?;
 
-    let ctx = FeasibilityContext::new(api_problem, matrices, solution_json)?;
+    let extra_locations = job_locations(&candidate);
+    let ctx = FeasibilityContext::new(api_problem, matrices, solution_json, &extra_locations)?;
     let result = ctx.check_job(&candidate)?;
 
     serde_json::to_string_pretty(&result).map_err(|e: serde_json::Error| e.to_string().into())
