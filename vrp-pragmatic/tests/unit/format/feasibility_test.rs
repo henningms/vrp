@@ -1174,3 +1174,116 @@ fn check_job_resolves_candidate_coordinate_absent_from_problem() {
         result.vehicles
     );
 }
+
+/// Builds a single vehicle whose shift starts at depot (0,0) with NO end (open
+/// route), capacity 10. Mirrors Ferd's open shifts (driver goes off-duty
+/// wherever the last drop-off is; no forced return-to-depot).
+fn open_windowed_vehicle() -> VehicleType {
+    VehicleType {
+        shifts: vec![VehicleShift {
+            start: ShiftStart { earliest: crate::format_time(0.), latest: None, location: (0.0, 0.0).to_loc() },
+            end: None,
+            breaks: None,
+            reloads: None,
+            recharges: None,
+            required_stops: None,
+            via: None,
+        }],
+        ..create_vehicle_with_capacity("veh", vec![10])
+    }
+}
+
+fn open_windowed_solution_json() -> String {
+    r#"{
+        "statistic": { "cost": 0, "distance": 0, "duration": 0,
+            "times": { "driving": 0, "serving": 0, "waiting": 0, "break": 0 } },
+        "tours": [{
+            "vehicleId": "veh_1",
+            "typeId": "veh",
+            "shiftIndex": 0,
+            "stops": [
+                {
+                    "location": { "lat": 0.0, "lng": 0.0 },
+                    "time": { "arrival": "1970-01-01T00:00:00Z", "departure": "1970-01-01T00:00:00Z" },
+                    "distance": 0, "load": [10],
+                    "activities": [{ "jobId": "departure", "type": "departure" }]
+                },
+                {
+                    "location": { "lat": 1.0, "lng": 0.0 },
+                    "time": { "arrival": "1970-01-01T00:01:40Z", "departure": "1970-01-01T00:01:41Z" },
+                    "distance": 1, "load": [9],
+                    "activities": [{ "jobId": "job1", "type": "delivery" }]
+                },
+                {
+                    "location": { "lat": 2.0, "lng": 0.0 },
+                    "time": { "arrival": "1970-01-01T00:03:20Z", "departure": "1970-01-01T00:03:21Z" },
+                    "distance": 2, "load": [8],
+                    "activities": [{ "jobId": "job2", "type": "delivery" }]
+                }
+            ],
+            "statistic": { "cost": 0, "distance": 0, "duration": 0,
+                "times": { "driving": 0, "serving": 0, "waiting": 0, "break": 0 } }
+        }]
+    }"#
+    .to_string()
+}
+
+/// Regression for the OPEN-route insertion-check append false negative.
+///
+/// Same shape as `can_append_candidate_after_last_stop_with_slack`, but the shift
+/// has NO end (open route) and the solution has NO arrival stop. This mirrors the
+/// Ferd production payload (open shifts) that produced a spurious
+/// `TIME_WINDOW_CONSTRAINT` while `/solve` placed the same candidate trivially.
+///
+/// Root cause (fixed in `initial_reader::create_core_route`): for an open route
+/// `CoreTour::new` creates only a start activity, so `tour.end()` — which returns
+/// `activities.last()` — returned the START activity. The end-schedule block then
+/// overwrote the start's schedule with the LAST stop's time (job2's departure),
+/// so the forward `update_schedules` pass anchored on that bogus late departure,
+/// pushing every job past its window and short-circuiting the leg fold before the
+/// feasible append leg was ever evaluated. Guarding the block on
+/// `actor.detail.end.is_some()` (a genuine end) instead of `tour.end().is_some()`
+/// fixes it. Closed routes are unaffected (they have a real end activity).
+#[test]
+fn can_append_candidate_after_last_stop_on_open_route() {
+    let jobs = vec![
+        create_delivery_job_with_times("job1", (1.0, 0.0), vec![(100, 110)], 1.),
+        create_delivery_job_with_times("job2", (2.0, 0.0), vec![(200, 210)], 1.),
+    ];
+    let candidate = create_delivery_job_with_times("candidate", (3.0, 0.0), vec![(300, 900)], 1.);
+    let extra = job_locations(&candidate);
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![open_windowed_vehicle()], jobs, &extra);
+    let solution_json = open_windowed_solution_json();
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &extra).expect("cannot build context");
+    let result = ctx.check_job(&candidate).expect("check_job failed");
+    assert!(
+        result.is_feasible,
+        "candidate must be appendable after the last stop on an OPEN route with trailing slack; got {:?}",
+        result.vehicles
+    );
+}
+
+/// Fail-open guard for the open-route path: the fix must not make the check
+/// blindly permissive. The candidate sits far away (loc 50) with a tight window
+/// [100,110] that cannot be met at ANY position — appending after job2 (served
+/// ~201) arrives long past 110, and inserting it before/between the early jobs
+/// pushes job1 (window [100,110]) past its own window (50-unit detour). So the
+/// check must still report infeasible.
+#[test]
+fn cannot_insert_unreachable_candidate_on_open_route() {
+    let jobs = vec![
+        create_delivery_job_with_times("job1", (1.0, 0.0), vec![(100, 110)], 1.),
+        create_delivery_job_with_times("job2", (2.0, 0.0), vec![(200, 210)], 1.),
+    ];
+    let candidate = create_delivery_job_with_times("candidate", (50.0, 0.0), vec![(100, 110)], 1.);
+    let extra = job_locations(&candidate);
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![open_windowed_vehicle()], jobs, &extra);
+    let solution_json = open_windowed_solution_json();
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &extra).expect("cannot build context");
+    let result = ctx.check_job(&candidate).expect("check_job failed");
+    assert!(
+        !result.is_feasible,
+        "far candidate with a tight window unreachable at any position must be infeasible; got {:?}",
+        result.vehicles
+    );
+}

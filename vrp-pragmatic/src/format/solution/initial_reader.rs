@@ -185,7 +185,7 @@ fn create_core_route(actor: Arc<Actor>, format_tour: &FormatTour) -> Result<Rout
 
     set_activity_time(start_stop, start_activity, core_start)?;
 
-    if core_tour.end().is_some() {
+    if actor.detail.end.is_some() {
         let end_stop = format_tour.stops.last().unwrap();
         let end_activity = end_stop.activities().first().ok_or_else(|| "end stop has no activities".to_string())?;
         let core_end = core_tour.all_activities_mut().last().unwrap();
