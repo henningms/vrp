@@ -85,7 +85,7 @@ pub fn eval_job_insertion_in_route(
 
 /// Evaluates possibility to preform insertion in route context only.
 /// NOTE: doesn't evaluate constraints on route level.
-fn eval_job_constraint_in_route(
+pub(crate) fn eval_job_constraint_in_route(
     eval_ctx: &EvaluationContext,
     solution_ctx: &SolutionContext,
     route_ctx: &RouteContext,

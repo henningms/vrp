@@ -45,3 +45,23 @@ fn can_run_analyze_kmedoids() {
 
     run_subcommand(matches);
 }
+
+#[test]
+fn can_configure_ride_quality_analysis() {
+    let args = vec![
+        "vrp-cli",
+        "analyze",
+        "ride-quality",
+        "pragmatic",
+        "problem.json",
+        "solution.json",
+        "--matrix",
+        "matrix.json",
+        "--min-direct-seconds",
+        "120",
+        "--worst-count",
+        "5",
+    ];
+
+    get_app().try_get_matches_from(args).unwrap();
+}

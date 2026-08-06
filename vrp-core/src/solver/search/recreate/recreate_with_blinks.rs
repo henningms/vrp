@@ -23,6 +23,19 @@ pub struct RecreateWithBlinks {
     weights: Vec<usize>,
 }
 
+/// Selects the one-time job ordering used by SISR blink insertion.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlinksJobOrdering {
+    /// Selects an ordering using the canonical SISR weights.
+    Weighted,
+    /// Inserts jobs with the shortest time windows first.
+    TimeWindowLength,
+    /// Inserts jobs with the earliest time-window start first.
+    TimeWindowStart,
+    /// Inserts jobs with the latest time-window end first.
+    TimeWindowEnd,
+}
+
 impl RecreateWithBlinks {
     /// Creates a new instance of `RecreateWithBlinks`.
     pub fn new(selectors: Vec<(Box<dyn JobSelector>, usize)>, blink_ratio: f64, random: Arc<dyn Random>) -> Self {
@@ -41,30 +54,45 @@ impl RecreateWithBlinks {
 
     /// Creates a new instance with defaults compliant with SISR paper (Section 5.3 + Table 13).
     pub fn new_with_defaults(random: Arc<dyn Random>) -> Self {
-        let blink_ratio = 0.01;
+        Self::new_with_job_ordering(BlinksJobOrdering::Weighted, false, random)
+    }
 
-        Self::new(
-            vec![
-                // --- Core Selectors (Section 5.3) ---
-                // 1. Random (Weight: 4)
+    /// Creates the default SISR recreate with bounded downstream-leg sampling on long routes.
+    ///
+    /// Pickup starting positions still use canonical blink selection. For each selected
+    /// pickup position, delivery and later activities use the standard stochastic leg
+    /// sampler once a route exceeds its greedy threshold. Short routes stay exhaustive.
+    pub fn new_sampled_with_defaults(random: Arc<dyn Random>) -> Self {
+        Self::new_with_job_ordering(BlinksJobOrdering::Weighted, true, random)
+    }
+
+    /// Creates SISR blink insertion with a specific one-time job ordering.
+    pub fn new_with_job_ordering(ordering: BlinksJobOrdering, sample_legs: bool, random: Arc<dyn Random>) -> Self {
+        let selectors: Vec<(Box<dyn JobSelector>, usize)> = match ordering {
+            BlinksJobOrdering::Weighted => vec![
                 (Box::<AllJobSelector>::default(), 4),
-                // 2. Demand: Largest First (Weight: 4)
                 (Box::new(DemandJobSelector::new(true)), 4),
-                // 3. Far: Largest Distance First (Weight: 2)
                 (Box::new(RankedJobSelector::new(true)), 2),
-                // 4. Close: Smallest Distance First (Weight: 1)
                 (Box::new(RankedJobSelector::new(false)), 1),
-                // --- VRPTW Extensions (Table 13) ---
-                // 5. TW Length: Increasing (Shortest/Hardest first) (Weight: 2)
                 (Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::LengthAscending)), 2),
-                // 6. TW Start: Increasing (Earliest first) (Weight: 2)
                 (Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::StartAscending)), 2),
-                // 7. TW End: Decreasing (Latest first) (Weight: 2)
                 (Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::EndDescending)), 2),
             ],
-            blink_ratio,
-            random,
-        )
+            BlinksJobOrdering::TimeWindowLength => {
+                vec![(Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::LengthAscending)), 1)]
+            }
+            BlinksJobOrdering::TimeWindowStart => {
+                vec![(Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::StartAscending)), 1)]
+            }
+            BlinksJobOrdering::TimeWindowEnd => {
+                vec![(Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::EndDescending)), 1)]
+            }
+        };
+        let mut recreate = Self::new(selectors, 0.01, random.clone());
+        if sample_legs {
+            recreate.leg_selection = LegSelection::Stochastic(random);
+        }
+        recreate
     }
 }
 
@@ -100,7 +128,7 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
         insertion_ctx: &InsertionContext,
         jobs: &[&Job],
         routes: &[&RouteContext],
-        _leg_selection: &LegSelection,
+        leg_selection: &LegSelection,
         result_selector: &dyn ResultSelector,
     ) -> InsertionResult {
         // Canonical SISR drives one job at a time via the `process` override below.
@@ -109,12 +137,7 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
             None => return InsertionResult::make_failure(),
         };
 
-        let eval_ctx = EvaluationContext {
-            goal: &insertion_ctx.problem.goal,
-            job,
-            leg_selection: &LegSelection::Exhaustive,
-            result_selector,
-        };
+        let eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
 
         let result = fold_reduce(
             routes,
@@ -122,6 +145,19 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
             |best_in_thread, route_ctx| {
                 let mut best_in_route = best_in_thread;
                 let tour = &route_ctx.route().tour;
+                let move_ctx = MoveContext::route(&insertion_ctx.solution, route_ctx, job);
+
+                // Route-level constraints and estimates do not depend on insertion position.
+                // Evaluating them inside the leg loop repeats skill, actor-time, capacity,
+                // and route-objective work for every possible pickup position.
+                if let Some(violation) = eval_ctx.goal.evaluate(&move_ctx) {
+                    return result_selector.select_insertion(
+                        insertion_ctx,
+                        best_in_route,
+                        InsertionResult::make_failure_with_code(violation.code, true, Some((*job).clone())),
+                    );
+                }
+                let route_costs = eval_ctx.goal.estimate(&move_ctx);
 
                 for leg_index in 0..tour.legs().count() {
                     // The Blink: "Each position is evaluated with a probability of 1 - gamma"
@@ -129,15 +165,21 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
                         continue;
                     }
 
-                    let result = eval_job_insertion_in_route(
-                        insertion_ctx,
+                    let best_known_cost = match best_in_route.as_success() {
+                        Some(success) if result_selector.select_cost(&success.cost, &route_costs).is_left() => continue,
+                        Some(success) => Some(success.cost.clone()),
+                        None => None,
+                    };
+                    let result = eval_job_constraint_in_route(
                         &eval_ctx,
+                        &insertion_ctx.solution,
                         route_ctx,
                         InsertionPosition::Concrete(leg_index),
-                        best_in_route,
+                        route_costs.clone(),
+                        best_known_cost,
                     );
 
-                    best_in_route = result;
+                    best_in_route = result_selector.select_insertion(insertion_ctx, best_in_route, result);
                 }
 
                 best_in_route

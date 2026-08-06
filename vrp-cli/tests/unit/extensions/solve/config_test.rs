@@ -132,6 +132,35 @@ fn can_create_default_config() {
 }
 
 #[test]
+fn can_read_blinks_recreate_variants() {
+    let json = r#"{
+      "hyper": {
+        "type": "static-selective",
+        "operators": [{
+          "type": "ruin-recreate",
+          "probability": { "scalar": 1.0 },
+          "ruins": [],
+          "recreates": [
+            { "type": "blinks", "weight": 1 },
+            { "type": "blinks-sampled", "weight": 2 },
+            { "type": "blinks-tw-start", "weight": 3 },
+            { "type": "blinks-sampled-tw-start", "weight": 4 }
+          ]
+        }]
+      }
+    }"#;
+
+    let config = read_config(BufReader::new(json.as_bytes())).unwrap();
+    let HyperType::StaticSelective { operators: Some(operators) } = config.hyper.unwrap() else { unreachable!() };
+    let SearchOperatorType::RuinRecreate { recreates, .. } = &operators[0] else { unreachable!() };
+
+    assert!(matches!(recreates[0], RecreateMethod::Blinks { weight: 1 }));
+    assert!(matches!(recreates[1], RecreateMethod::BlinksSampled { weight: 2 }));
+    assert!(matches!(recreates[2], RecreateMethod::BlinksTimeWindowStart { weight: 3 }));
+    assert!(matches!(recreates[3], RecreateMethod::BlinksSampledTimeWindowStart { weight: 4 }));
+}
+
+#[test]
 fn can_configure_telemetry_metrics() {
     let config = Config {
         evolution: None,

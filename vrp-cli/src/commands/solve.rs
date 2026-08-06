@@ -29,6 +29,9 @@ const GEO_JSON_ARG_NAME: &str = "geo-json";
 
 const INIT_SOLUTION_ARG_NAME: &str = "init-solution";
 const INIT_SIZE_ARG_NAME: &str = "init-size";
+const INITIAL_MAX_SIZE_ARG_NAME: &str = "initial-max-size";
+const CONSTRUCTION_JOB_CAP_ARG_NAME: &str = "construction-job-cap";
+const INITIAL_CONSTRUCTION_ARG_NAME: &str = "initial-construction";
 const OUT_RESULT_ARG_NAME: &str = "out-result";
 const GET_LOCATIONS_ARG_NAME: &str = "get-locations";
 const CONFIG_ARG_NAME: &str = "config";
@@ -86,6 +89,41 @@ pub fn get_solve_app() -> Command {
                 .help("Specifies amount of initial solutions. Min is 1")
                 .long(INIT_SIZE_ARG_NAME)
                 .required(false)
+        )
+        .arg(
+            Arg::new(INITIAL_MAX_SIZE_ARG_NAME)
+                .help("Specifies the maximum number of solutions built during initial construction. Min is 1")
+                .long(INITIAL_MAX_SIZE_ARG_NAME)
+                .required(false)
+        )
+        .arg(
+            Arg::new(CONSTRUCTION_JOB_CAP_ARG_NAME)
+                .help("Caps jobs evaluated per cheapest-insertion step during initial construction. Min is 1")
+                .long(CONSTRUCTION_JOB_CAP_ARG_NAME)
+                .required(false)
+        )
+        .arg(
+            Arg::new(INITIAL_CONSTRUCTION_ARG_NAME)
+                .help("Selects the recreate heuristic used to build the first solution")
+                .long(INITIAL_CONSTRUCTION_ARG_NAME)
+                .value_parser([
+                    "cheapest",
+                    "blinks",
+                    "blinks-tw-start",
+                    "blinks-sampled",
+                    "blinks-sampled-tw-length",
+                    "blinks-sampled-tw-start",
+                    "blinks-sampled-tw-end",
+                    "farthest",
+                    "regret",
+                    "gaps",
+                    "skip-best",
+                    "perturbation",
+                    "nearest",
+                    "skip-random",
+                    "slice",
+                ])
+                .default_value("cheapest")
         )
         .arg(
             Arg::new(MATRIX_ARG_NAME)
@@ -311,12 +349,41 @@ fn from_cli_parameters(
     };
     let min_cv = get_min_cv(matches)?;
     let init_size = get_init_size(matches)?;
+    let initial_max_size = get_positive_usize(matches, INITIAL_MAX_SIZE_ARG_NAME, "initial max size")?;
+    let construction_job_cap = get_positive_usize(matches, CONSTRUCTION_JOB_CAP_ARG_NAME, "construction job cap")?;
+    let initial_construction = match matches.get_one::<String>(INITIAL_CONSTRUCTION_ARG_NAME).map(String::as_str) {
+        Some("blinks") => InitialConstruction::Blinks,
+        Some("blinks-tw-start") => InitialConstruction::BlinksTimeWindowStart,
+        Some("blinks-sampled") => InitialConstruction::BlinksSampled,
+        Some("blinks-sampled-tw-length") => InitialConstruction::BlinksSampledTimeWindowLength,
+        Some("blinks-sampled-tw-start") => InitialConstruction::BlinksSampledTimeWindowStart,
+        Some("blinks-sampled-tw-end") => InitialConstruction::BlinksSampledTimeWindowEnd,
+        Some("farthest") => InitialConstruction::Farthest,
+        Some("regret") => InitialConstruction::Regret,
+        Some("gaps") => InitialConstruction::Gaps,
+        Some("skip-best") => InitialConstruction::SkipBest,
+        Some("perturbation") => InitialConstruction::Perturbation,
+        Some("nearest") => InitialConstruction::Nearest,
+        Some("skip-random") => InitialConstruction::SkipRandom,
+        Some("slice") => InitialConstruction::Slice,
+        _ => InitialConstruction::Cheapest,
+    };
     let mode = matches.get_one::<String>(SEARCH_MODE_ARG_NAME);
 
-    let config = VrpConfigBuilder::new(problem.clone())
+    let mut builder = VrpConfigBuilder::new(problem.clone())
         .set_environment(environment.clone())
         .set_telemetry_mode(telemetry_mode.clone())
         .set_heuristic(get_heuristic(matches, problem.clone(), environment.clone())?)
+        .set_initial_construction(initial_construction);
+
+    if let Some(initial_max_size) = initial_max_size {
+        builder = builder.set_initial_max_size(initial_max_size);
+    }
+    if construction_job_cap.is_some() {
+        builder = builder.set_construction_job_cap(construction_job_cap);
+    }
+
+    let config = builder
         .prebuild()?
         .with_init_solutions(init_solutions, init_size)
         .with_max_generations(max_generations)
@@ -365,6 +432,13 @@ fn get_init_size(matches: &ArgMatches) -> GenericResult<Option<usize>> {
             }
         })
         .unwrap_or(Ok(None))
+}
+
+fn get_positive_usize(matches: &ArgMatches, arg_name: &str, arg_desc: &str) -> GenericResult<Option<usize>> {
+    parse_int_value::<usize>(matches, arg_name, arg_desc).and_then(|value| match value {
+        Some(0) => Err(format!("{arg_desc} must be an integer bigger than 0, got '0'").into()),
+        value => Ok(value),
+    })
 }
 
 fn get_environment(matches: &ArgMatches) -> GenericResult<Arc<Environment>> {

@@ -63,6 +63,43 @@ custom_extra_property!(pub HeuristicFilter typeof HeuristicFilterFn);
 /// earlier if the elapsed-time-fraction exceeds the initial-quota.
 pub const DEFAULT_INITIAL_MAX_SIZE: usize = 4;
 
+/// Selects the recreate heuristic used to build the first solution.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum InitialConstruction {
+    /// Uses exhaustive cheapest insertion, preserving the historical default.
+    #[default]
+    Cheapest,
+    /// Uses Slack Induction by String Removals (SISR) blink insertion.
+    Blinks,
+    /// Uses exhaustive SISR with earliest-time-window-start-first job ordering.
+    BlinksTimeWindowStart,
+    /// Uses SISR blink insertion with bounded delivery-position sampling on
+    /// sufficiently long routes.
+    BlinksSampled,
+    /// Uses sampled SISR with shortest-time-window-first job ordering.
+    BlinksSampledTimeWindowLength,
+    /// Uses sampled SISR with earliest-time-window-start-first job ordering.
+    BlinksSampledTimeWindowStart,
+    /// Uses sampled SISR with latest-time-window-end-first job ordering.
+    BlinksSampledTimeWindowEnd,
+    /// Inserts the job farthest from the current solution first.
+    Farthest,
+    /// Prioritizes jobs with the largest regret between insertion choices.
+    Regret,
+    /// Evaluates a bounded subset of jobs at each insertion step.
+    Gaps,
+    /// Randomly skips some of the best insertion choices.
+    SkipBest,
+    /// Adds noise to insertion costs.
+    Perturbation,
+    /// Builds routes using nearest-neighbour insertion.
+    Nearest,
+    /// Randomly skips jobs and routes.
+    SkipRandom,
+    /// Recreates a spatial slice of the problem.
+    Slice,
+}
+
 /// Provides the way to get [ProblemConfigBuilder] with reasonable defaults for VRP domain.
 pub struct VrpConfigBuilder {
     problem: Arc<Problem>,
@@ -71,6 +108,7 @@ pub struct VrpConfigBuilder {
     telemetry_mode: Option<TelemetryMode>,
     initial_max_size: Option<usize>,
     construction_job_cap: Option<usize>,
+    initial_construction: InitialConstruction,
 }
 
 impl VrpConfigBuilder {
@@ -83,6 +121,7 @@ impl VrpConfigBuilder {
             telemetry_mode: None,
             initial_max_size: None,
             construction_job_cap: None,
+            initial_construction: InitialConstruction::default(),
         }
     }
 
@@ -132,6 +171,17 @@ impl VrpConfigBuilder {
         self
     }
 
+    /// Selects the recreate heuristic used for the first constructed solution.
+    ///
+    /// [`InitialConstruction::Cheapest`] is the backward-compatible default.
+    /// [`InitialConstruction::Blinks`] is substantially faster on large
+    /// problems because it considers jobs in one sorted pass rather than
+    /// repeatedly rescanning every remaining job.
+    pub fn set_initial_construction(mut self, initial_construction: InitialConstruction) -> Self {
+        self.initial_construction = initial_construction;
+        self
+    }
+
     /// Builds a preconfigured instance of [ProblemConfigBuilder] for further usage.
     pub fn prebuild(self) -> GenericResult<ProblemConfigBuilder> {
         let problem = self.problem;
@@ -147,6 +197,7 @@ impl VrpConfigBuilder {
 
         let initial_max_size = self.initial_max_size.unwrap_or(DEFAULT_INITIAL_MAX_SIZE);
         let construction_job_cap = self.construction_job_cap;
+        let initial_construction = self.initial_construction;
 
         Ok(ProblemConfigBuilder::default()
             .with_heuristic(heuristic)
@@ -155,7 +206,7 @@ impl VrpConfigBuilder {
             .with_initial(
                 initial_max_size,
                 0.05,
-                create_default_init_operators(problem, environment, construction_job_cap),
+                builder::create_init_operators(problem, environment, construction_job_cap, initial_construction),
             ))
     }
 }
@@ -352,6 +403,15 @@ mod builder {
         environment: Arc<Environment>,
         construction_job_cap: Option<usize>,
     ) -> InitialOperators<RefinementContext, GoalContext, InsertionContext> {
+        create_init_operators(problem, environment, construction_job_cap, InitialConstruction::default())
+    }
+
+    pub(super) fn create_init_operators(
+        problem: Arc<Problem>,
+        environment: Arc<Environment>,
+        construction_job_cap: Option<usize>,
+        initial_construction: InitialConstruction,
+    ) -> InitialOperators<RefinementContext, GoalContext, InsertionContext> {
         type VrpInitialOperator = dyn InitialOperator<Context = RefinementContext, Objective = GoalContext, Solution = InsertionContext>
             + Send
             + Sync;
@@ -360,17 +420,51 @@ mod builder {
         let wrap: fn(Arc<dyn Recreate>) -> Box<VrpInitialOperator> =
             |recreate| Box::new(RecreateInitialOperator::new(recreate));
 
-        let solo_aware: Arc<dyn Recreate> = match construction_job_cap {
-            Some(cap) => Arc::new(RecreateWithSoloAwareCheapest::with_cap(random.clone(), cap)),
-            None => Arc::new(RecreateWithSoloAwareCheapest::new(random.clone())),
+        let first: Arc<dyn Recreate> = match initial_construction {
+            InitialConstruction::Cheapest => match construction_job_cap {
+                Some(cap) => Arc::new(RecreateWithSoloAwareCheapest::with_cap(random.clone(), cap)),
+                None => Arc::new(RecreateWithSoloAwareCheapest::new(random.clone())),
+            },
+            InitialConstruction::Blinks => Arc::new(RecreateWithBlinks::new_with_defaults(random.clone())),
+            InitialConstruction::BlinksTimeWindowStart => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowStart,
+                false,
+                random.clone(),
+            )),
+            InitialConstruction::BlinksSampled => {
+                Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random.clone()))
+            }
+            InitialConstruction::BlinksSampledTimeWindowLength => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowLength,
+                true,
+                random.clone(),
+            )),
+            InitialConstruction::BlinksSampledTimeWindowStart => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowStart,
+                true,
+                random.clone(),
+            )),
+            InitialConstruction::BlinksSampledTimeWindowEnd => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowEnd,
+                true,
+                random.clone(),
+            )),
+            InitialConstruction::Farthest => Arc::new(RecreateWithFarthest::new(random.clone())),
+            InitialConstruction::Regret => Arc::new(RecreateWithRegret::new(2, 3, random.clone())),
+            InitialConstruction::Gaps => {
+                Arc::new(RecreateWithGaps::new(1, (problem.jobs.size() / 10).max(1), random.clone()))
+            }
+            InitialConstruction::SkipBest => Arc::new(RecreateWithSkipBest::new(1, 2, random.clone())),
+            InitialConstruction::Perturbation => Arc::new(RecreateWithPerturbation::new_with_defaults(random.clone())),
+            InitialConstruction::Nearest => Arc::new(RecreateWithNearestNeighbor::new(random.clone())),
+            InitialConstruction::SkipRandom => Arc::new(RecreateWithSkipRandom::new(random.clone())),
+            InitialConstruction::Slice => Arc::new(RecreateWithSlice::new(random.clone())),
         };
 
         std::iter::once({
-            // main stable constructive heuristics — solo-aware variant prefers
-            // empty routes for solo-riding jobs at construction time so the
-            // greedy gen-0 pass does not commit cost-cheapest placements that
-            // later block solo-riders from finding feasible insertions.
-            (wrap(solo_aware), 1)
+            // The first operator controls time-to-first-solution. Cheapest is
+            // solo-aware; blinks relies on the solo-riding hard constraint.
+            (wrap(first), 1)
         })
         .chain(
             // alternative constructive heuristics — same per-iteration job-pool
@@ -645,11 +739,17 @@ mod dynamic {
     }
 
     fn get_strong_recreates(problem: &Problem, random: Arc<dyn Random>) -> Vec<(Arc<dyn Recreate>, String, Float)> {
-        let blinks: Arc<dyn Recreate> = Arc::new(RecreateWithBlinks::new_with_defaults(random.clone()));
+        let blinks: Arc<dyn Recreate> = Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random.clone()));
+        let blinks_tw_start: Arc<dyn Recreate> = Arc::new(RecreateWithBlinks::new_with_job_ordering(
+            BlinksJobOrdering::TimeWindowStart,
+            false,
+            random.clone(),
+        ));
         let cheapest: Arc<dyn Recreate> = Arc::new(RecreateWithCheapest::new(random.clone()));
         let regret: Arc<dyn Recreate> = Arc::new(RecreateWithRegret::new(1, 3, random.clone()));
         vec![
-            (blinks, "blinks".to_string(), SISR_BOOST_WEIGHT),
+            (blinks, "blinks_sampled".to_string(), SISR_BOOST_WEIGHT),
+            (blinks_tw_start, "blinks_tw_start".to_string(), SISR_BOOST_WEIGHT),
             (cheapest, "cheapest".to_string(), STRONG_WEIGHT),
             (regret, "regret".to_string(), STRONG_WEIGHT),
         ]

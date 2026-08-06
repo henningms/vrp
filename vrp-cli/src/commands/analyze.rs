@@ -4,18 +4,21 @@ mod analyze_test;
 
 use super::*;
 use std::sync::Arc;
-use vrp_cli::extensions::analyze::{get_dbscan_clusters, get_k_medoids_clusters};
+use vrp_cli::extensions::analyze::{get_dbscan_clusters, get_k_medoids_clusters, get_ride_quality_serialized};
 use vrp_core::prelude::*;
 use vrp_pragmatic::format::Location as ApiLocation;
-use vrp_pragmatic::format::solution::serialize_named_locations_as_geojson;
+use vrp_pragmatic::format::solution::{deserialize_solution, serialize_named_locations_as_geojson};
 
 const FORMAT_ARG_NAME: &str = "FORMAT";
 const PROBLEM_ARG_NAME: &str = "PROBLEM";
+const SOLUTION_ARG_NAME: &str = "SOLUTION";
 const MATRIX_ARG_NAME: &str = "matrix";
 const MIN_POINTS_ARG_NAME: &str = "min-points";
 const EPSILON_ARG_NAME: &str = "epsilon";
 const K_ARG_NAME: &str = "k";
 const OUT_RESULT_ARG_NAME: &str = "out-result";
+const MIN_DIRECT_SECONDS_ARG_NAME: &str = "min-direct-seconds";
+const WORST_COUNT_ARG_NAME: &str = "worst-count";
 
 pub fn get_analyze_app() -> Command {
     Command::new("analyze")
@@ -96,6 +99,48 @@ pub fn get_analyze_app() -> Command {
                         .required(true),
                 ),
         )
+        .subcommand(
+            Command::new("ride-quality")
+                .about("Analyzes passenger time aboard against direct and requested trip durations")
+                .arg(
+                    Arg::new(FORMAT_ARG_NAME)
+                        .help("Specifies input type")
+                        .required(true)
+                        .value_parser(["pragmatic"])
+                        .index(1),
+                )
+                .arg(Arg::new(PROBLEM_ARG_NAME).help("Sets the problem file to use").required(true).index(2))
+                .arg(Arg::new(SOLUTION_ARG_NAME).help("Sets the solution file to analyze").required(true).index(3))
+                .arg(
+                    Arg::new(MATRIX_ARG_NAME)
+                        .help("Specifies path to file with routing matrix")
+                        .short('m')
+                        .long(MATRIX_ARG_NAME)
+                        .num_args(1..)
+                        .required(true),
+                )
+                .arg(
+                    Arg::new(MIN_DIRECT_SECONDS_ARG_NAME)
+                        .help("Minimum baseline duration included in ratio statistics")
+                        .long(MIN_DIRECT_SECONDS_ARG_NAME)
+                        .default_value("60")
+                        .required(false),
+                )
+                .arg(
+                    Arg::new(WORST_COUNT_ARG_NAME)
+                        .help("Number of worst direct-excess ride legs included in the report")
+                        .long(WORST_COUNT_ARG_NAME)
+                        .default_value("20")
+                        .required(false),
+                )
+                .arg(
+                    Arg::new(OUT_RESULT_ARG_NAME)
+                        .help("Specifies path to the file for result output; writes to stdout when omitted")
+                        .short('o')
+                        .long(OUT_RESULT_ARG_NAME)
+                        .required(false),
+                ),
+        )
 }
 
 pub fn run_analyze(
@@ -118,8 +163,40 @@ pub fn run_analyze(
                 get_k_medoids_clusters(problem, k.unwrap_or(2))
             })
         }
+        Some(("ride-quality", quality_matches)) => read_and_execute_ride_quality(quality_matches, out_writer_func),
         _ => Err("no argument with analyze subcommand was used. Use -h to print help information".into()),
     }
+}
+
+fn read_and_execute_ride_quality(
+    matches: &ArgMatches,
+    out_writer_func: fn(Option<File>) -> BufWriter<Box<dyn Write>>,
+) -> GenericResult<()> {
+    let problem_format = matches.get_one::<String>(FORMAT_ARG_NAME).unwrap();
+    if problem_format != "pragmatic" {
+        return Err(format!("unknown problem format: '{problem_format}'").into());
+    }
+
+    let min_direct_seconds =
+        parse_int_value::<i64>(matches, MIN_DIRECT_SECONDS_ARG_NAME, "minimum direct seconds")?.unwrap_or(60);
+    let worst_count = parse_int_value::<usize>(matches, WORST_COUNT_ARG_NAME, "worst ride count")?.unwrap_or(20);
+    let problem_path = matches.get_one::<String>(PROBLEM_ARG_NAME).unwrap();
+    let solution_path = matches.get_one::<String>(SOLUTION_ARG_NAME).unwrap();
+    let problem = deserialize_problem(BufReader::new(open_file(problem_path, "problem")))
+        .map_err(|err| format!("cannot read problem: '{err}'"))?;
+    let solution = deserialize_solution(BufReader::new(open_file(solution_path, "solution")))
+        .map_err(|err| format!("cannot read solution: '{err}'"))?;
+    let matrices = matches
+        .get_many::<String>(MATRIX_ARG_NAME)
+        .unwrap()
+        .map(|path| deserialize_matrix(BufReader::new(open_file(path, "routing matrix"))))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("cannot read routing matrix: '{err}'"))?;
+    let result = get_ride_quality_serialized(&problem, &matrices, &solution, min_direct_seconds, worst_count)?;
+
+    let out_result = matches.get_one::<String>(OUT_RESULT_ARG_NAME).map(|path| create_file(path, "analysis result"));
+    let mut writer = out_writer_func(out_result);
+    writer.write_all(result.as_bytes()).map_err(|err| format!("cannot write result: '{err}'").into())
 }
 
 fn read_and_execute_clusters_command<F>(

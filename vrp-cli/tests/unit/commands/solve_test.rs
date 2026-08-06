@@ -160,6 +160,45 @@ fn can_use_init_size() {
 }
 
 #[test]
+fn can_configure_initial_construction() {
+    for (params, arg_name, arg_desc, result) in [
+        (vec!["--initial-max-size", "1"], INITIAL_MAX_SIZE_ARG_NAME, "initial max size", Ok(Some(1))),
+        (vec!["--construction-job-cap", "300"], CONSTRUCTION_JOB_CAP_ARG_NAME, "construction job cap", Ok(Some(300))),
+        (
+            vec!["--construction-job-cap", "0"],
+            CONSTRUCTION_JOB_CAP_ARG_NAME,
+            "construction job cap",
+            Err("construction job cap must be an integer bigger than 0, got '0'".into()),
+        ),
+    ] {
+        let matches = get_solomon_matches(params.as_slice());
+
+        assert_eq!(get_positive_usize(&matches, arg_name, arg_desc), result);
+    }
+
+    for method in [
+        "cheapest",
+        "blinks",
+        "blinks-tw-start",
+        "blinks-sampled",
+        "blinks-sampled-tw-length",
+        "blinks-sampled-tw-start",
+        "blinks-sampled-tw-end",
+        "farthest",
+        "regret",
+        "gaps",
+        "skip-best",
+        "perturbation",
+        "nearest",
+        "skip-random",
+        "slice",
+    ] {
+        let matches = get_solomon_matches(&["--initial-construction", method]);
+        assert_eq!(matches.get_one::<String>(INITIAL_CONSTRUCTION_ARG_NAME).map(String::as_str), Some(method));
+    }
+}
+
+#[test]
 fn can_specify_cv() {
     for (params, result) in [
         (vec!["--min-cv", "sample,200,0.05,true"], Ok(Some(("sample".to_string(), 200, 0.05, true)))),

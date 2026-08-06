@@ -26,4 +26,7 @@ heuristic_state.json
 # profiler
 callgrind*
 
+# Local benchmark datasets, artifacts, and research notes
+/private/
+
 .claude

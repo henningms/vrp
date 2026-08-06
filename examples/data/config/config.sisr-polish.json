@@ -1,0 +1,54 @@
+{
+  "evolution": {
+    "initial": {
+      "method": { "type": "blinks-tw-start", "weight": 1 },
+      "alternatives": { "methods": [], "maxSize": 1, "quota": 1.0 }
+    },
+    "population": {
+      "type": "elitism",
+      "maxSize": 8,
+      "selectionSize": 8
+    }
+  },
+  "hyper": {
+    "type": "static-selective",
+    "operators": [
+      {
+        "type": "ruin-recreate",
+        "probability": { "scalar": 1.0 },
+        "ruins": [
+          {
+            "weight": 100,
+            "methods": [
+              { "type": "adjusted-string", "probability": 1.0, "lmax": 10, "cavg": 10, "alpha": 0.01 }
+            ]
+          },
+          {
+            "weight": 20,
+            "methods": [
+              { "type": "close-route", "probability": 1.0 }
+            ]
+          },
+          {
+            "weight": 10,
+            "methods": [
+              { "type": "worst-route", "probability": 1.0 }
+            ]
+          }
+        ],
+        "recreates": [
+          { "type": "blinks", "weight": 1 }
+        ]
+      }
+    ]
+  },
+  "termination": { "maxTime": 120 },
+  "environment": {
+    "parallelism": { "numThreadPools": 1, "threadsPerPool": 8 },
+    "logging": { "enabled": true }
+  },
+  "telemetry": {
+    "progress": { "enabled": true, "logBest": 100, "logPopulation": 1000 },
+    "metrics": { "enabled": false }
+  }
+}

@@ -282,6 +282,15 @@ pub enum RecreateMethod {
     /// Insertion with blinks method.
     #[serde(rename(deserialize = "blinks"))]
     Blinks { weight: usize },
+    /// Insertion with blinks and bounded downstream-leg sampling.
+    #[serde(rename(deserialize = "blinks-sampled"))]
+    BlinksSampled { weight: usize },
+    /// Insertion with blinks in earliest-time-window-start order.
+    #[serde(rename(deserialize = "blinks-tw-start"))]
+    BlinksTimeWindowStart { weight: usize },
+    /// Earliest-time-window-start blinks with bounded downstream-leg sampling.
+    #[serde(rename(deserialize = "blinks-sampled-tw-start"))]
+    BlinksSampledTimeWindowStart { weight: usize },
     /// Insertion with gaps method.
     #[serde(rename(deserialize = "gaps"))]
     Gaps { weight: usize, min: usize, max: usize },
@@ -580,6 +589,25 @@ fn create_recreate_method(method: &RecreateMethod, environment: Arc<Environment>
         }
         RecreateMethod::Slice { weight } => (Arc::new(RecreateWithSlice::new(random)), *weight),
         RecreateMethod::Blinks { weight } => (Arc::new(RecreateWithBlinks::new_with_defaults(random.clone())), *weight),
+        RecreateMethod::BlinksSampled { weight } => {
+            (Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random.clone())), *weight)
+        }
+        RecreateMethod::BlinksTimeWindowStart { weight } => (
+            Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowStart,
+                false,
+                random.clone(),
+            )),
+            *weight,
+        ),
+        RecreateMethod::BlinksSampledTimeWindowStart { weight } => (
+            Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::TimeWindowStart,
+                true,
+                random.clone(),
+            )),
+            *weight,
+        ),
         RecreateMethod::SkipRandom { weight } => (Arc::new(RecreateWithSkipRandom::new(random)), *weight),
         RecreateMethod::Gaps { weight, min, max } => (Arc::new(RecreateWithGaps::new(*min, *max, random)), *weight),
         RecreateMethod::Nearest { weight } => (Arc::new(RecreateWithNearestNeighbor::new(random)), *weight),
