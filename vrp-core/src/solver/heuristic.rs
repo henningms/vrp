@@ -100,6 +100,21 @@ pub enum InitialConstruction {
     Slice,
 }
 
+/// Controls optional operators in the built-in heuristic portfolios.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HeuristicSearchConfig {
+    /// Enables diversification through temporarily infeasible solutions.
+    pub infeasible_diversification: bool,
+    /// Enables Lin-Kernighan-Helsgaun intra-route cost optimization.
+    pub lkh_search: bool,
+}
+
+impl Default for HeuristicSearchConfig {
+    fn default() -> Self {
+        Self { infeasible_diversification: true, lkh_search: true }
+    }
+}
+
 /// Provides the way to get [ProblemConfigBuilder] with reasonable defaults for VRP domain.
 pub struct VrpConfigBuilder {
     problem: Arc<Problem>,
@@ -109,7 +124,7 @@ pub struct VrpConfigBuilder {
     initial_max_size: Option<usize>,
     construction_job_cap: Option<usize>,
     initial_construction: InitialConstruction,
-    infeasible_diversification: bool,
+    heuristic_search: HeuristicSearchConfig,
 }
 
 impl VrpConfigBuilder {
@@ -123,7 +138,7 @@ impl VrpConfigBuilder {
             initial_max_size: None,
             construction_job_cap: None,
             initial_construction: InitialConstruction::default(),
-            infeasible_diversification: true,
+            heuristic_search: HeuristicSearchConfig::default(),
         }
     }
 
@@ -191,7 +206,14 @@ impl VrpConfigBuilder {
     /// on large problems: recovering a relaxed solution may otherwise consume
     /// a substantial share of the time budget in one non-interruptible call.
     pub fn set_infeasible_diversification(mut self, enabled: bool) -> Self {
-        self.infeasible_diversification = enabled;
+        self.heuristic_search.infeasible_diversification = enabled;
+        self
+    }
+
+    /// Enables or disables LKH intra-route optimization in the default search
+    /// portfolio. It is enabled by default for backwards compatibility.
+    pub fn set_lkh_search(mut self, enabled: bool) -> Self {
+        self.heuristic_search.lkh_search = enabled;
         self
     }
 
@@ -203,11 +225,7 @@ impl VrpConfigBuilder {
             self.telemetry_mode.unwrap_or_else(|| get_default_telemetry_mode(environment.logger.clone()));
 
         let heuristic = self.heuristic.unwrap_or_else(|| {
-            get_default_heuristic_with_diversification(
-                problem.clone(),
-                environment.clone(),
-                self.infeasible_diversification,
-            )
+            get_default_heuristic_with_search_config(problem.clone(), environment.clone(), self.heuristic_search)
         });
 
         let selection_size = get_default_selection_size(environment.as_ref());
@@ -247,13 +265,22 @@ pub fn get_default_heuristic_with_diversification(
     environment: Arc<Environment>,
     infeasible_diversification: bool,
 ) -> TargetHeuristic {
+    get_default_heuristic_with_search_config(
+        problem,
+        environment,
+        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
+    )
+}
+
+/// Gets the default dynamic heuristic with explicit optional-operator controls.
+pub fn get_default_heuristic_with_search_config(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    search_config: HeuristicSearchConfig,
+) -> TargetHeuristic {
     Timer::measure_duration_with_callback(
         || {
-            Box::new(get_dynamic_heuristic_with_diversification(
-                problem,
-                environment.clone(),
-                infeasible_diversification,
-            ))
+            Box::new(get_dynamic_heuristic_with_search_config(problem, environment.clone(), search_config))
         },
         |duration| (environment.logger)(format!("getting default heuristic took: {}ms", duration.as_millis()).as_str()),
     )
@@ -274,33 +301,48 @@ pub fn get_static_heuristic_with_diversification(
     environment: Arc<Environment>,
     infeasible_diversification: bool,
 ) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
+    get_static_heuristic_with_search_config(
+        problem,
+        environment,
+        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
+    )
+}
+
+/// Gets the default static heuristic with explicit optional-operator controls.
+pub fn get_static_heuristic_with_search_config(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    search_config: HeuristicSearchConfig,
+) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
     let default_operator = statik::create_default_heuristic_operator(problem.clone(), environment.clone());
     let local_search = statik::create_default_local_search(environment.random.clone());
 
-    let heuristic_group: TargetHeuristicGroup = vec![
-        (
-            Arc::new(DecomposeSearch::new(default_operator.clone(), (2, 4), 4)),
-            create_context_operator_probability(
-                300,
-                10,
-                vec![(SelectionPhase::Exploration, 0.05), (SelectionPhase::Exploitation, 0.05)],
-                environment.random.clone(),
-            ),
+    let mut heuristic_group: TargetHeuristicGroup = vec![(
+        Arc::new(DecomposeSearch::new(default_operator.clone(), (2, 4), 4)),
+        create_context_operator_probability(
+            300,
+            10,
+            vec![(SelectionPhase::Exploration, 0.05), (SelectionPhase::Exploitation, 0.05)],
+            environment.random.clone(),
         ),
-        (
+    )];
+    if search_config.lkh_search {
+        heuristic_group.push((
             Arc::new(LKHSearch::new(LKHSearchMode::ImprovementOnly)),
             create_scalar_operator_probability(0.05, environment.random.clone()),
-        ),
+        ));
+    }
+    heuristic_group.extend([
         (local_search.clone(), create_scalar_operator_probability(0.05, environment.random.clone())),
         (default_operator.clone(), create_scalar_operator_probability(1., environment.random.clone())),
         (local_search, create_scalar_operator_probability(0.05, environment.random.clone())),
-    ];
+    ]);
 
     get_static_heuristic_from_heuristic_group_with_diversification(
         problem,
         environment,
         heuristic_group,
-        infeasible_diversification,
+        search_config.infeasible_diversification,
     )
 }
 
@@ -341,8 +383,22 @@ pub fn get_dynamic_heuristic_with_diversification(
     environment: Arc<Environment>,
     infeasible_diversification: bool,
 ) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
-    let search_operators = dynamic::get_operators(problem.clone(), environment.clone());
-    let diversify_operators = create_diversify_operators(problem, environment.clone(), infeasible_diversification);
+    get_dynamic_heuristic_with_search_config(
+        problem,
+        environment,
+        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
+    )
+}
+
+/// Gets the dynamic heuristic with explicit optional-operator controls.
+pub fn get_dynamic_heuristic_with_search_config(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    search_config: HeuristicSearchConfig,
+) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
+    let search_operators = dynamic::get_operators(problem.clone(), environment.clone(), search_config.lkh_search);
+    let diversify_operators =
+        create_diversify_operators(problem, environment.clone(), search_config.infeasible_diversification);
 
     DynamicSelective::<RefinementContext, GoalContext, InsertionContext>::new(
         search_operators,
@@ -983,6 +1039,7 @@ mod dynamic {
     pub fn get_operators(
         problem: Arc<Problem>,
         environment: Arc<Environment>,
+        lkh_search: bool,
     ) -> Vec<(TargetSearchOperator, String, Float)> {
         let (normal_limits, small_limits) = get_limits(problem.as_ref());
         let random = environment.random.clone();
@@ -1049,7 +1106,10 @@ mod dynamic {
             })
             .collect::<Vec<_>>();
 
-        let operators = get_search_operators(problem.clone(), environment.clone());
+        let mut operators = get_search_operators(problem.clone(), environment.clone());
+        if !lkh_search {
+            operators.retain(|(_, name, _)| name != "lkh_strict");
+        }
         let heuristic_filter = problem.extras.get_heuristic_filter();
 
         strong_cartesian_ops

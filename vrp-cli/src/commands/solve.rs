@@ -33,6 +33,7 @@ const INITIAL_MAX_SIZE_ARG_NAME: &str = "initial-max-size";
 const CONSTRUCTION_JOB_CAP_ARG_NAME: &str = "construction-job-cap";
 const INITIAL_CONSTRUCTION_ARG_NAME: &str = "initial-construction";
 const DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME: &str = "disable-infeasible-diversification";
+const DISABLE_LKH_SEARCH_ARG_NAME: &str = "disable-lkh-search";
 const OUT_RESULT_ARG_NAME: &str = "out-result";
 const GET_LOCATIONS_ARG_NAME: &str = "get-locations";
 const CONFIG_ARG_NAME: &str = "config";
@@ -130,6 +131,14 @@ pub fn get_solve_app() -> Command {
             Arg::new(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME)
                 .help("Disables relaxed infeasible-space diversification to avoid long recovery tails")
                 .long(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME)
+                .required(false)
+                .action(ArgAction::SetTrue)
+                .conflicts_with(CONFIG_ARG_NAME)
+        )
+        .arg(
+            Arg::new(DISABLE_LKH_SEARCH_ARG_NAME)
+                .help("Disables LKH intra-route cost optimization in the built-in search portfolio")
+                .long(DISABLE_LKH_SEARCH_ARG_NAME)
                 .required(false)
                 .action(ArgAction::SetTrue)
                 .conflicts_with(CONFIG_ARG_NAME)
@@ -377,23 +386,22 @@ fn from_cli_parameters(
         Some("slice") => InitialConstruction::Slice,
         _ => InitialConstruction::Cheapest,
     };
-    let infeasible_diversification = !matches
-        .get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME)
-        .copied()
-        .unwrap_or(false);
+    let heuristic_search = HeuristicSearchConfig {
+        infeasible_diversification: !matches
+            .get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME)
+            .copied()
+            .unwrap_or(false),
+        lkh_search: !matches.get_one::<bool>(DISABLE_LKH_SEARCH_ARG_NAME).copied().unwrap_or(false),
+    };
     let mode = matches.get_one::<String>(SEARCH_MODE_ARG_NAME);
 
     let mut builder = VrpConfigBuilder::new(problem.clone())
         .set_environment(environment.clone())
         .set_telemetry_mode(telemetry_mode.clone())
-        .set_heuristic(get_heuristic(
-            matches,
-            problem.clone(),
-            environment.clone(),
-            infeasible_diversification,
-        )?)
+        .set_heuristic(get_heuristic(matches, problem.clone(), environment.clone(), heuristic_search)?)
         .set_initial_construction(initial_construction)
-        .set_infeasible_diversification(infeasible_diversification);
+        .set_infeasible_diversification(heuristic_search.infeasible_diversification)
+        .set_lkh_search(heuristic_search.lkh_search);
 
     if let Some(initial_max_size) = initial_max_size {
         builder = builder.set_initial_max_size(initial_max_size);
@@ -514,25 +522,13 @@ fn get_heuristic(
     matches: &ArgMatches,
     problem: Arc<Problem>,
     environment: Arc<Environment>,
-    infeasible_diversification: bool,
+    search_config: HeuristicSearchConfig,
 ) -> GenericResult<TargetHeuristic> {
     match matches.get_one::<String>(HEURISTIC_ARG_NAME).map(String::as_str) {
-        Some("dynamic") => Ok(Box::new(get_dynamic_heuristic_with_diversification(
-            problem,
-            environment,
-            infeasible_diversification,
-        ))),
-        Some("static") => Ok(Box::new(get_static_heuristic_with_diversification(
-            problem,
-            environment,
-            infeasible_diversification,
-        ))),
+        Some("dynamic") => Ok(Box::new(get_dynamic_heuristic_with_search_config(problem, environment, search_config))),
+        Some("static") => Ok(Box::new(get_static_heuristic_with_search_config(problem, environment, search_config))),
         Some(name) if name != "default" => Err(format!("unknown heuristic type name: '{name}'").into()),
-        _ => Ok(get_default_heuristic_with_diversification(
-            problem,
-            environment,
-            infeasible_diversification,
-        )),
+        _ => Ok(get_default_heuristic_with_search_config(problem, environment, search_config)),
     }
 }
 

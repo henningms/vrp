@@ -165,14 +165,18 @@ fn can_disable_infeasible_dynamic_diversification() {
     let json = r#"{
       "hyper": {
         "type": "dynamic-selective",
-        "infeasibleDiversification": false
+        "infeasibleDiversification": false,
+        "lkhSearch": false
       }
     }"#;
 
     let config = read_config(BufReader::new(json.as_bytes())).unwrap();
     assert!(matches!(
         config.hyper,
-        Some(HyperType::DynamicSelective { infeasible_diversification: Some(false) })
+        Some(HyperType::DynamicSelective {
+            infeasible_diversification: Some(false),
+            lkh_search: Some(false)
+        })
     ));
 }
 

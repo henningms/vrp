@@ -138,6 +138,9 @@ pub enum HyperType {
         /// Enables relaxed infeasible-space diversification. Defaults to true.
         #[serde(rename = "infeasibleDiversification")]
         infeasible_diversification: Option<bool>,
+        /// Enables LKH intra-route cost optimization. Defaults to true.
+        #[serde(rename = "lkhSearch")]
+        lkh_search: Option<bool>,
     },
 }
 
@@ -559,11 +562,14 @@ fn configure_from_hyper(
 
                 builder = builder.with_heuristic(Box::new(static_selective));
             }
-            HyperType::DynamicSelective { infeasible_diversification } => {
-                let dynamic_selective = get_dynamic_heuristic_with_diversification(
+            HyperType::DynamicSelective { infeasible_diversification, lkh_search } => {
+                let dynamic_selective = get_dynamic_heuristic_with_search_config(
                     problem,
                     environment,
-                    infeasible_diversification.unwrap_or(true),
+                    HeuristicSearchConfig {
+                        infeasible_diversification: infeasible_diversification.unwrap_or(true),
+                        lkh_search: lkh_search.unwrap_or(true),
+                    },
                 );
                 builder = builder.with_heuristic(Box::new(dynamic_selective));
             }
