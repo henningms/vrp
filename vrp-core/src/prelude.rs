@@ -6,7 +6,7 @@ pub use crate::construction::{
     features::{CapacityFeatureBuilder, MinimizeUnassignedBuilder, TransportFeatureBuilder},
     heuristics::{InsertionContext, MoveContext, RouteContext, RouteState, SolutionContext, SolutionState},
 };
-pub use crate::solver::{Solver, VrpConfigBuilder};
+pub use crate::solver::{HeuristicSearchConfig, InitialConstruction, Solver, VrpConfigBuilder};
 pub use crate::{
     custom_activity_state, custom_dimension, custom_extra_property, custom_solution_state, custom_tour_state,
 };

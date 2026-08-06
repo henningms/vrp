@@ -82,8 +82,13 @@
 //!
 //! // create your VRP problem
 //! let problem: Arc<Problem> = create_example_problem();
-//! // build solver config using pre-build builder with defaults and then override some parameters
+//! // build solver config using the fast SISR constructor and latency-bounded fleet search
 //! let config = VrpConfigBuilder::new(problem.clone())
+//!     .set_initial_max_size(1)
+//!     .set_initial_construction(InitialConstruction::BlinksTimeWindowStart)
+//!     .set_infeasible_diversification(false)
+//!     .set_lkh_search(false)
+//!     .set_bounded_recreates(true)
 //!     .prebuild()?
 //!     .with_max_time(Some(60))
 //!     .with_max_generations(Some(100))

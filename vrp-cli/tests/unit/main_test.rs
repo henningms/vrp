@@ -6,3 +6,10 @@ fn can_get_app_name() {
 
     assert_eq!(app.get_name(), "Vehicle Routing Problem Solver");
 }
+
+#[test]
+fn can_get_package_version() {
+    let app = get_app();
+
+    assert_eq!(app.get_version(), Some(env!("CARGO_PKG_VERSION")));
+}
