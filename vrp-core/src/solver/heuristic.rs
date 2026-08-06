@@ -109,6 +109,7 @@ pub struct VrpConfigBuilder {
     initial_max_size: Option<usize>,
     construction_job_cap: Option<usize>,
     initial_construction: InitialConstruction,
+    infeasible_diversification: bool,
 }
 
 impl VrpConfigBuilder {
@@ -122,6 +123,7 @@ impl VrpConfigBuilder {
             initial_max_size: None,
             construction_job_cap: None,
             initial_construction: InitialConstruction::default(),
+            infeasible_diversification: true,
         }
     }
 
@@ -182,6 +184,17 @@ impl VrpConfigBuilder {
         self
     }
 
+    /// Enables or disables the default infeasible-space diversification
+    /// operator. It is enabled by default for backwards compatibility.
+    ///
+    /// Disabling it can make short, latency-sensitive runs more predictable
+    /// on large problems: recovering a relaxed solution may otherwise consume
+    /// a substantial share of the time budget in one non-interruptible call.
+    pub fn set_infeasible_diversification(mut self, enabled: bool) -> Self {
+        self.infeasible_diversification = enabled;
+        self
+    }
+
     /// Builds a preconfigured instance of [ProblemConfigBuilder] for further usage.
     pub fn prebuild(self) -> GenericResult<ProblemConfigBuilder> {
         let problem = self.problem;
@@ -189,7 +202,13 @@ impl VrpConfigBuilder {
         let telemetry_mode =
             self.telemetry_mode.unwrap_or_else(|| get_default_telemetry_mode(environment.logger.clone()));
 
-        let heuristic = self.heuristic.unwrap_or_else(|| get_default_heuristic(problem.clone(), environment.clone()));
+        let heuristic = self.heuristic.unwrap_or_else(|| {
+            get_default_heuristic_with_diversification(
+                problem.clone(),
+                environment.clone(),
+                self.infeasible_diversification,
+            )
+        });
 
         let selection_size = get_default_selection_size(environment.as_ref());
         let footprint = Footprint::new(problem.as_ref());
@@ -218,8 +237,24 @@ pub fn get_default_telemetry_mode(logger: InfoLogger) -> TelemetryMode {
 
 /// Gets default heuristic.
 pub fn get_default_heuristic(problem: Arc<Problem>, environment: Arc<Environment>) -> TargetHeuristic {
+    get_default_heuristic_with_diversification(problem, environment, true)
+}
+
+/// Gets the default dynamic heuristic and controls whether its diversification
+/// portfolio can search in relaxed, temporarily infeasible space.
+pub fn get_default_heuristic_with_diversification(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    infeasible_diversification: bool,
+) -> TargetHeuristic {
     Timer::measure_duration_with_callback(
-        || Box::new(get_dynamic_heuristic(problem, environment.clone())),
+        || {
+            Box::new(get_dynamic_heuristic_with_diversification(
+                problem,
+                environment.clone(),
+                infeasible_diversification,
+            ))
+        },
         |duration| (environment.logger)(format!("getting default heuristic took: {}ms", duration.as_millis()).as_str()),
     )
 }
@@ -228,6 +263,16 @@ pub fn get_default_heuristic(problem: Arc<Problem>, environment: Arc<Environment
 pub fn get_static_heuristic(
     problem: Arc<Problem>,
     environment: Arc<Environment>,
+) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
+    get_static_heuristic_with_diversification(problem, environment, true)
+}
+
+/// Gets the default static heuristic with optional infeasible-space
+/// diversification.
+pub fn get_static_heuristic_with_diversification(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    infeasible_diversification: bool,
 ) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
     let default_operator = statik::create_default_heuristic_operator(problem.clone(), environment.clone());
     let local_search = statik::create_default_local_search(environment.random.clone());
@@ -251,7 +296,12 @@ pub fn get_static_heuristic(
         (local_search, create_scalar_operator_probability(0.05, environment.random.clone())),
     ];
 
-    get_static_heuristic_from_heuristic_group(problem, environment, heuristic_group)
+    get_static_heuristic_from_heuristic_group_with_diversification(
+        problem,
+        environment,
+        heuristic_group,
+        infeasible_diversification,
+    )
 }
 
 /// Gets static heuristic using heuristic group.
@@ -260,9 +310,20 @@ pub fn get_static_heuristic_from_heuristic_group(
     environment: Arc<Environment>,
     heuristic_group: TargetHeuristicGroup,
 ) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
+    get_static_heuristic_from_heuristic_group_with_diversification(problem, environment, heuristic_group, true)
+}
+
+/// Gets a static heuristic using the supplied search group and optional
+/// infeasible-space diversification.
+pub fn get_static_heuristic_from_heuristic_group_with_diversification(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    heuristic_group: TargetHeuristicGroup,
+    infeasible_diversification: bool,
+) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
     StaticSelective::<RefinementContext, GoalContext, InsertionContext>::new(
         heuristic_group,
-        create_diversify_operators(problem, environment),
+        create_diversify_operators(problem, environment, infeasible_diversification),
     )
 }
 
@@ -271,8 +332,17 @@ pub fn get_dynamic_heuristic(
     problem: Arc<Problem>,
     environment: Arc<Environment>,
 ) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
+    get_dynamic_heuristic_with_diversification(problem, environment, true)
+}
+
+/// Gets the dynamic heuristic with optional infeasible-space diversification.
+pub fn get_dynamic_heuristic_with_diversification(
+    problem: Arc<Problem>,
+    environment: Arc<Environment>,
+    infeasible_diversification: bool,
+) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
     let search_operators = dynamic::get_operators(problem.clone(), environment.clone());
-    let diversify_operators = create_diversify_operators(problem, environment.clone());
+    let diversify_operators = create_diversify_operators(problem, environment.clone(), infeasible_diversification);
 
     DynamicSelective::<RefinementContext, GoalContext, InsertionContext>::new(
         search_operators,
@@ -507,9 +577,52 @@ mod builder {
     }
 }
 
+struct WeightedDiversifyOperator {
+    operators: Vec<(TargetSearchOperator, &'static str)>,
+    weights: Vec<usize>,
+}
+
+impl WeightedDiversifyOperator {
+    fn new(operators: Vec<(TargetSearchOperator, &'static str, usize)>) -> Self {
+        let (operators, weights) =
+            operators.into_iter().map(|(operator, name, weight)| ((operator, name), weight)).unzip();
+
+        Self { operators, weights }
+    }
+}
+
+impl HeuristicDiversifyOperator for WeightedDiversifyOperator {
+    type Context = RefinementContext;
+    type Objective = GoalContext;
+    type Solution = InsertionContext;
+
+    fn diversify(&self, heuristic_ctx: &Self::Context, solution: &Self::Solution) -> Vec<Self::Solution> {
+        let index = solution.environment.random.weighted(self.weights.as_slice());
+        let (operator, name) = &self.operators[index];
+        let generation = heuristic_ctx.statistics().generation;
+        let log_timing = heuristic_ctx.environment.is_experimental;
+
+        if log_timing {
+            (heuristic_ctx.environment.logger)(&format!("diversify,{name},{generation},started"));
+        }
+
+        let (solution, duration) = Timer::measure_duration(|| operator.search(heuristic_ctx, solution));
+
+        if log_timing {
+            (heuristic_ctx.environment.logger)(&format!(
+                "diversify,{name},{generation},finished,{}",
+                duration.as_millis()
+            ));
+        }
+
+        vec![solution]
+    }
+}
+
 fn create_diversify_operators(
     problem: Arc<Problem>,
     environment: Arc<Environment>,
+    infeasible_diversification: bool,
 ) -> HeuristicDiversifyOperators<RefinementContext, GoalContext, InsertionContext> {
     let random = environment.random.clone();
 
@@ -523,29 +636,38 @@ fn create_diversify_operators(
     ];
 
     let redistribute_search = Arc::new(RedistributeSearch::new(Arc::new(WeightedRecreate::new(recreates))));
-    let infeasible_search = Arc::new(InfeasibleSearch::new(
-        Arc::new(WeightedHeuristicOperator::new(
-            vec![
-                dynamic::create_default_inner_ruin_recreate(problem, environment.clone()),
-                dynamic::create_default_local_search(random.clone()),
-            ],
-            vec![10, 1],
-        )),
-        Arc::new(RecreateWithCheapest::new(random)),
-        4,
-        (0.05, 0.2),
-        (0.33, 0.75),
-    ));
     let local_search = Arc::new(LocalSearch::new(Arc::new(CompositeLocalOperator::new(
         vec![(Arc::new(ExchangeSequence::new(8, 0.5, 0.1)), 1)],
         2,
         4,
     ))));
 
-    vec![Arc::new(WeightedHeuristicOperator::new(
-        vec![redistribute_search, local_search, infeasible_search],
-        vec![10, 2, 1],
-    ))]
+    let mut operators: Vec<(TargetSearchOperator, &'static str, usize)> = vec![
+        (redistribute_search, "redistribute", 10),
+        (local_search, "exchange_sequence", 2),
+    ];
+
+    if infeasible_diversification {
+        let infeasible_search = Arc::new(InfeasibleSearch::new(
+            Arc::new(WeightedHeuristicOperator::new(
+                vec![
+                    dynamic::create_default_inner_ruin_recreate(problem, environment.clone()),
+                    dynamic::create_default_local_search(random.clone()),
+                ],
+                vec![10, 1],
+            )),
+            // Recovery can receive a large set of jobs after relaxed search.
+            // One-pass sampled SISR avoids the exhaustive cheapest-insertion
+            // tail while retaining a path back to a feasible solution.
+            Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random)),
+            4,
+            (0.05, 0.2),
+            (0.33, 0.75),
+        ));
+        operators.push((infeasible_search, "infeasible", 1));
+    }
+
+    vec![Arc::new(WeightedDiversifyOperator::new(operators))]
 }
 
 mod statik {

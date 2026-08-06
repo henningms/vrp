@@ -199,6 +199,25 @@ fn can_configure_initial_construction() {
 }
 
 #[test]
+fn can_disable_infeasible_diversification_without_config_file() {
+    let matches = get_solomon_matches(&["--disable-infeasible-diversification"]);
+    assert_eq!(
+        matches.get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME),
+        Some(&true)
+    );
+
+    let args = vec![
+        "solve",
+        "solomon",
+        SOLOMON_PROBLEM_PATH,
+        "--disable-infeasible-diversification",
+        "--config",
+        "config.json",
+    ];
+    assert!(get_solve_app().try_get_matches_from(args).is_err());
+}
+
+#[test]
 fn can_specify_cv() {
     for (params, result) in [
         (vec!["--min-cv", "sample,200,0.05,true"], Ok(Some(("sample".to_string(), 200, 0.05, true)))),

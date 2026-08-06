@@ -134,7 +134,11 @@ pub enum HyperType {
     /// A hyper heuristic which selects operator from the predefined list using reinforcement
     /// learning technics.
     #[serde(rename(deserialize = "dynamic-selective"))]
-    DynamicSelective,
+    DynamicSelective {
+        /// Enables relaxed infeasible-space diversification. Defaults to true.
+        #[serde(rename = "infeasibleDiversification")]
+        infeasible_diversification: Option<bool>,
+    },
 }
 
 /// A operator configuration.
@@ -555,8 +559,12 @@ fn configure_from_hyper(
 
                 builder = builder.with_heuristic(Box::new(static_selective));
             }
-            HyperType::DynamicSelective => {
-                let dynamic_selective = get_dynamic_heuristic(problem, environment);
+            HyperType::DynamicSelective { infeasible_diversification } => {
+                let dynamic_selective = get_dynamic_heuristic_with_diversification(
+                    problem,
+                    environment,
+                    infeasible_diversification.unwrap_or(true),
+                );
                 builder = builder.with_heuristic(Box::new(dynamic_selective));
             }
         }

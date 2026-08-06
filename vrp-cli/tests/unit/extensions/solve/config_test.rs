@@ -99,7 +99,7 @@ fn can_read_full_config() {
                 _ => unreachable!(),
             }
         }
-        HyperType::DynamicSelective => unreachable!(),
+        HyperType::DynamicSelective { .. } => unreachable!(),
     }
 
     let termination = config.termination.expect("no termination config");
@@ -158,6 +158,22 @@ fn can_read_blinks_recreate_variants() {
     assert!(matches!(recreates[1], RecreateMethod::BlinksSampled { weight: 2 }));
     assert!(matches!(recreates[2], RecreateMethod::BlinksTimeWindowStart { weight: 3 }));
     assert!(matches!(recreates[3], RecreateMethod::BlinksSampledTimeWindowStart { weight: 4 }));
+}
+
+#[test]
+fn can_disable_infeasible_dynamic_diversification() {
+    let json = r#"{
+      "hyper": {
+        "type": "dynamic-selective",
+        "infeasibleDiversification": false
+      }
+    }"#;
+
+    let config = read_config(BufReader::new(json.as_bytes())).unwrap();
+    assert!(matches!(
+        config.hyper,
+        Some(HyperType::DynamicSelective { infeasible_diversification: Some(false) })
+    ));
 }
 
 #[test]
