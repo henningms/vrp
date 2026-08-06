@@ -864,6 +864,11 @@ mod dynamic {
     /// Bandit prior weight for weak-tier arms.
     const WEAK_ARM_PRIOR: Float = 0.5;
 
+    /// Maximum jobs compared by one exhaustive insertion decision in the opt-in bounded portfolio.
+    /// This changes a large ruin's job dimension from roughly N²/2 to at most 4N while retaining
+    /// a small multi-job choice. SISR recreates already use bounded downstream sampling instead.
+    const BOUNDED_RECREATE_JOB_CAP: usize = 4;
+
     /// Internal `WeightedRuin`/`WeightedRecreate` weight for strong members (used in weak-tier bundles
     /// and in non-bandit inner R&R). Combined with [`WEAK_BUNDLE_WEIGHT`] to give a strong:weak = 2:1 ratio.
     const STRONG_BUNDLE_WEIGHT: usize = 2;
@@ -951,8 +956,16 @@ mod dynamic {
             false,
             random.clone(),
         ));
-        let cheapest: Arc<dyn Recreate> = Arc::new(RecreateWithCheapest::new(random.clone()));
-        let regret: Arc<dyn Recreate> = Arc::new(RecreateWithRegret::new(1, 3, random.clone()));
+        let (cheapest, cheapest_name): (Arc<dyn Recreate>, &str) = if bounded_recreates {
+            (Arc::new(RecreateWithCheapest::with_cap(random.clone(), BOUNDED_RECREATE_JOB_CAP)), "cheapest_capped")
+        } else {
+            (Arc::new(RecreateWithCheapest::new(random.clone())), "cheapest")
+        };
+        let (regret, regret_name): (Arc<dyn Recreate>, &str) = if bounded_recreates {
+            (Arc::new(RecreateWithRegret::with_cap(1, 3, random.clone(), BOUNDED_RECREATE_JOB_CAP)), "regret_capped")
+        } else {
+            (Arc::new(RecreateWithRegret::new(1, 3, random.clone())), "regret")
+        };
         let alternatives: Vec<(Arc<dyn Recreate>, String, Float)> = if bounded_recreates {
             get_recreate_with_alternative_goal(problem.goal.as_ref(), {
                 let random = random.clone();
@@ -974,8 +987,8 @@ mod dynamic {
         vec![
             (blinks, "blinks_sampled".to_string(), SISR_BOOST_WEIGHT),
             (blinks_tw_start, "blinks_tw_start".to_string(), SISR_BOOST_WEIGHT),
-            (cheapest, "cheapest".to_string(), STRONG_WEIGHT),
-            (regret, "regret".to_string(), STRONG_WEIGHT),
+            (cheapest, cheapest_name.to_string(), STRONG_WEIGHT),
+            (regret, regret_name.to_string(), STRONG_WEIGHT),
         ]
         .into_iter()
         .chain(alternatives)
@@ -983,7 +996,11 @@ mod dynamic {
     }
 
     fn get_weak_recreates(random: Arc<dyn Random>, bounded_recreates: bool) -> Vec<(Arc<dyn Recreate>, String, Float)> {
-        let cheapest: Arc<dyn Recreate> = Arc::new(RecreateWithCheapest::new(random.clone()));
+        let cheapest: Arc<dyn Recreate> = if bounded_recreates {
+            Arc::new(RecreateWithCheapest::with_cap(random.clone(), BOUNDED_RECREATE_JOB_CAP))
+        } else {
+            Arc::new(RecreateWithCheapest::new(random.clone()))
+        };
         let skip_best: Arc<dyn Recreate> = Arc::new(RecreateWithSkipBest::new(1, 2, random.clone()));
         let perturbation: Arc<dyn Recreate> = Arc::new(RecreateWithPerturbation::new_with_defaults(random.clone()));
         let gaps: Arc<dyn Recreate> = Arc::new(RecreateWithGaps::new(2, 20, random.clone()));

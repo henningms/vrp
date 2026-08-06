@@ -33,6 +33,28 @@ impl RecreateWithRegret {
             ),
         }
     }
+
+    /// Creates a regret recreate whose per-iteration job pool is capped at `cap`.
+    ///
+    /// Standard regret evaluates every required job against every route before
+    /// committing one insertion. Repeating that scan until all removed jobs are
+    /// inserted gives it quadratic growth in the size of a large ruin. A capped
+    /// selector keeps the regret signal across a random subset while bounding
+    /// each insertion decision; remaining jobs stay required and are considered
+    /// by later iterations.
+    pub fn with_cap(min: usize, max: usize, random: Arc<dyn Random>, cap: usize) -> Self {
+        assert!(cap > 0);
+
+        Self {
+            recreate: ConfigurableRecreate::new(
+                Box::new(CappedJobSelector::new(cap)),
+                Box::<AllRouteSelector>::default(),
+                LegSelection::Stochastic(random.clone()),
+                ResultSelection::Stochastic(ResultSelectorProvider::new_default(random)),
+                InsertionHeuristic::new(Box::new(RegretInsertionEvaluator::new(min, max))),
+            ),
+        }
+    }
 }
 
 struct RegretInsertionEvaluator {
