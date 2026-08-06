@@ -34,6 +34,7 @@ const CONSTRUCTION_JOB_CAP_ARG_NAME: &str = "construction-job-cap";
 const INITIAL_CONSTRUCTION_ARG_NAME: &str = "initial-construction";
 const DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME: &str = "disable-infeasible-diversification";
 const DISABLE_LKH_SEARCH_ARG_NAME: &str = "disable-lkh-search";
+const BOUNDED_RECREATES_ARG_NAME: &str = "bounded-recreates";
 const OUT_RESULT_ARG_NAME: &str = "out-result";
 const GET_LOCATIONS_ARG_NAME: &str = "get-locations";
 const CONFIG_ARG_NAME: &str = "config";
@@ -139,6 +140,14 @@ pub fn get_solve_app() -> Command {
             Arg::new(DISABLE_LKH_SEARCH_ARG_NAME)
                 .help("Disables LKH intra-route cost optimization in the built-in search portfolio")
                 .long(DISABLE_LKH_SEARCH_ARG_NAME)
+                .required(false)
+                .action(ArgAction::SetTrue)
+                .conflicts_with(CONFIG_ARG_NAME)
+        )
+        .arg(
+            Arg::new(BOUNDED_RECREATES_ARG_NAME)
+                .help("Uses the bounded SISR-heavy dynamic recreate portfolio")
+                .long(BOUNDED_RECREATES_ARG_NAME)
                 .required(false)
                 .action(ArgAction::SetTrue)
                 .conflicts_with(CONFIG_ARG_NAME)
@@ -392,6 +401,7 @@ fn from_cli_parameters(
             .copied()
             .unwrap_or(false),
         lkh_search: !matches.get_one::<bool>(DISABLE_LKH_SEARCH_ARG_NAME).copied().unwrap_or(false),
+        bounded_recreates: matches.get_one::<bool>(BOUNDED_RECREATES_ARG_NAME).copied().unwrap_or(false),
     };
     let mode = matches.get_one::<String>(SEARCH_MODE_ARG_NAME);
 
@@ -401,7 +411,8 @@ fn from_cli_parameters(
         .set_heuristic(get_heuristic(matches, problem.clone(), environment.clone(), heuristic_search)?)
         .set_initial_construction(initial_construction)
         .set_infeasible_diversification(heuristic_search.infeasible_diversification)
-        .set_lkh_search(heuristic_search.lkh_search);
+        .set_lkh_search(heuristic_search.lkh_search)
+        .set_bounded_recreates(heuristic_search.bounded_recreates);
 
     if let Some(initial_max_size) = initial_max_size {
         builder = builder.set_initial_max_size(initial_max_size);

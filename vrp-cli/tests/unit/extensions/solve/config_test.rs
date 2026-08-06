@@ -166,7 +166,8 @@ fn can_disable_infeasible_dynamic_diversification() {
       "hyper": {
         "type": "dynamic-selective",
         "infeasibleDiversification": false,
-        "lkhSearch": false
+        "lkhSearch": false,
+        "boundedRecreates": true
       }
     }"#;
 
@@ -175,7 +176,8 @@ fn can_disable_infeasible_dynamic_diversification() {
         config.hyper,
         Some(HyperType::DynamicSelective {
             infeasible_diversification: Some(false),
-            lkh_search: Some(false)
+            lkh_search: Some(false),
+            bounded_recreates: Some(true)
         })
     ));
 }

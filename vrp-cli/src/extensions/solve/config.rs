@@ -141,6 +141,9 @@ pub enum HyperType {
         /// Enables LKH intra-route cost optimization. Defaults to true.
         #[serde(rename = "lkhSearch")]
         lkh_search: Option<bool>,
+        /// Uses the bounded SISR-heavy dynamic recreate portfolio. Defaults to false.
+        #[serde(rename = "boundedRecreates")]
+        bounded_recreates: Option<bool>,
     },
 }
 
@@ -562,13 +565,14 @@ fn configure_from_hyper(
 
                 builder = builder.with_heuristic(Box::new(static_selective));
             }
-            HyperType::DynamicSelective { infeasible_diversification, lkh_search } => {
+            HyperType::DynamicSelective { infeasible_diversification, lkh_search, bounded_recreates } => {
                 let dynamic_selective = get_dynamic_heuristic_with_search_config(
                     problem,
                     environment,
                     HeuristicSearchConfig {
                         infeasible_diversification: infeasible_diversification.unwrap_or(true),
                         lkh_search: lkh_search.unwrap_or(true),
+                        bounded_recreates: bounded_recreates.unwrap_or(false),
                     },
                 );
                 builder = builder.with_heuristic(Box::new(dynamic_selective));
