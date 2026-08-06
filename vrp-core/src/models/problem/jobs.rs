@@ -349,24 +349,58 @@ fn create_index(
             fleet.profiles.iter().fold(HashMap::new(), |mut acc, profile| {
                 let avg_costs = avg_profile_costs.get(&profile.index).unwrap();
                 // get all possible start positions for given profile
-                let starts: Vec<Location> = fleet
+                let mut starts: Vec<Location> = fleet
                     .vehicles
                     .iter()
                     .filter(|v| v.profile.index == profile.index)
                     .flat_map(|v| v.details.iter().map(|d| d.start.as_ref().map(|s| s.location)))
                     .flatten()
                     .collect();
+                // Fleets share depots heavily — a real 1,431-vehicle school-transport
+                // fleet had all of its shift starts at a single location. The fleet
+                // cost below is a `min` over these, and a min is unaffected by
+                // duplicates, so deduplicating here is result-preserving and turns
+                // (vehicles × jobs) cost evaluations into (unique starts × jobs).
+                starts.sort_unstable();
+                starts.dedup();
 
                 // create job index
                 let item = parallel_collect(&jobs, |job| {
-                    let mut sorted_job_costs: Vec<(Job, LowPrecisionCost)> = jobs
-                        .iter()
-                        .filter(|j| **j != *job)
-                        .map(|j| (j.clone(), get_cost_between_jobs(profile, avg_costs, transport, job, j)))
-                        .collect();
-                    sorted_job_costs.sort_unstable_by(|(_, a), (_, b)| a.total_cmp(b));
+                    // Hoisted out of the inner loop: these are the same for every
+                    // one of the N jobs compared against, so collecting them per
+                    // pair meant an allocation per pair (~36M on a 6k-job problem).
+                    let outer_locations: Vec<Option<Location>> = get_job_locations(job).collect();
 
-                    sorted_job_costs.truncate(MAX_NEIGHBOURS);
+                    // Cost first, jobs second. Only MAX_NEIGHBOURS of these N
+                    // candidates survive, so referencing them by index keeps the
+                    // Arc traffic proportional to what is kept (N × K) rather than
+                    // to what is considered (N × N) — on a 6k-job problem that is
+                    // ~1.5M refcount updates instead of ~36M, all of them on memory
+                    // shared between rayon workers.
+                    let mut job_costs: Vec<(usize, LowPrecisionCost)> = jobs
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, j)| **j != *job)
+                        .map(|(index, j)| {
+                            (
+                                index,
+                                get_cost_between_job_locations(profile, avg_costs, transport, &outer_locations, j),
+                            )
+                        })
+                        .collect();
+
+                    // Partition rather than sort: the full ordering is discarded by
+                    // the truncation below, so only the K cheapest need to be found
+                    // (linear) and only those K need ordering among themselves.
+                    let keep = MAX_NEIGHBOURS.min(job_costs.len());
+                    if job_costs.len() > keep && keep > 0 {
+                        job_costs.select_nth_unstable_by(keep - 1, |(_, a), (_, b)| a.total_cmp(b));
+                        job_costs.truncate(keep);
+                    }
+                    job_costs.sort_unstable_by(|(_, a), (_, b)| a.total_cmp(b));
+
+                    let mut sorted_job_costs: Vec<(Job, LowPrecisionCost)> =
+                        job_costs.into_iter().map(|(index, cost)| (jobs[index].clone(), cost)).collect();
                     sorted_job_costs.shrink_to_fit();
 
                     let fleet_costs = starts
@@ -431,11 +465,27 @@ fn get_cost_between_jobs(
     rhs: &Job,
 ) -> LowPrecisionCost {
     let outer: Vec<Option<Location>> = get_job_locations(lhs).collect();
-    let inner: Vec<Option<Location>> = get_job_locations(rhs).collect();
 
+    get_cost_between_job_locations(profile, costs, transport, &outer, rhs)
+}
+
+/// Same as [`get_cost_between_jobs`], but with the left-hand job's locations already
+/// collected by the caller.
+///
+/// `create_index` compares one job against every other job, so the left-hand side is
+/// invariant across the whole inner loop. Taking it as a slice lets the caller hoist
+/// that collection out, and iterating the right-hand side lazily avoids a second
+/// allocation — together removing two heap allocations per evaluated job pair.
+fn get_cost_between_job_locations(
+    profile: &Profile,
+    costs: &Costs,
+    transport: &dyn TransportCost,
+    outer: &[Option<Location>],
+    rhs: &Job,
+) -> LowPrecisionCost {
     outer
         .iter()
-        .flat_map(|o| inner.iter().map(move |i| (*o, *i)))
+        .flat_map(|o| get_job_locations(rhs).map(move |i| (*o, i)))
         .map(|pair| match pair {
             (Some(from), Some(to)) => get_cost_between_locations(profile, costs, transport, from, to),
             _ => DEFAULT_COST,
