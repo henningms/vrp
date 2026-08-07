@@ -142,6 +142,8 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
         };
 
         let eval_ctx = EvaluationContext { goal: &insertion_ctx.problem.goal, job, leg_selection, result_selector };
+        let first_multi_suffix_covers_later =
+            matches!(*job, Job::Multi(_)) && matches!(leg_selection, LegSelection::Exhaustive);
 
         let result = fold_reduce(
             routes,
@@ -187,7 +189,10 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
                     let is_stopped = matches!(&result, InsertionResult::Failure(failure) if failure.stopped);
 
                     best_in_route = result_selector.select_insertion(insertion_ctx, best_in_route, result);
-                    if is_stopped {
+                    // `eval_multi` treats a concrete index as the start of an exhaustive
+                    // suffix search. Its first non-blinked suffix therefore contains every
+                    // candidate that any later suffix could return.
+                    if is_stopped || first_multi_suffix_covers_later {
                         break;
                     }
                 }
