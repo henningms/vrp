@@ -14,7 +14,14 @@ use vrp_core::utils::GenericError;
 
 /// Checks assignment of jobs and vehicles.
 pub fn check_assignment(ctx: &CheckerContext) -> Result<(), Vec<GenericError>> {
-    combine_error_results(&[check_vehicles(ctx), check_jobs_presence(ctx), check_jobs_match(ctx), check_groups(ctx)])
+    combine_error_results(&[
+        check_vehicles(ctx),
+        check_jobs_presence(ctx),
+        check_jobs_match(ctx),
+        check_fixed_order(ctx),
+        check_solo_riding(ctx),
+        check_groups(ctx),
+    ])
 }
 
 /// Checks that vehicles in each tour are used once per shift and they are known in problem.
@@ -204,6 +211,224 @@ fn check_jobs_match(ctx: &CheckerContext) -> GenericResult<()> {
     }
 
     Ok(())
+}
+
+/// Checks that jobs marked with `fixedOrder` use the exact task sequence used by the problem reader:
+/// pickups, deliveries, replacements, then services, preserving order within each task collection.
+fn check_fixed_order(ctx: &CheckerContext) -> GenericResult<()> {
+    let activities_by_job = ctx
+        .solution
+        .tours
+        .iter()
+        .flat_map(|tour| tour.stops.iter())
+        .flat_map(|stop| stop.activities())
+        .filter(|activity| matches!(activity.activity_type.as_str(), "pickup" | "delivery" | "replacement" | "service"))
+        .fold(HashMap::<&str, Vec<&Activity>>::new(), |mut activities_by_job, activity| {
+            activities_by_job.entry(activity.job_id.as_str()).or_default().push(activity);
+            activities_by_job
+        });
+
+    ctx.problem.plan.jobs.iter().filter(|job| job.fixed_order == Some(true)).try_for_each(|job| {
+        let expected = get_ordered_tasks(job);
+        let actual = activities_by_job.get(job.id.as_str()).map_or(&[] as &[_], Vec::as_slice);
+
+        // An unassigned job has no activities and is valid from an ordering perspective.
+        if actual.is_empty() {
+            return Ok(());
+        }
+
+        if actual.len() != expected.len() {
+            return Err(format!(
+                "fixed order cannot be checked for job '{}': expected {} activities, found {}",
+                job.id,
+                expected.len(),
+                actual.len()
+            )
+            .into());
+        }
+
+        expected.iter().zip(actual.iter()).enumerate().try_for_each(|(idx, ((expected_type, task), activity))| {
+            let has_multiple_tasks_of_type =
+                expected.iter().filter(|(activity_type, _)| activity_type == expected_type).count() > 1;
+            let tag_matches = !has_multiple_tasks_of_type
+                || task.places.iter().any(|place| place.tag.as_ref() == activity.job_tag.as_ref());
+
+            if activity.activity_type == *expected_type && tag_matches {
+                Ok(())
+            } else {
+                let expected_tags = task.places.iter().filter_map(|place| place.tag.as_deref()).collect::<Vec<_>>();
+                Err(format!(
+                    "fixed order is not respected for job '{}': activity {} expected type '{}' with tag in {:?}, found type '{}' with tag {:?}",
+                    job.id,
+                    idx,
+                    expected_type,
+                    expected_tags,
+                    activity.activity_type,
+                    activity.job_tag
+                )
+                .into())
+            }
+        })
+    })
+}
+
+/// Checks that a solo-riding job does not overlap another dynamic pickup-delivery job while onboard.
+/// A parent job becomes active on its first dynamic pickup and completes on its final dynamic delivery,
+/// which also handles companion jobs with unequal pickup and delivery activity counts.
+fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
+    let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
+    let solo_jobs = jobs
+        .iter()
+        .filter_map(|(job_id, job)| (job.solo_riding == Some(true)).then_some(*job_id))
+        .collect::<HashSet<_>>();
+
+    if solo_jobs.is_empty() {
+        return Ok(());
+    }
+
+    let dynamic_delivery_counts = jobs
+        .iter()
+        .map(|(job_id, job)| {
+            let count = job.deliveries.iter().flatten().filter(|task| is_dynamic_task(job, "delivery", task)).count();
+            (*job_id, count)
+        })
+        .collect::<HashMap<_, _>>();
+
+    ctx.solution.tours.iter().try_for_each(|tour| {
+        let mut active_jobs = HashSet::<&str>::new();
+        let mut completed_deliveries = HashMap::<&str, usize>::new();
+        let mut active_solo: Option<&str> = None;
+
+        tour.stops
+            .iter()
+            .flat_map(|stop| stop.activities())
+            .enumerate()
+            .try_for_each(|(activity_idx, activity)| {
+                let Some(job) = jobs.get(activity.job_id.as_str()) else {
+                    return Ok(());
+                };
+                let Some(task) = get_activity_task(job, activity)? else {
+                    return Ok(());
+                };
+
+                if !is_dynamic_task(job, activity.activity_type.as_str(), task) {
+                    return Ok(());
+                }
+
+                let job_id = job.id.as_str();
+                match activity.activity_type.as_str() {
+                    "pickup" => {
+                        if active_solo.is_some_and(|solo_job_id| solo_job_id != job_id) {
+                            return Err(format!(
+                                "solo riding is not respected in tour '{}'/{} at activity {}: job '{}' is picked up while solo job '{}' is onboard",
+                                tour.vehicle_id,
+                                tour.shift_index,
+                                activity_idx,
+                                job_id,
+                                active_solo.unwrap()
+                            )
+                            .into());
+                        }
+
+                        if solo_jobs.contains(job_id) && active_jobs.iter().any(|active_id| *active_id != job_id) {
+                            return Err(format!(
+                                "solo riding is not respected in tour '{}'/{} at activity {}: solo job '{}' is picked up while another job is onboard",
+                                tour.vehicle_id, tour.shift_index, activity_idx, job_id
+                            )
+                            .into());
+                        }
+
+                        active_jobs.insert(job_id);
+                        if solo_jobs.contains(job_id) {
+                            active_solo = Some(job_id);
+                        }
+                    }
+                    "delivery" => {
+                        if active_solo.is_some_and(|solo_job_id| solo_job_id != job_id) {
+                            return Err(format!(
+                                "solo riding is not respected in tour '{}'/{} at activity {}: job '{}' is delivered while solo job '{}' is onboard",
+                                tour.vehicle_id,
+                                tour.shift_index,
+                                activity_idx,
+                                job_id,
+                                active_solo.unwrap()
+                            )
+                            .into());
+                        }
+
+                        let completed = completed_deliveries.entry(job_id).or_default();
+                        *completed += 1;
+                        if *completed >= dynamic_delivery_counts.get(job_id).copied().unwrap_or_default() {
+                            active_jobs.remove(job_id);
+                            if active_solo == Some(job_id) {
+                                active_solo = None;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+
+                if let Some(solo_job_id) = active_solo
+                    && active_jobs.iter().any(|active_id| *active_id != solo_job_id)
+                {
+                    return Err(format!(
+                        "solo riding is not respected in tour '{}'/{} at activity {}: solo job '{}' overlaps another job",
+                        tour.vehicle_id, tour.shift_index, activity_idx, solo_job_id
+                    )
+                    .into());
+                }
+
+                Ok(())
+            })
+    })
+}
+
+fn get_ordered_tasks(job: &Job) -> Vec<(&'static str, &JobTask)> {
+    job.pickups
+        .iter()
+        .flatten()
+        .map(|task| ("pickup", task))
+        .chain(job.deliveries.iter().flatten().map(|task| ("delivery", task)))
+        .chain(job.replacements.iter().flatten().map(|task| ("replacement", task)))
+        .chain(job.services.iter().flatten().map(|task| ("service", task)))
+        .collect()
+}
+
+fn get_activity_task<'a>(job: &'a Job, activity: &Activity) -> GenericResult<Option<&'a JobTask>> {
+    let tasks = match activity.activity_type.as_str() {
+        "pickup" => job.pickups.as_ref(),
+        "delivery" => job.deliveries.as_ref(),
+        "replacement" => job.replacements.as_ref(),
+        "service" => job.services.as_ref(),
+        _ => return Ok(None),
+    };
+    let Some(tasks) = tasks else { return Ok(None) };
+
+    let task_count = job_task_size(&job.pickups)
+        + job_task_size(&job.deliveries)
+        + job_task_size(&job.replacements)
+        + job_task_size(&job.services);
+    let pickup_count = job.pickups.as_ref().map_or(0, Vec::len);
+    let delivery_count = job.deliveries.as_ref().map_or(0, Vec::len);
+
+    if task_count < 2 || (task_count == 2 && pickup_count == 1 && delivery_count == 1) {
+        return Ok(tasks.first());
+    }
+
+    let tag = activity.job_tag.as_ref().ok_or_else(|| {
+        GenericError::from(format!("checker requires that multi job activity must have tag: '{}'", activity.job_id))
+    })?;
+
+    Ok(tasks.iter().find(|task| task.places.iter().any(|place| place.tag.as_ref() == Some(tag))))
+}
+
+fn is_dynamic_task(job: &Job, activity_type: &str, task: &JobTask) -> bool {
+    let has_pickups = job.pickups.as_ref().is_some_and(|tasks| !tasks.is_empty());
+    let has_deliveries = job.deliveries.as_ref().is_some_and(|tasks| !tasks.is_empty());
+    let has_demand = task.demand.as_ref().is_some_and(|demand| demand.iter().any(|value| *value != 0))
+        || task.named_demand.as_ref().is_some_and(|demand| demand.values().any(|value| *value != 0));
+
+    has_pickups && has_deliveries && matches!(activity_type, "pickup" | "delivery") && has_demand
 }
 
 fn is_valid_job_info(

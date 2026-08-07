@@ -48,6 +48,49 @@ fn create_regular_activity(location: usize) -> Activity {
         .build()
 }
 
+fn create_companion_job_activities(
+    job_id: &str,
+    pickup_demands: &[i32],
+    delivery_demands: &[i32],
+) -> (Arc<Multi>, Vec<Activity>, Vec<Activity>) {
+    let pickups = pickup_demands
+        .iter()
+        .enumerate()
+        .map(|(idx, demand)| {
+            let mut builder = TestSingleBuilder::default();
+            builder.location(Some(idx + 1)).demand(Demand::pudo_pickup(*demand));
+            builder.build_shared()
+        })
+        .collect::<Vec<_>>();
+    let deliveries = delivery_demands
+        .iter()
+        .enumerate()
+        .map(|(idx, demand)| {
+            let mut builder = TestSingleBuilder::default();
+            builder.location(Some(idx + 10)).demand(Demand::pudo_delivery(*demand));
+            builder.build_shared()
+        })
+        .collect::<Vec<_>>();
+
+    let mut dimens = Dimensions::default();
+    dimens.set_job_id(job_id.to_string()).set_job_solo_riding(true);
+
+    let pickup_count = pickups.len();
+    let multi = Multi::new_shared(pickups.into_iter().chain(deliveries).collect(), dimens);
+    let pickup_activities = multi.jobs[..pickup_count]
+        .iter()
+        .enumerate()
+        .map(|(idx, single)| ActivityBuilder::with_location(idx + 1).job(Some(single.clone())).build())
+        .collect();
+    let delivery_activities = multi.jobs[pickup_count..]
+        .iter()
+        .enumerate()
+        .map(|(idx, single)| ActivityBuilder::with_location(idx + 10).job(Some(single.clone())).build())
+        .collect();
+
+    (multi, pickup_activities, delivery_activities)
+}
+
 fn create_single_job(job_id: &str, solo_riding: bool) -> Job {
     let mut builder = TestSingleBuilder::default();
     builder.id(job_id);
@@ -151,6 +194,39 @@ fn allows_other_job_after_solo_job_is_completed_real_leg_index() {
     let result = evaluate_insertion(&route_ctx, &other_pickup, 2, 2, Some(3));
 
     assert!(result.is_none(), "should allow other job after solo job is completed");
+}
+
+#[test]
+fn allows_other_job_after_solo_companion_job_is_completed() {
+    let (_solo, pickups, deliveries) = create_companion_job_activities("solo", &[1, 1], &[2]);
+    let (_other, other_pickup, _) = create_pudo_job_activities("other", false, 20, 21);
+    let mut route = RouteBuilder::with_default_vehicle();
+    pickups.into_iter().chain(deliveries).for_each(|activity| {
+        route.add_activity(activity);
+    });
+    let route_ctx = RouteContextBuilder::default().with_route(route.build()).build();
+    let prev_idx = route_ctx.route().tour.total() - 2;
+
+    let result = evaluate_insertion(&route_ctx, &other_pickup, prev_idx, prev_idx, Some(prev_idx + 1));
+
+    assert!(result.is_none(), "the aggregate delivery completes the solo companion job");
+}
+
+#[test]
+fn rejects_other_job_before_all_solo_deliveries_are_completed() {
+    let (_solo, pickups, mut deliveries) = create_companion_job_activities("solo", &[2], &[1, 1]);
+    let (_other, other_pickup, _) = create_pudo_job_activities("other", false, 20, 21);
+    let first_delivery = deliveries.remove(0);
+    let mut route = RouteBuilder::with_default_vehicle();
+    pickups.into_iter().chain([first_delivery]).for_each(|activity| {
+        route.add_activity(activity);
+    });
+    let route_ctx = RouteContextBuilder::default().with_route(route.build()).build();
+    let prev_idx = route_ctx.route().tour.total() - 2;
+
+    let result = evaluate_insertion(&route_ctx, &other_pickup, prev_idx, prev_idx, Some(prev_idx + 1));
+
+    assert_eq!(result.map(|violation| violation.code), Some(SOLO_RIDING_VIOLATION_CODE));
 }
 
 #[test]

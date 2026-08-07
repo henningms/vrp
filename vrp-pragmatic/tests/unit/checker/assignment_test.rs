@@ -182,6 +182,205 @@ fn check_jobs_impl(
     assert_eq!(result, expected_result);
 }
 
+fn create_constraint_job(
+    id: &str,
+    pickup_tags: &[&str],
+    delivery_tags: &[&str],
+    solo_riding: bool,
+    fixed_order: bool,
+) -> Job {
+    let create_tasks =
+        |tags: &[&str]| tags.iter().map(|tag| create_task((0., 0.), Some((*tag).to_string()))).collect::<Vec<_>>();
+
+    Job {
+        pickups: Some(create_tasks(pickup_tags)),
+        deliveries: Some(create_tasks(delivery_tags)),
+        solo_riding: Some(solo_riding),
+        fixed_order: Some(fixed_order),
+        ..create_job(id)
+    }
+}
+
+fn create_constraint_context(jobs: Vec<Job>, activities: Vec<(&str, &str, &str)>) -> CheckerContext {
+    let problem =
+        Problem { plan: Plan { jobs, ..create_empty_plan() }, fleet: create_default_fleet(), ..create_empty_problem() };
+    let solution = if activities.is_empty() {
+        SolutionBuilder::default().build()
+    } else {
+        let stops = activities
+            .into_iter()
+            .map(|(job_id, activity_type, tag)| {
+                StopBuilder::default().coordinate((0., 0.)).build_single_tag(job_id, activity_type, tag)
+            })
+            .collect();
+        SolutionBuilder::default().tour(TourBuilder::default().stops(stops).build()).build()
+    };
+
+    CheckerContext::new(create_example_problem(), problem, None, solution).unwrap()
+}
+
+#[test]
+fn can_check_fixed_companion_order() {
+    let ctx = create_constraint_context(
+        vec![create_constraint_job("job1", &["p0", "p1"], &["d0"], false, true)],
+        vec![("job1", "pickup", "p0"), ("job1", "pickup", "p1"), ("job1", "delivery", "d0")],
+    );
+
+    assert_eq!(check_fixed_order(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_fixed_companion_order_violation() {
+    let ctx = create_constraint_context(
+        vec![create_constraint_job("job1", &["p0", "p1"], &["d0"], false, true)],
+        vec![("job1", "pickup", "p1"), ("job1", "pickup", "p0"), ("job1", "delivery", "d0")],
+    );
+
+    let error = check_fixed_order(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("fixed order is not respected for job 'job1'"));
+    assert!(error.contains("activity 0"));
+}
+
+#[test]
+fn can_reorder_pickups_when_fixed_order_is_disabled() {
+    let ctx = create_constraint_context(
+        vec![create_constraint_job("job1", &["p0", "p1"], &["d0"], false, false)],
+        vec![("job1", "pickup", "p1"), ("job1", "pickup", "p0"), ("job1", "delivery", "d0")],
+    );
+
+    assert_eq!(check_fixed_order(&ctx), Ok(()));
+}
+
+#[test]
+fn can_skip_fixed_order_check_for_unassigned_job() {
+    let ctx =
+        create_constraint_context(vec![create_constraint_job("job1", &["p0", "p1"], &["d0"], false, true)], vec![]);
+
+    assert_eq!(check_fixed_order(&ctx), Ok(()));
+}
+
+#[test]
+fn can_check_non_overlapping_solo_riding() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("solo", &["sp"], &["sd"], true, false),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("solo", "pickup", "sp"),
+            ("solo", "delivery", "sd"),
+            ("other", "pickup", "op"),
+            ("other", "delivery", "od"),
+        ],
+    );
+
+    assert_eq!(check_solo_riding(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_solo_pickup_while_another_job_is_onboard() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("solo", &["sp"], &["sd"], true, false),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("other", "pickup", "op"),
+            ("solo", "pickup", "sp"),
+            ("solo", "delivery", "sd"),
+            ("other", "delivery", "od"),
+        ],
+    );
+
+    let error = check_solo_riding(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("solo job 'solo' is picked up while another job is onboard"));
+}
+
+#[test]
+fn can_detect_other_pickup_while_solo_job_is_onboard() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("solo", &["sp"], &["sd"], true, false),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("solo", "pickup", "sp"),
+            ("other", "pickup", "op"),
+            ("other", "delivery", "od"),
+            ("solo", "delivery", "sd"),
+        ],
+    );
+
+    let error = check_solo_riding(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("job 'other' is picked up while solo job 'solo' is onboard"));
+}
+
+#[test]
+fn can_finish_solo_companion_job_with_unequal_activity_counts() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("solo", &["sp0", "sp1"], &["sd0"], true, true),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("solo", "pickup", "sp0"),
+            ("solo", "pickup", "sp1"),
+            ("solo", "delivery", "sd0"),
+            ("other", "pickup", "op"),
+            ("other", "delivery", "od"),
+        ],
+    );
+
+    assert_eq!(check_solo_riding(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_overlap_with_solo_companion_job() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("solo", &["sp0", "sp1"], &["sd0"], true, true),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("solo", "pickup", "sp0"),
+            ("solo", "pickup", "sp1"),
+            ("other", "pickup", "op"),
+            ("solo", "delivery", "sd0"),
+            ("other", "delivery", "od"),
+        ],
+    );
+
+    assert!(check_solo_riding(&ctx).is_err());
+}
+
+#[test]
+fn assignment_check_includes_fixed_order_and_solo_riding() {
+    let ctx = create_constraint_context(
+        vec![
+            create_constraint_job("fixed", &["fp0", "fp1"], &["fd0"], false, true),
+            create_constraint_job("solo", &["sp"], &["sd"], true, false),
+            create_constraint_job("other", &["op"], &["od"], false, false),
+        ],
+        vec![
+            ("fixed", "pickup", "fp1"),
+            ("fixed", "pickup", "fp0"),
+            ("fixed", "delivery", "fd0"),
+            ("solo", "pickup", "sp"),
+            ("other", "pickup", "op"),
+            ("other", "delivery", "od"),
+            ("solo", "delivery", "sd"),
+        ],
+    );
+
+    let errors = check_assignment(&ctx).unwrap_err().into_iter().map(|error| error.to_string()).collect::<Vec<_>>();
+
+    assert!(errors.iter().any(|error| error.contains("fixed order is not respected for job 'fixed'")));
+    assert!(errors.iter().any(|error| error.contains("job 'other' is picked up while solo job 'solo' is onboard")));
+}
+
 #[test]
 fn can_detect_time_window_violation() {
     let problem = Problem {

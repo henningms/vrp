@@ -18,7 +18,7 @@ use super::*;
 use crate::models::common::{ConfigurableLoad, MultiDimLoad, SingleDimLoad};
 use crate::models::problem::Single;
 use crate::models::solution::Activity;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 custom_dimension!(pub JobSoloRiding typeof bool);
 
@@ -68,7 +68,8 @@ impl SoloRidingConstraint {
     }
 
     fn check_solo_riding(&self, route_ctx: &RouteContext, activity_ctx: &ActivityContext) -> bool {
-        let mut onboard: FxHashMap<Job, usize> = FxHashMap::default();
+        let mut onboard: FxHashSet<Job> = FxHashSet::default();
+        let mut completed_deliveries: FxHashMap<Job, usize> = FxHashMap::default();
         let mut active_solo_job: Option<Job> = None;
         let tour = &route_ctx.route().tour;
 
@@ -76,19 +77,26 @@ impl SoloRidingConstraint {
         // The target is inserted AFTER prev, so prev must be processed BEFORE target.
         for idx in 0..=activity_ctx.index {
             if let Some(activity) = tour.get(idx)
-                && self.process_activity(activity, &mut onboard, &mut active_solo_job).is_err()
+                && self
+                    .process_activity(activity, &mut onboard, &mut completed_deliveries, &mut active_solo_job)
+                    .is_err()
             {
                 return true;
             }
         }
 
-        if self.process_activity(activity_ctx.target, &mut onboard, &mut active_solo_job).is_err() {
+        if self
+            .process_activity(activity_ctx.target, &mut onboard, &mut completed_deliveries, &mut active_solo_job)
+            .is_err()
+        {
             return true;
         }
 
         for idx in activity_ctx.index + 1..tour.total() {
             if let Some(activity) = tour.get(idx)
-                && self.process_activity(activity, &mut onboard, &mut active_solo_job).is_err()
+                && self
+                    .process_activity(activity, &mut onboard, &mut completed_deliveries, &mut active_solo_job)
+                    .is_err()
             {
                 return true;
             }
@@ -100,7 +108,8 @@ impl SoloRidingConstraint {
     fn process_activity(
         &self,
         activity: &Activity,
-        onboard: &mut FxHashMap<Job, usize>,
+        onboard: &mut FxHashSet<Job>,
+        completed_deliveries: &mut FxHashMap<Job, usize>,
         active_solo_job: &mut Option<Job>,
     ) -> Result<(), ()> {
         let Some(single) = activity.job.as_ref().map(|single| single.as_ref()) else {
@@ -122,11 +131,11 @@ impl SoloRidingConstraint {
                 return Err(());
             }
 
-            if self.is_solo_job(&job) && onboard.iter().any(|(other, count)| *count > 0 && other != &job) {
+            if self.is_solo_job(&job) && onboard.iter().any(|other| other != &job) {
                 return Err(());
             }
 
-            *onboard.entry(job.clone()).or_insert(0) += 1;
+            onboard.insert(job.clone());
 
             if self.is_solo_job(&job) {
                 *active_solo_job = Some(job.clone());
@@ -138,20 +147,20 @@ impl SoloRidingConstraint {
                 return Err(());
             }
 
-            if let Some(count) = onboard.get_mut(&job) {
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    onboard.remove(&job);
-                }
-            }
+            let completed = completed_deliveries.entry(job.clone()).or_default();
+            *completed += 1;
+            let delivery_count = self.get_dynamic_delivery_count(&job);
 
-            if active_solo_job.as_ref() == Some(&job) && !onboard.contains_key(&job) {
-                *active_solo_job = None;
+            if *completed >= delivery_count {
+                onboard.remove(&job);
+                if active_solo_job.as_ref() == Some(&job) {
+                    *active_solo_job = None;
+                }
             }
         }
 
         if let Some(solo_job) = active_solo_job.as_ref()
-            && onboard.iter().any(|(job, count)| *count > 0 && job != solo_job)
+            && onboard.iter().any(|job| job != solo_job)
         {
             return Err(());
         }
@@ -185,6 +194,13 @@ impl SoloRidingConstraint {
                 .dimens
                 .get_job_demand::<ConfigurableLoad>()
                 .is_some_and(|d| has_non_zero_values(&d.delivery.1.load, d.delivery.1.size))
+    }
+
+    fn get_dynamic_delivery_count(&self, job: &Job) -> usize {
+        match job {
+            Job::Single(single) => usize::from(self.is_dynamic_delivery(single)),
+            Job::Multi(multi) => multi.jobs.iter().filter(|single| self.is_dynamic_delivery(single)).count(),
+        }
     }
 }
 

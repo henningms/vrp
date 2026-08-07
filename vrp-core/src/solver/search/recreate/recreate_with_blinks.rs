@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../../../../tests/unit/solver/search/recreate_with_blinks_test.rs"]
+mod recreate_with_blinks_test;
+
 use crate::construction::heuristics::*;
 use crate::construction::heuristics::{InsertionContext, JobSelector};
 use crate::models::Problem;
@@ -178,8 +182,14 @@ impl InsertionEvaluator for BlinkInsertionEvaluator {
                         route_costs.clone(),
                         best_known_cost,
                     );
+                    // A stopped failure proves that later starting positions cannot work,
+                    // matching the standard insertion evaluator's ControlFlow::Break semantics.
+                    let is_stopped = matches!(&result, InsertionResult::Failure(failure) if failure.stopped);
 
                     best_in_route = result_selector.select_insertion(insertion_ctx, best_in_route, result);
+                    if is_stopped {
+                        break;
+                    }
                 }
 
                 best_in_route
