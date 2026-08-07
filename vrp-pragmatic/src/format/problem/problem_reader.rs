@@ -215,7 +215,7 @@ fn get_problem_blocks(
     // TODO pass environment from outside to allow parametrization
     let environment = Environment::default();
 
-    let fleet = read_fleet(api_problem, problem_props, &coord_index);
+    let fleet = Arc::new(read_fleet(api_problem, problem_props, &coord_index));
     let reserved_times_index = read_reserved_times_index(api_problem, &fleet);
 
     let transport = Timer::measure_duration_with_callback(
@@ -257,8 +257,8 @@ fn get_problem_blocks(
         api_problem,
         problem_props,
         &coord_index,
-        &fleet,
-        transport.as_ref(),
+        fleet.clone(),
+        transport.clone(),
         job_index,
         &environment,
     );
@@ -266,7 +266,7 @@ fn get_problem_blocks(
 
     Ok(ProblemBlocks {
         jobs: Arc::new(jobs),
-        fleet: Arc::new(fleet),
+        fleet,
         job_index: None,
         transport,
         activity,

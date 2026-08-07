@@ -11,14 +11,15 @@ use vrp_core::utils::GenericResult;
 pub(crate) trait TextReader {
     fn read_problem(&mut self, is_rounded: bool) -> GenericResult<Problem> {
         let (jobs, fleet) = self.read_definitions()?;
+        let fleet = Arc::new(fleet);
         let transport = self.create_transport(is_rounded)?;
         let activity = Arc::new(SimpleActivityCost::default());
-        let jobs = Jobs::new(&fleet, jobs, transport.as_ref(), &self.get_logger())?;
+        let jobs = Jobs::new(fleet.clone(), jobs, transport.clone(), &self.get_logger())?;
         let extras = self.create_extras();
         let goal = self.create_goal_context(activity.clone(), transport.clone())?;
 
         Ok(Problem {
-            fleet: Arc::new(fleet),
+            fleet,
             jobs: Arc::new(jobs),
             locks: vec![],
             goal: Arc::new(goal),

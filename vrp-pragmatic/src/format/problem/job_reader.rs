@@ -31,8 +31,8 @@ pub(super) fn read_jobs_with_extra_locks(
     api_problem: &ApiProblem,
     props: &ProblemProperties,
     coord_index: &CoordIndex,
-    fleet: &Fleet,
-    transport: &(dyn TransportCost + Sync + Send),
+    fleet: Arc<Fleet>,
+    transport: Arc<dyn TransportCost>,
     job_index: &mut JobIndex,
     environment: &Environment,
 ) -> (Jobs, Vec<Arc<Lock>>) {
