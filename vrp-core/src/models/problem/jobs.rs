@@ -514,6 +514,7 @@ fn get_cost_between_job_and_location(
 }
 
 /// Returns minimal cost between jobs.
+#[cfg(test)]
 fn get_cost_between_jobs(
     profile: &Profile,
     costs: &Costs,
@@ -526,7 +527,7 @@ fn get_cost_between_jobs(
     get_cost_between_job_locations(profile, costs, transport, &outer, rhs)
 }
 
-/// Same as [`get_cost_between_jobs`], but with the left-hand job's locations already
+/// Calculates the cost between two jobs with the left-hand job's locations already
 /// collected by the caller.
 ///
 /// `create_index` compares one job against every other job, so the left-hand side is
