@@ -45,6 +45,11 @@ constraints such as time windows. The objective has the following optional param
 * `fast-service`: prefers solutions when jobs are served early in tours. Optional parameter:
   *  `tolerance`: an objective tolerance specifies how different objective values have to be to consider them different.
       Relative distance metric is used.
+* `match-requested-time`: minimizes early/late deviation between activity
+  service start and a place's optional `requestedTime`. Optional `earlyPenalty`
+  and `latePenalty` values are expressed per minute and default to `1`. This is
+  a schedule-adherence objective; it does not minimize pickup-to-delivery ride
+  duration.
 * `hierarchical-areas`: an experimental objective to play with clusters of jobs. Internally uses distance minimization as
   a base penalty.
   * `levels` - number of hierarchy levels

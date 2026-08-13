@@ -3,7 +3,7 @@ use crate::construction::heuristics::ActivityContext;
 use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
 use crate::helpers::models::problem::{FleetBuilder, TestSingleBuilder, test_driver, test_vehicle_with_id};
 use crate::helpers::models::solution::{RouteBuilder, RouteContextBuilder};
-use crate::models::common::{Demand, Distance, Location, Profile, Schedule};
+use crate::models::common::{ConfigurableLoad, Demand, Distance, Location, MultiDimLoad, Profile, Schedule};
 use crate::models::problem::{Multi, TransportCost, TravelTime};
 use crate::models::solution::{Activity, Place, Route};
 use std::sync::Arc;
@@ -87,62 +87,77 @@ fn test_max_ride_duration_dimension_on_multi() {
 
 #[test]
 fn test_is_pickup_detection() {
-    let transport = ScaledTransportCost::new_shared(1.0);
-    let constraint = MaxRideDurationConstraint { code: MAX_RIDE_DURATION_CODE, transport };
-
     // Create a pickup single job
     let mut pickup_builder = TestSingleBuilder::default();
     pickup_builder.demand(Demand::pudo_pickup(1));
     let pickup = pickup_builder.build();
 
-    assert!(constraint.is_pickup(&pickup));
-    assert!(!constraint.is_delivery(&pickup));
+    assert!(is_pickup(&pickup));
+    assert!(!is_delivery(&pickup));
 }
 
 #[test]
 fn test_is_delivery_detection() {
-    let transport = ScaledTransportCost::new_shared(1.0);
-    let constraint = MaxRideDurationConstraint { code: MAX_RIDE_DURATION_CODE, transport };
-
     // Create a delivery single job
     let mut delivery_builder = TestSingleBuilder::default();
     delivery_builder.demand(Demand::pudo_delivery(1));
     let delivery = delivery_builder.build();
 
-    assert!(!constraint.is_pickup(&delivery));
-    assert!(constraint.is_delivery(&delivery));
+    assert!(!is_pickup(&delivery));
+    assert!(is_delivery(&delivery));
+}
+
+fn configurable_pudo_pickup_demand(value: i32) -> Demand<ConfigurableLoad> {
+    Demand {
+        pickup: (ConfigurableLoad::default(), ConfigurableLoad::from_load(vec![value])),
+        delivery: (ConfigurableLoad::default(), ConfigurableLoad::default()),
+    }
+}
+
+fn configurable_pudo_delivery_demand(value: i32) -> Demand<ConfigurableLoad> {
+    Demand {
+        pickup: (ConfigurableLoad::default(), ConfigurableLoad::default()),
+        delivery: (ConfigurableLoad::default(), ConfigurableLoad::from_load(vec![value])),
+    }
+}
+
+fn multi_dim_pudo_pickup_demand(value: i32) -> Demand<MultiDimLoad> {
+    Demand {
+        pickup: (MultiDimLoad::default(), MultiDimLoad::new(vec![value])),
+        delivery: (MultiDimLoad::default(), MultiDimLoad::default()),
+    }
+}
+
+fn multi_dim_pudo_delivery_demand(value: i32) -> Demand<MultiDimLoad> {
+    Demand {
+        pickup: (MultiDimLoad::default(), MultiDimLoad::default()),
+        delivery: (MultiDimLoad::default(), MultiDimLoad::new(vec![value])),
+    }
 }
 
 #[test]
-fn test_is_same_job_detection() {
-    let transport = ScaledTransportCost::new_shared(1.0);
-    let constraint = MaxRideDurationConstraint { code: MAX_RIDE_DURATION_CODE, transport };
-
-    // Create a pickup single
-    let mut pickup_builder = TestSingleBuilder::default();
-    pickup_builder.demand(Demand::pudo_pickup(1));
-    let pickup = pickup_builder.build_shared();
-
-    // Create a delivery single
-    let mut delivery_builder = TestSingleBuilder::default();
-    delivery_builder.demand(Demand::pudo_delivery(1));
-    let delivery = delivery_builder.build_shared();
-
-    // Create Multi job - note: do not clone the Arc before passing to Multi
-    let dimens: Dimensions = Default::default();
-    let multi = Multi::new_shared(vec![pickup, delivery], dimens);
-
-    // Get references to the bound singles
-    let pickup_single = &multi.jobs[0];
-    let delivery_single = &multi.jobs[1];
-
-    // Verify same job detection
-    assert!(constraint.is_same_job(pickup_single, delivery_single));
-    assert!(constraint.is_same_job(delivery_single, pickup_single));
-
-    // Create a different single
-    let different = TestSingleBuilder::default().build();
-    assert!(!constraint.is_same_job(pickup_single, &different));
+fn test_pickup_and_delivery_detection_with_configurable_and_multi_dim_demand() {
+    for (pickup, delivery) in [
+        {
+            let mut pickup = TestSingleBuilder::default();
+            pickup.demand(configurable_pudo_pickup_demand(1));
+            let mut delivery = TestSingleBuilder::default();
+            delivery.demand(configurable_pudo_delivery_demand(1));
+            (pickup.build(), delivery.build())
+        },
+        {
+            let mut pickup = TestSingleBuilder::default();
+            pickup.demand(multi_dim_pudo_pickup_demand(1));
+            let mut delivery = TestSingleBuilder::default();
+            delivery.demand(multi_dim_pudo_delivery_demand(1));
+            (pickup.build(), delivery.build())
+        },
+    ] {
+        assert!(is_pickup(&pickup));
+        assert!(!is_delivery(&pickup));
+        assert!(!is_pickup(&delivery));
+        assert!(is_delivery(&delivery));
+    }
 }
 
 // Helper to create a pickup activity with specific location and schedule
@@ -183,6 +198,109 @@ fn create_pudo_multi_job(max_ride_duration: Option<Duration>) -> Arc<Multi> {
     }
 
     Multi::new_shared(vec![pickup, delivery], dimens)
+}
+
+fn create_configurable_pudo_multi_job(max_ride_duration: Duration) -> Arc<Multi> {
+    let mut pickup_builder = TestSingleBuilder::default();
+    pickup_builder.demand(configurable_pudo_pickup_demand(1));
+    pickup_builder.location(Some(10));
+    let pickup = pickup_builder.build_shared();
+
+    let mut delivery_builder = TestSingleBuilder::default();
+    delivery_builder.demand(configurable_pudo_delivery_demand(1));
+    delivery_builder.location(Some(20));
+    let delivery = delivery_builder.build_shared();
+
+    let mut dimens: Dimensions = Default::default();
+    dimens.set_job_max_ride_duration(max_ride_duration);
+    Multi::new_shared(vec![pickup, delivery], dimens)
+}
+
+#[test]
+fn test_delivery_insertion_violates_max_ride_duration_with_configurable_demand() {
+    let transport = ScaledTransportCost::new_shared(100.0);
+    let feature = create_max_ride_duration_feature("test", MAX_RIDE_DURATION_CODE, transport).unwrap();
+    let multi = create_configurable_pudo_multi_job(500.0);
+    let pickup_single = multi.jobs[0].clone();
+    let delivery_single = multi.jobs[1].clone();
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default()
+                .with_vehicle(&fleet, "v1")
+                .add_activity(create_pickup_activity(10, 100.0, pickup_single))
+                .build(),
+        )
+        .build();
+    let delivery_activity = create_delivery_activity(20, delivery_single);
+    let activity_ctx = ActivityContext {
+        index: 1,
+        prev: route_ctx.route().tour.get(1).unwrap(),
+        target: &delivery_activity,
+        next: route_ctx.route().tour.get(2),
+    };
+    let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+    let move_ctx = MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx);
+
+    let result = feature.constraint.unwrap().evaluate(&move_ctx);
+    assert!(result.is_some(), "configurable demand must enforce max ride duration");
+    assert_eq!(result.unwrap().code, MAX_RIDE_DURATION_CODE);
+}
+
+#[test]
+fn test_unrelated_insertion_between_pickup_and_delivery_violates_max_ride_duration() {
+    let transport = ScaledTransportCost::new_shared(100.0);
+    let feature = create_max_ride_duration_feature("test", MAX_RIDE_DURATION_CODE, transport).unwrap();
+    let multi = create_configurable_pudo_multi_job(1500.0);
+    let pickup = create_pickup_activity(10, 100.0, multi.jobs[0].clone());
+    let delivery = create_delivery_activity(20, multi.jobs[1].clone());
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(pickup).add_activity(delivery).build(),
+        )
+        .build();
+
+    // The existing direct ride is 1000 seconds. Inserting an unrelated stop at
+    // location 30 makes the projected ride 3000 seconds.
+    let unrelated = Activity {
+        place: Place { idx: 0, location: 30, duration: 0.0, time: TimeWindow::new(0.0, 10_000.0) },
+        schedule: Schedule::new(0.0, 0.0),
+        job: Some(TestSingleBuilder::default().build_shared()),
+        commute: None,
+    };
+    let activity_ctx = ActivityContext {
+        index: 1,
+        prev: route_ctx.route().tour.get(1).unwrap(),
+        target: &unrelated,
+        next: route_ctx.route().tour.get(2),
+    };
+    let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+    let move_ctx = MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx);
+
+    let result = feature.constraint.unwrap().evaluate(&move_ctx);
+    assert_eq!(result.map(|violation| violation.code), Some(MAX_RIDE_DURATION_CODE));
+}
+
+#[test]
+fn invalid_ride_after_route_change_is_returned_to_unassigned() {
+    let multi = create_configurable_pudo_multi_job(500.0);
+    let job = Job::Multi(multi.clone());
+    let pickup = create_pickup_activity(10, 100.0, multi.jobs[0].clone());
+    let mut delivery = create_delivery_activity(20, multi.jobs[1].clone());
+    delivery.schedule = Schedule::new(1000.0, 1060.0);
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(pickup).add_activity(delivery).build(),
+        )
+        .build();
+    let mut insertion_ctx = TestInsertionContextBuilder::default().with_routes(vec![route_ctx]).build();
+
+    MaxRideDurationState {}.accept_solution_state(&mut insertion_ctx.solution);
+
+    assert!(!insertion_ctx.solution.routes[0].route().tour.contains(&job));
+    assert!(insertion_ctx.solution.unassigned.contains_key(&job));
 }
 
 #[test]

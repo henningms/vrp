@@ -17,8 +17,10 @@
 mod ride_duration_test;
 
 use super::*;
-use crate::models::common::{Duration, SingleDimLoad, Timestamp};
+use crate::models::common::{ConfigurableLoad, Duration, MultiDimLoad, SingleDimLoad, Timestamp};
 use crate::models::problem::{Multi, Single, TransportCost, TravelTime};
+use crate::models::solution::Activity;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 custom_dimension!(pub JobMaxRideDuration typeof Duration);
@@ -32,12 +34,43 @@ pub fn create_max_ride_duration_feature(
     code: ViolationCode,
     transport: Arc<dyn TransportCost>,
 ) -> Result<Feature, GenericError> {
-    FeatureBuilder::default().with_name(name).with_constraint(MaxRideDurationConstraint { code, transport }).build()
+    FeatureBuilder::default()
+        .with_name(name)
+        .with_constraint(MaxRideDurationConstraint { code, transport })
+        .with_state(MaxRideDurationState {})
+        .build()
 }
 
 struct MaxRideDurationConstraint {
     code: ViolationCode,
     transport: Arc<dyn TransportCost>,
+}
+
+struct MaxRideDurationState {}
+
+impl FeatureState for MaxRideDurationState {
+    fn accept_insertion(&self, _: &mut SolutionContext, _: usize, _: &Job) {}
+
+    fn accept_route_state(&self, _: &mut RouteContext) {}
+
+    fn accept_solution_state(&self, solution_ctx: &mut SolutionContext) {
+        // Removing another job can make a pickup happen earlier while its delivery
+        // remains pinned by a later time window. Such a removal is not evaluated as
+        // an insertion move, so remove any newly invalid ride and let the normal
+        // unassigned/recreate flow try it again in a subsequent search iteration.
+        let mut invalid_jobs = Vec::new();
+        for route_ctx in &mut solution_ctx.routes {
+            let jobs = get_violating_jobs(route_ctx);
+            for job in jobs {
+                if route_ctx.route_mut().tour.remove(&job) {
+                    route_ctx.mark_stale(true);
+                    invalid_jobs.push(job);
+                }
+            }
+        }
+
+        solution_ctx.unassigned.extend(invalid_jobs.into_iter().map(|job| (job, UnassignmentInfo::Unknown)));
+    }
 }
 
 impl FeatureConstraint for MaxRideDurationConstraint {
@@ -61,194 +94,130 @@ impl MaxRideDurationConstraint {
         route_ctx: &RouteContext,
         activity_ctx: &ActivityContext,
     ) -> Option<ConstraintViolation> {
-        let target = &activity_ctx.target;
-
-        // Get the job associated with this activity
-        let single = target.job.as_ref()?;
-
-        // Try to get max ride duration from the Multi parent job
-        let max_ride_duration = self.get_max_ride_duration_for_single(single)?;
-
-        // Check if this is a pickup or delivery
-        if self.is_pickup(single) {
-            // For pickup insertion, check if existing deliveries for this job would violate the constraint
-            self.check_pickup_insertion(route_ctx, activity_ctx, single, max_ride_duration)
-        } else if self.is_delivery(single) {
-            // For delivery insertion, check if the ride duration from pickup would be exceeded
-            self.check_delivery_insertion(route_ctx, activity_ctx, single, max_ride_duration)
-        } else {
-            None
-        }
-    }
-
-    /// Gets the max ride duration for a Single that belongs to a Multi job.
-    fn get_max_ride_duration_for_single(&self, single: &Single) -> Option<Duration> {
-        // First check if the Single itself has the max ride duration
-        if let Some(duration) = single.dimens.get_job_max_ride_duration() {
-            return Some(*duration);
-        }
-
-        // Then check the Multi parent via the root
-        if let Some(multi) = Multi::roots(single) {
-            return multi.dimens.get_job_max_ride_duration().copied();
-        }
-
-        None
-    }
-
-    /// Checks if inserting a pickup would cause downstream deliveries to violate the constraint.
-    fn check_pickup_insertion(
-        &self,
-        route_ctx: &RouteContext,
-        activity_ctx: &ActivityContext,
-        pickup_single: &Single,
-        max_ride_duration: Duration,
-    ) -> Option<ConstraintViolation> {
         let route = route_ctx.route();
         let tour = &route.tour;
+        let mut intervals = HashMap::<usize, RideInterval>::new();
 
-        // Calculate when we would depart from this pickup
-        let pickup_departure = self.estimate_departure_time(route_ctx, activity_ctx);
-
-        // Look for the corresponding delivery in the tour (after insertion point)
-        for idx in activity_ctx.index..tour.total() {
-            if let Some(activity) = tour.get(idx)
-                && let Some(delivery_single) = activity.job.as_ref()
-                && self.is_same_job(pickup_single, delivery_single)
-                && self.is_delivery(delivery_single)
-            {
-                // Found the delivery - recalculate its arrival time considering the insertion
-                let delivery_arrival = self.estimate_arrival_at_activity_after_insertion(route_ctx, activity_ctx, idx);
-
-                let ride_duration = delivery_arrival - pickup_departure;
-                if ride_duration > max_ride_duration {
-                    return Some(ConstraintViolation { code: self.code, stopped: false });
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Checks if inserting a delivery would exceed the max ride duration from its pickup.
-    fn check_delivery_insertion(
-        &self,
-        route_ctx: &RouteContext,
-        activity_ctx: &ActivityContext,
-        delivery_single: &Single,
-        max_ride_duration: Duration,
-    ) -> Option<ConstraintViolation> {
-        let route = route_ctx.route();
-        let tour = &route.tour;
-
-        // Look for the corresponding pickup earlier in the tour
-        // Note: activity_ctx.index is the leg index, which corresponds to the index of activity_ctx.prev.
-        // The delivery will be inserted AFTER prev, so we need to check indices 0..=activity_ctx.index
-        // to include prev (which might be the pickup).
+        // Activities through `index` precede the insertion and keep their current schedule.
         for idx in 0..=activity_ctx.index {
-            if let Some(activity) = tour.get(idx)
-                && let Some(pickup_single) = activity.job.as_ref()
-                && self.is_same_job(delivery_single, pickup_single)
-                && self.is_pickup(pickup_single)
-            {
-                // Found the pickup - get its departure time
-                let pickup_departure = activity.schedule.departure;
-
-                // Calculate when we would arrive at the delivery
-                let delivery_arrival = self.estimate_arrival_time(route_ctx, activity_ctx);
-
-                let ride_duration = delivery_arrival - pickup_departure;
-                if ride_duration > max_ride_duration {
-                    return Some(ConstraintViolation { code: self.code, stopped: false });
-                }
-
-                // Found and checked the pickup, no need to continue
-                return None;
-            }
-        }
-
-        None
-    }
-
-    /// Estimates the arrival time at the target activity.
-    fn estimate_arrival_time(&self, route_ctx: &RouteContext, activity_ctx: &ActivityContext) -> Timestamp {
-        let prev = activity_ctx.prev;
-        let target = &activity_ctx.target;
-
-        let travel_duration = self.transport.duration(
-            route_ctx.route(),
-            prev.place.location,
-            target.place.location,
-            TravelTime::Departure(prev.schedule.departure),
-        );
-
-        prev.schedule.departure + travel_duration
-    }
-
-    /// Estimates the departure time from the target activity after insertion.
-    fn estimate_departure_time(&self, route_ctx: &RouteContext, activity_ctx: &ActivityContext) -> Timestamp {
-        let arrival = self.estimate_arrival_time(route_ctx, activity_ctx);
-        let target = &activity_ctx.target;
-
-        // Departure = max(arrival, time_window_start) + service_duration
-        arrival.max(target.place.time.start) + target.place.duration
-    }
-
-    /// Estimates the arrival time at an activity that comes after the insertion point.
-    fn estimate_arrival_at_activity_after_insertion(
-        &self,
-        route_ctx: &RouteContext,
-        activity_ctx: &ActivityContext,
-        target_idx: usize,
-    ) -> Timestamp {
-        let route = route_ctx.route();
-        let tour = &route.tour;
-
-        // Start from the inserted activity's departure
-        let mut current_departure = self.estimate_departure_time(route_ctx, activity_ctx);
-        let mut current_location = activity_ctx.target.place.location;
-
-        // Walk through activities from insertion point to target
-        for idx in activity_ctx.index..=target_idx {
             if let Some(activity) = tour.get(idx) {
-                let travel_duration = self.transport.duration(
-                    route,
-                    current_location,
-                    activity.place.location,
-                    TravelTime::Departure(current_departure),
-                );
-
-                let arrival = current_departure + travel_duration;
-
-                if idx == target_idx {
-                    return arrival;
-                }
-
-                // Update for next iteration
-                current_departure = arrival.max(activity.place.time.start) + activity.place.duration;
-                current_location = activity.place.location;
+                self.record_interval(activity, activity.schedule.arrival, activity.schedule.departure, &mut intervals);
             }
         }
 
-        // Should not reach here
-        current_departure
-    }
+        // Project the inserted activity and every downstream activity using the same
+        // earliest-arrival scheduling rule as the route schedule updater. This is
+        // necessary even when the inserted activity belongs to another job: a stop
+        // inserted between an existing pickup and delivery can lengthen that ride.
+        let mut location = activity_ctx.prev.place.location;
+        let mut departure = activity_ctx.prev.schedule.departure;
 
-    /// Checks if a job activity is a pickup.
-    fn is_pickup(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
-    }
+        let mut project = |activity: &Activity| {
+            let arrival = departure
+                + self.transport.duration(route, location, activity.place.location, TravelTime::Departure(departure));
+            departure = arrival.max(activity.place.time.start) + activity.place.duration;
+            location = activity.place.location;
+            self.record_interval(activity, arrival, departure, &mut intervals);
+        };
 
-    /// Checks if a job activity is a delivery.
-    fn is_delivery(&self, single: &Single) -> bool {
-        single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.delivery.1.is_not_empty())
-    }
-
-    /// Checks if two Singles belong to the same Multi job.
-    fn is_same_job(&self, single1: &Single, single2: &Single) -> bool {
-        match (Multi::roots(single1), Multi::roots(single2)) {
-            (Some(multi1), Some(multi2)) => Arc::ptr_eq(&multi1, &multi2),
-            _ => false,
+        project(activity_ctx.target);
+        for idx in activity_ctx.index + 1..tour.total() {
+            if let Some(activity) = tour.get(idx) {
+                project(activity);
+            }
         }
+
+        intervals.values().find_map(|interval| {
+            interval.pickup_departure.zip(interval.delivery_arrival).and_then(|(pickup, delivery)| {
+                (delivery - pickup > interval.limit).then_some(ConstraintViolation { code: self.code, stopped: false })
+            })
+        })
     }
+
+    fn record_interval(
+        &self,
+        activity: &Activity,
+        arrival: Timestamp,
+        departure: Timestamp,
+        intervals: &mut HashMap<usize, RideInterval>,
+    ) {
+        record_interval(activity, arrival, departure, intervals);
+    }
+}
+
+struct RideInterval {
+    job: Arc<Multi>,
+    limit: Duration,
+    pickup_departure: Option<Timestamp>,
+    delivery_arrival: Option<Timestamp>,
+}
+
+fn get_violating_jobs(route_ctx: &RouteContext) -> Vec<Job> {
+    let mut intervals = HashMap::<usize, RideInterval>::new();
+    route_ctx.route().tour.all_activities().for_each(|activity| {
+        record_interval(activity, activity.schedule.arrival, activity.schedule.departure, &mut intervals)
+    });
+
+    intervals
+        .into_values()
+        .filter(|interval| {
+            interval
+                .pickup_departure
+                .zip(interval.delivery_arrival)
+                .is_some_and(|(pickup, delivery)| delivery - pickup > interval.limit)
+        })
+        .map(|interval| Job::Multi(interval.job))
+        .collect()
+}
+
+fn record_interval(
+    activity: &Activity,
+    arrival: Timestamp,
+    departure: Timestamp,
+    intervals: &mut HashMap<usize, RideInterval>,
+) {
+    let Some(single) = activity.job.as_ref() else { return };
+    let Some(multi) = Multi::roots(single) else { return };
+    let Some(limit) = multi.dimens.get_job_max_ride_duration().copied() else { return };
+    let key = Arc::as_ptr(&multi) as usize;
+    let interval = intervals.entry(key).or_insert_with(|| RideInterval {
+        job: multi,
+        limit,
+        pickup_departure: None,
+        delivery_arrival: None,
+    });
+
+    if is_pickup(single) {
+        interval.pickup_departure = Some(interval.pickup_departure.map_or(departure, |value| value.min(departure)));
+    } else if is_delivery(single) {
+        interval.delivery_arrival = Some(interval.delivery_arrival.map_or(arrival, |value| value.max(arrival)));
+    }
+}
+
+fn is_pickup(single: &Single) -> bool {
+    if let Some(demand) = single.dimens.get_job_demand::<ConfigurableLoad>() {
+        return configurable_load_has_load(&demand.pickup.1);
+    }
+    if let Some(demand) = single.dimens.get_job_demand::<MultiDimLoad>() {
+        return multi_dim_has_load(&demand.pickup.1);
+    }
+    single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
+}
+
+fn is_delivery(single: &Single) -> bool {
+    if let Some(demand) = single.dimens.get_job_demand::<ConfigurableLoad>() {
+        return configurable_load_has_load(&demand.delivery.1);
+    }
+    if let Some(demand) = single.dimens.get_job_demand::<MultiDimLoad>() {
+        return multi_dim_has_load(&demand.delivery.1);
+    }
+    single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.delivery.1.is_not_empty())
+}
+
+fn multi_dim_has_load(load: &MultiDimLoad) -> bool {
+    load.size > 0 && load.load[..load.size].iter().any(|value| *value != 0)
+}
+
+fn configurable_load_has_load(load: &ConfigurableLoad) -> bool {
+    load.size > 0 && load.load[..load.size].iter().any(|value| *value != 0)
 }

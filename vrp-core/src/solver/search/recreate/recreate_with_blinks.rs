@@ -2,6 +2,7 @@
 #[path = "../../../../tests/unit/solver/search/recreate_with_blinks_test.rs"]
 mod recreate_with_blinks_test;
 
+use crate::construction::features::{JobSkillsDimension, VehicleSkillsDimension};
 use crate::construction::heuristics::*;
 use crate::construction::heuristics::{InsertionContext, JobSelector};
 use crate::models::Problem;
@@ -11,6 +12,7 @@ use crate::solver::RefinementContext;
 use crate::solver::search::recreate::Recreate;
 use rosomaxa::prelude::*;
 use rosomaxa::utils::fold_reduce;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// A recreate method as described in "Slack Induction by String Removals for
@@ -38,6 +40,13 @@ pub enum BlinksJobOrdering {
     TimeWindowStart,
     /// Inserts jobs with the latest time-window end first.
     TimeWindowEnd,
+    /// Inserts jobs with the fewest skill-compatible route groups first,
+    /// breaking ties by earliest time-window start.
+    SkillScarcity,
+    /// Inserts jobs with the fewest route groups which pass route-level hard
+    /// constraints first, breaking ties by earliest time-window start. Unlike
+    /// skill scarcity, this also sees capacity and actor time compatibility.
+    RouteScarcity,
 }
 
 impl RecreateWithBlinks {
@@ -91,6 +100,8 @@ impl RecreateWithBlinks {
             BlinksJobOrdering::TimeWindowEnd => {
                 vec![(Box::new(TimeWindowJobSelector::new(TimeWindowSelectionMode::EndDescending)), 1)]
             }
+            BlinksJobOrdering::SkillScarcity => vec![(Box::<SkillScarcityJobSelector>::default(), 1)],
+            BlinksJobOrdering::RouteScarcity => vec![(Box::<RouteScarcityJobSelector>::default(), 1)],
         };
         let mut recreate = Self::new(selectors, 0.01, random.clone());
         if sample_legs {
@@ -405,5 +416,128 @@ impl JobSelector for TimeWindowJobSelector {
                 TimeWindowSelectionMode::EndDescending => end_b.total_cmp(&end_a),
             }
         });
+    }
+}
+
+/// Orders jobs by the number of route groups whose vehicle skills satisfy the
+/// job's skill requirements. This is a one-time prioritization hint only: all
+/// normal hard constraints still decide whether each insertion is feasible.
+/// Earliest time-window start breaks ties to keep scarce scheduled work chronological.
+#[derive(Default)]
+struct SkillScarcityJobSelector {}
+
+impl JobSelector for SkillScarcityJobSelector {
+    fn prepare(&self, insertion_ctx: &mut InsertionContext) {
+        let metrics = {
+            let solution = &insertion_ctx.solution;
+            let routes = solution.routes.iter().chain(solution.registry.next_route()).collect::<Vec<_>>();
+            let mut compatible_counts = HashMap::<JobSkillKey, usize>::new();
+
+            solution
+                .required
+                .iter()
+                .map(|job| {
+                    let skill_key = JobSkillKey::new(job);
+                    let compatible_routes = *compatible_counts.entry(skill_key.clone()).or_insert_with(|| {
+                        routes.iter().filter(|route_ctx| skill_key.is_compatible(route_ctx)).count()
+                    });
+                    let (start, _, length) = TimeWindowJobSelector::get_tw_metric(job);
+                    (job.clone(), (compatible_routes, start, length))
+                })
+                .collect::<HashMap<_, _>>()
+        };
+
+        insertion_ctx.solution.required.sort_by(|a, b| {
+            let (routes_a, start_a, length_a) = metrics[a];
+            let (routes_b, start_b, length_b) = metrics[b];
+
+            routes_a
+                .cmp(&routes_b)
+                .then_with(|| start_a.total_cmp(&start_b))
+                .then_with(|| length_a.total_cmp(&length_b))
+        });
+    }
+}
+
+/// Orders jobs by the number of route groups which pass the goal's route-level
+/// hard constraints. This is deliberately evaluated once before SISR starts:
+/// it captures scarce capacity/skills/actor availability without turning the
+/// constructor back into a repeated all-jobs candidate scan.
+#[derive(Default)]
+struct RouteScarcityJobSelector {}
+
+impl JobSelector for RouteScarcityJobSelector {
+    fn prepare(&self, insertion_ctx: &mut InsertionContext) {
+        let metrics = {
+            let solution = &insertion_ctx.solution;
+            let routes = solution.routes.iter().chain(solution.registry.next_route()).collect::<Vec<_>>();
+
+            solution
+                .required
+                .iter()
+                .map(|job| {
+                    let compatible_routes = routes
+                        .iter()
+                        .filter(|route_ctx| {
+                            insertion_ctx.problem.goal.evaluate(&MoveContext::route(solution, route_ctx, job)).is_none()
+                        })
+                        .count();
+                    let (start, _, length) = TimeWindowJobSelector::get_tw_metric(job);
+                    (job.clone(), (compatible_routes, start, length))
+                })
+                .collect::<HashMap<_, _>>()
+        };
+
+        insertion_ctx.solution.required.sort_by(|a, b| {
+            let (routes_a, start_a, length_a) = metrics[a];
+            let (routes_b, start_b, length_b) = metrics[b];
+
+            routes_a
+                .cmp(&routes_b)
+                .then_with(|| start_a.total_cmp(&start_b))
+                .then_with(|| length_a.total_cmp(&length_b))
+        });
+    }
+}
+
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct JobSkillKey {
+    all_of: Vec<String>,
+    one_of: Vec<String>,
+    none_of: Vec<String>,
+}
+
+impl JobSkillKey {
+    fn new(job: &Job) -> Self {
+        let sorted = |skills: Option<&std::collections::HashSet<String>>| {
+            let mut skills = skills.into_iter().flatten().cloned().collect::<Vec<_>>();
+            skills.sort_unstable();
+            skills
+        };
+        let job_skills = job.dimens().get_job_skills();
+
+        Self {
+            all_of: sorted(job_skills.and_then(|skills| skills.all_of.as_ref())),
+            one_of: sorted(job_skills.and_then(|skills| skills.one_of.as_ref())),
+            none_of: sorted(job_skills.and_then(|skills| skills.none_of.as_ref())),
+        }
+    }
+
+    fn is_compatible(&self, route_ctx: &RouteContext) -> bool {
+        let vehicle_skills = route_ctx.route().actor.vehicle.dimens.get_vehicle_skills();
+        let has_all = |required: &[String]| {
+            required.is_empty()
+                || vehicle_skills.is_some_and(|available| required.iter().all(|skill| available.contains(skill)))
+        };
+        let has_any = |required: &[String]| {
+            required.is_empty()
+                || vehicle_skills.is_some_and(|available| required.iter().any(|skill| available.contains(skill)))
+        };
+        let has_none = |forbidden: &[String]| {
+            forbidden.is_empty()
+                || vehicle_skills.is_none_or(|available| forbidden.iter().all(|skill| !available.contains(skill)))
+        };
+
+        has_all(&self.all_of) && has_any(&self.one_of) && has_none(&self.none_of)
     }
 }

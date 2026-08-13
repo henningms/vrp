@@ -3,7 +3,9 @@ use crate::helpers::*;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::Arc;
-use vrp_core::construction::features::{JobDemandDimension, JobSkillsDimension, VehicleSkillsDimension};
+use vrp_core::construction::features::{
+    JobDemandDimension, JobRequestedTimesDimension, JobSkillsDimension, VehicleSkillsDimension,
+};
 use vrp_core::models::common::*;
 use vrp_core::models::problem::{JobIdDimension, Jobs, Multi, Place, Single, VehicleIdDimension};
 
@@ -271,6 +273,64 @@ fn can_read_complex_problem() {
         );
         assert_vehicle_skills(&vehicle.dimens, Some(vec!["unique1".to_string(), "unique2".to_string()]));
     });
+}
+
+#[test]
+fn can_read_requested_times_with_configurable_capacity() {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![Job {
+                pickups: Some(vec![JobTask {
+                    places: vec![JobPlace {
+                        location: (1., 0.).to_loc(),
+                        duration: 60.,
+                        times: None,
+                        tag: Some("pickup".to_string()),
+                        requested_time: Some("1970-01-01T00:00:10Z".to_string()),
+                    }],
+                    demand: Some(vec![0, 1]),
+                    named_demand: None,
+                    order: None,
+                }]),
+                deliveries: Some(vec![JobTask {
+                    places: vec![JobPlace {
+                        location: (2., 0.).to_loc(),
+                        duration: 60.,
+                        times: None,
+                        tag: Some("delivery".to_string()),
+                        requested_time: Some("1970-01-01T00:00:30Z".to_string()),
+                    }],
+                    demand: Some(vec![0, 1]),
+                    named_demand: None,
+                    order: None,
+                }]),
+                ..create_job("wheelchair_trip")
+            }],
+            ..create_empty_plan()
+        },
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                capacity: None,
+                capacity_configurations: Some(vec![CapacityConfiguration {
+                    name: Some("wheelchair".to_string()),
+                    capacities: vec![4, 1],
+                }]),
+                ..create_default_vehicle("accessible_vehicle")
+            }],
+            capacity_dimensions: Some(vec!["seated".to_string(), "wheelchair".to_string()]),
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().unwrap();
+    let trip = get_multi_job(0, core_problem.jobs.as_ref());
+    let pickup = trip.jobs.first().unwrap();
+    let delivery = trip.jobs.last().unwrap();
+
+    assert_eq!(pickup.dimens.get_job_requested_times().unwrap().get(&0), Some(&10.));
+    assert_eq!(delivery.dimens.get_job_requested_times().unwrap().get(&0), Some(&30.));
 }
 
 #[test]

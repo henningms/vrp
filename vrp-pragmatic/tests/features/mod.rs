@@ -10,6 +10,7 @@ mod flexible_routes;
 mod format;
 mod group;
 mod limits;
+mod line_based;
 mod multjob;
 mod pickdev;
 mod priorities;

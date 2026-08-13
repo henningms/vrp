@@ -82,6 +82,12 @@ pub enum InitialConstruction {
     BlinksSampledTimeWindowStart,
     /// Uses sampled SISR with latest-time-window-end-first job ordering.
     BlinksSampledTimeWindowEnd,
+    /// Uses sampled SISR with skill-scarcity-first job ordering, breaking ties
+    /// chronologically.
+    BlinksSampledSkillScarcity,
+    /// Uses sampled SISR with route-level-compatibility scarcity ordering,
+    /// including capacity and actor time constraints.
+    BlinksSampledRouteScarcity,
     /// Inserts the job farthest from the current solution first.
     Farthest,
     /// Prioritizes jobs with the largest regret between insertion choices.
@@ -289,9 +295,7 @@ pub fn get_default_heuristic_with_search_config(
     search_config: HeuristicSearchConfig,
 ) -> TargetHeuristic {
     Timer::measure_duration_with_callback(
-        || {
-            Box::new(get_dynamic_heuristic_with_search_config(problem, environment.clone(), search_config))
-        },
+        || Box::new(get_dynamic_heuristic_with_search_config(problem, environment.clone(), search_config)),
         |duration| (environment.logger)(format!("getting default heuristic took: {}ms", duration.as_millis()).as_str()),
     )
 }
@@ -595,6 +599,16 @@ mod builder {
                 true,
                 random.clone(),
             )),
+            InitialConstruction::BlinksSampledSkillScarcity => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::SkillScarcity,
+                true,
+                random.clone(),
+            )),
+            InitialConstruction::BlinksSampledRouteScarcity => Arc::new(RecreateWithBlinks::new_with_job_ordering(
+                BlinksJobOrdering::RouteScarcity,
+                true,
+                random.clone(),
+            )),
             InitialConstruction::Farthest => Arc::new(RecreateWithFarthest::new(random.clone())),
             InitialConstruction::Regret => Arc::new(RecreateWithRegret::new(2, 3, random.clone())),
             InitialConstruction::Gaps => {
@@ -718,10 +732,8 @@ fn create_diversify_operators(
         4,
     ))));
 
-    let mut operators: Vec<(TargetSearchOperator, &'static str, usize)> = vec![
-        (redistribute_search, "redistribute", 10),
-        (local_search, "exchange_sequence", 2),
-    ];
+    let mut operators: Vec<(TargetSearchOperator, &'static str, usize)> =
+        vec![(redistribute_search, "redistribute", 10), (local_search, "exchange_sequence", 2)];
 
     if search_config.infeasible_diversification {
         let infeasible_search = Arc::new(InfeasibleSearch::new(
@@ -1113,8 +1125,7 @@ mod dynamic {
 
         let strong_ruins = get_strong_ruins(problem.clone(), &normal_limits, &small_limits);
         let weak_ruins = get_weak_ruins(&normal_limits, &small_limits);
-        let strong_recreates =
-            get_strong_recreates(problem.as_ref(), random.clone(), search_config.bounded_recreates);
+        let strong_recreates = get_strong_recreates(problem.as_ref(), random.clone(), search_config.bounded_recreates);
         let weak_recreates = get_weak_recreates(random.clone(), search_config.bounded_recreates);
 
         // 3:1 weighted mix of random_job and random_route — applied at 0.1 probability to every
@@ -1172,8 +1183,7 @@ mod dynamic {
             })
             .collect::<Vec<_>>();
 
-        let mut operators =
-            get_search_operators(problem.clone(), environment.clone(), search_config.bounded_recreates);
+        let mut operators = get_search_operators(problem.clone(), environment.clone(), search_config.bounded_recreates);
         if !search_config.lkh_search {
             operators.retain(|(_, name, _)| name != "lkh_strict");
         }
@@ -1263,11 +1273,7 @@ mod dynamic {
         Arc::new(DecomposeSearch::new(
             Arc::new(WeightedHeuristicOperator::new(
                 vec![
-                    create_default_inner_ruin_recreate(
-                        problem.clone(),
-                        environment.clone(),
-                        bounded_recreates,
-                    ),
+                    create_default_inner_ruin_recreate(problem.clone(), environment.clone(), bounded_recreates),
                     create_default_good_operator(problem, environment.clone()),
                     create_default_local_search(environment.random.clone()),
                 ],

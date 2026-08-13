@@ -169,6 +169,20 @@ fn multi_dim_pudo_delivery_demand(value: i32) -> Demand<MultiDimLoad> {
     }
 }
 
+fn configurable_pudo_pickup_demand(value: i32) -> Demand<ConfigurableLoad> {
+    Demand {
+        pickup: (ConfigurableLoad::default(), ConfigurableLoad::from_load(vec![value])),
+        delivery: (ConfigurableLoad::default(), ConfigurableLoad::default()),
+    }
+}
+
+fn configurable_pudo_delivery_demand(value: i32) -> Demand<ConfigurableLoad> {
+    Demand {
+        pickup: (ConfigurableLoad::default(), ConfigurableLoad::default()),
+        delivery: (ConfigurableLoad::default(), ConfigurableLoad::from_load(vec![value])),
+    }
+}
+
 #[test]
 fn test_is_pickup_detection_with_multi_dim_demand() {
     let constraint = LifoOrderingConstraint { code: LIFO_VIOLATION_CODE };
@@ -189,6 +203,24 @@ fn test_is_delivery_detection_with_multi_dim_demand() {
     delivery_builder.demand(multi_dim_pudo_delivery_demand(1));
     let delivery = delivery_builder.build();
 
+    assert!(!constraint.is_pickup(&delivery));
+    assert!(constraint.is_delivery(&delivery));
+}
+
+#[test]
+fn test_pickup_and_delivery_detection_with_configurable_demand() {
+    let constraint = LifoOrderingConstraint { code: LIFO_VIOLATION_CODE };
+
+    let mut pickup_builder = TestSingleBuilder::default();
+    pickup_builder.demand(configurable_pudo_pickup_demand(1));
+    let pickup = pickup_builder.build();
+
+    let mut delivery_builder = TestSingleBuilder::default();
+    delivery_builder.demand(configurable_pudo_delivery_demand(1));
+    let delivery = delivery_builder.build();
+
+    assert!(constraint.is_pickup(&pickup));
+    assert!(!constraint.is_delivery(&pickup));
     assert!(!constraint.is_pickup(&delivery));
     assert!(constraint.is_delivery(&delivery));
 }

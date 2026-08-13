@@ -1,4 +1,4 @@
-//! Provides a feature to minimize deviation from requested arrival times.
+//! Provides a feature to minimize deviation from requested service times.
 
 #[cfg(test)]
 #[path = "../../../tests/unit/construction/features/requested_time_test.rs"]
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Stores requested times for each place index in a job.
-/// Key is the place index, value is the requested arrival timestamp.
+/// Key is the place index, value is the requested service-start timestamp.
 pub type RequestedTimes = HashMap<usize, Timestamp>;
 
 custom_dimension!(pub JobRequestedTimes typeof RequestedTimes);
@@ -20,9 +20,9 @@ custom_dimension!(pub JobRequestedTimes typeof RequestedTimes);
 /// Penalty configuration for requested time deviations.
 #[derive(Clone, Debug)]
 pub struct RequestedTimePenalty {
-    /// Penalty per second for arriving early (before requested time).
+    /// Penalty per second for starting service early (before requested time).
     pub early_penalty_per_second: Cost,
-    /// Penalty per second for arriving late (after requested time).
+    /// Penalty per second for starting service late (after requested time).
     pub late_penalty_per_second: Cost,
 }
 
@@ -46,21 +46,21 @@ impl RequestedTimePenalty {
     }
 
     /// Calculates the penalty for a given deviation from requested time.
-    fn calculate_penalty(&self, arrival: Timestamp, requested: Timestamp) -> Cost {
-        if arrival < requested {
-            // Early arrival
-            (requested - arrival) * self.early_penalty_per_second
+    fn calculate_penalty(&self, service_start: Timestamp, requested: Timestamp) -> Cost {
+        if service_start < requested {
+            // Early service
+            (requested - service_start) * self.early_penalty_per_second
         } else {
-            // Late arrival (or on time = 0 penalty)
-            (arrival - requested) * self.late_penalty_per_second
+            // Late service (or on time = 0 penalty)
+            (service_start - requested) * self.late_penalty_per_second
         }
     }
 }
 
-/// Creates a feature that minimizes deviation from requested arrival times.
+/// Creates a feature that minimizes deviation from requested service-start times.
 ///
 /// Jobs with requested times specified (via `JobRequestedTimes` dimension) will be
-/// penalized based on how far the actual arrival deviates from the requested time.
+/// penalized based on how far the actual service start deviates from the requested time.
 pub fn create_requested_time_feature(
     name: &str,
     penalty: RequestedTimePenalty,
@@ -93,28 +93,59 @@ impl FeatureObjective for RequestedTimeObjective {
         match move_ctx {
             MoveContext::Route { .. } => Cost::default(),
             MoveContext::Activity { route_ctx, activity_ctx, .. } => {
-                // Calculate actual arrival time based on travel from previous activity
                 let (_, (prev_to_tar_dur, _)) = calculate_travel(route_ctx, activity_ctx, self.transport.as_ref());
-                let arrival = activity_ctx.prev.schedule.departure + prev_to_tar_dur;
+                let target = activity_ctx.target;
+                let target_arrival = activity_ctx.prev.schedule.departure + prev_to_tar_dur;
+                let target_service_start = target_arrival.max(target.place.time.start);
+                let mut delta = self
+                    .calculate_activity_penalty_with_service_start(target, target_service_start)
+                    .unwrap_or_default();
 
-                self.calculate_activity_penalty_with_arrival(activity_ctx.target, arrival).unwrap_or_default()
+                // An insertion can delay every downstream requested-time activity.
+                // Include that full delta instead of scoring only the new target.
+                let route = route_ctx.route();
+                let mut location = target.place.location;
+                let mut departure = target_service_start + target.place.duration;
+                for idx in activity_ctx.index + 1..route.tour.total() {
+                    let Some(activity) = route.tour.get(idx) else { continue };
+                    delta -= self.calculate_activity_penalty(activity).unwrap_or_default();
+                    let arrival = departure
+                        + self.transport.duration(
+                            route,
+                            location,
+                            activity.place.location,
+                            crate::models::problem::TravelTime::Departure(departure),
+                        );
+                    let service_start = arrival.max(activity.place.time.start);
+                    delta +=
+                        self.calculate_activity_penalty_with_service_start(activity, service_start).unwrap_or_default();
+                    departure = service_start + activity.place.duration;
+                    location = activity.place.location;
+                }
+
+                delta
             }
         }
     }
 }
 
 impl RequestedTimeObjective {
-    /// Calculates penalty for an activity using its scheduled arrival time.
+    /// Calculates penalty for an activity using its scheduled service-start time.
     fn calculate_activity_penalty(&self, activity: &Activity) -> Option<Cost> {
-        self.calculate_activity_penalty_with_arrival(activity, activity.schedule.arrival)
+        let service_start = activity.schedule.arrival.max(activity.place.time.start);
+        self.calculate_activity_penalty_with_service_start(activity, service_start)
     }
 
-    /// Calculates penalty for an activity with a given arrival time.
-    fn calculate_activity_penalty_with_arrival(&self, activity: &Activity, arrival: Timestamp) -> Option<Cost> {
+    /// Calculates penalty for an activity with a given service-start time.
+    fn calculate_activity_penalty_with_service_start(
+        &self,
+        activity: &Activity,
+        service_start: Timestamp,
+    ) -> Option<Cost> {
         let single = activity.job.as_ref()?;
         let requested_times = single.dimens.get_job_requested_times()?;
         let requested_time = requested_times.get(&activity.place.idx)?;
 
-        Some(self.penalty.calculate_penalty(arrival, *requested_time))
+        Some(self.penalty.calculate_penalty(service_start, *requested_time))
     }
 }

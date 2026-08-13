@@ -184,6 +184,8 @@ fn can_configure_initial_construction() {
         "blinks-sampled-tw-length",
         "blinks-sampled-tw-start",
         "blinks-sampled-tw-end",
+        "blinks-sampled-skill-scarcity",
+        "blinks-sampled-route-scarcity",
         "farthest",
         "regret",
         "gaps",
@@ -201,10 +203,7 @@ fn can_configure_initial_construction() {
 #[test]
 fn can_disable_infeasible_diversification_without_config_file() {
     let matches = get_solomon_matches(&["--disable-infeasible-diversification"]);
-    assert_eq!(
-        matches.get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME),
-        Some(&true)
-    );
+    assert_eq!(matches.get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME), Some(&true));
 
     let args = vec![
         "solve",
@@ -222,14 +221,7 @@ fn can_disable_lkh_search_without_config_file() {
     let matches = get_solomon_matches(&["--disable-lkh-search"]);
     assert_eq!(matches.get_one::<bool>(DISABLE_LKH_SEARCH_ARG_NAME), Some(&true));
 
-    let args = vec![
-        "solve",
-        "solomon",
-        SOLOMON_PROBLEM_PATH,
-        "--disable-lkh-search",
-        "--config",
-        "config.json",
-    ];
+    let args = vec!["solve", "solomon", SOLOMON_PROBLEM_PATH, "--disable-lkh-search", "--config", "config.json"];
     assert!(get_solve_app().try_get_matches_from(args).is_err());
 }
 
@@ -238,14 +230,7 @@ fn can_enable_bounded_recreates_without_config_file() {
     let matches = get_solomon_matches(&["--bounded-recreates"]);
     assert_eq!(matches.get_one::<bool>(BOUNDED_RECREATES_ARG_NAME), Some(&true));
 
-    let args = vec![
-        "solve",
-        "solomon",
-        SOLOMON_PROBLEM_PATH,
-        "--bounded-recreates",
-        "--config",
-        "config.json",
-    ];
+    let args = vec!["solve", "solomon", SOLOMON_PROBLEM_PATH, "--bounded-recreates", "--config", "config.json"];
     assert!(get_solve_app().try_get_matches_from(args).is_err());
 }
 

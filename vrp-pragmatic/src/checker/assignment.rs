@@ -19,9 +19,70 @@ pub fn check_assignment(ctx: &CheckerContext) -> Result<(), Vec<GenericError>> {
         check_jobs_presence(ctx),
         check_jobs_match(ctx),
         check_fixed_order(ctx),
+        check_max_ride_duration(ctx),
         check_solo_riding(ctx),
+        check_lifo(ctx),
         check_groups(ctx),
     ])
+}
+
+/// Checks the final scheduled interval constrained by `maxRideDuration`.
+///
+/// For jobs with multiple pickups/deliveries, the earliest pickup departure to
+/// latest delivery arrival is the longest passenger/item ride and therefore the
+/// conservative interval to validate.
+fn check_max_ride_duration(ctx: &CheckerContext) -> GenericResult<()> {
+    let constrained_jobs = ctx
+        .problem
+        .plan
+        .jobs
+        .iter()
+        .filter_map(|job| job.max_ride_duration.map(|limit| (job.id.as_str(), limit)))
+        .collect::<HashMap<_, _>>();
+    if constrained_jobs.is_empty() {
+        return Ok(());
+    }
+
+    ctx.solution.tours.iter().try_for_each(|tour| {
+        let mut intervals = HashMap::<&str, (Vec<Float>, Vec<Float>)>::new();
+        for stop in &tour.stops {
+            let schedule = stop.schedule();
+            for activity in stop.activities() {
+                if !constrained_jobs.contains_key(activity.job_id.as_str()) {
+                    continue;
+                }
+                let entry = intervals.entry(activity.job_id.as_str()).or_default();
+                match activity.activity_type.as_str() {
+                    "pickup" => {
+                        entry.0.push(parse_time(activity.time.as_ref().map_or(&schedule.departure, |time| &time.end)))
+                    }
+                    "delivery" => {
+                        entry.1.push(parse_time(activity.time.as_ref().map_or(&schedule.arrival, |time| &time.start)))
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        intervals.into_iter().try_for_each(|(job_id, (pickups, deliveries))| {
+            if pickups.is_empty() || deliveries.is_empty() {
+                return Ok(());
+            }
+            let pickup_departure = pickups.into_iter().min_by(Float::total_cmp).unwrap();
+            let delivery_arrival = deliveries.into_iter().max_by(Float::total_cmp).unwrap();
+            let ride_duration = delivery_arrival - pickup_departure;
+            let limit = constrained_jobs[job_id];
+            if ride_duration > limit + 1. {
+                Err(format!(
+                    "max ride duration is not respected for job '{}': duration {:.0}s exceeds {:.0}s",
+                    job_id, ride_duration, limit
+                )
+                .into())
+            } else {
+                Ok(())
+            }
+        })
+    })
 }
 
 /// Checks that vehicles in each tour are used once per shift and they are known in problem.
@@ -376,6 +437,93 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
                         tour.vehicle_id, tour.shift_index, activity_idx, solo_job_id
                     )
                     .into());
+                }
+
+                Ok(())
+            })
+    })
+}
+
+/// Checks that dynamic pickup-delivery jobs follow LIFO ordering when their `lifoTag` is enforced
+/// by the concrete vehicle. Each enforced tag has its own independent stack, matching the solver's
+/// LIFO feature semantics.
+fn check_lifo(ctx: &CheckerContext) -> GenericResult<()> {
+    let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
+
+    if !jobs.values().any(|job| job.lifo_tag.is_some()) {
+        return Ok(());
+    }
+
+    ctx.solution.tours.iter().try_for_each(|tour| {
+        let vehicle = ctx
+            .problem
+            .fleet
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.vehicle_ids.contains(&tour.vehicle_id))
+            .ok_or_else(|| GenericError::from(format!("cannot check LIFO for unknown vehicle '{}'", tour.vehicle_id)))?;
+        let enforced_tags = vehicle
+            .lifo_tags
+            .iter()
+            .flatten()
+            .map(String::as_str)
+            .collect::<HashSet<_>>();
+
+        if enforced_tags.is_empty() {
+            return Ok(());
+        }
+
+        let mut stacks = HashMap::<&str, Vec<&str>>::new();
+
+        tour.stops
+            .iter()
+            .flat_map(|stop| stop.activities())
+            .enumerate()
+            .try_for_each(|(activity_idx, activity)| {
+                let Some(job) = jobs.get(activity.job_id.as_str()) else {
+                    return Ok(());
+                };
+                let Some(lifo_tag) = job.lifo_tag.as_deref().filter(|tag| enforced_tags.contains(tag)) else {
+                    return Ok(());
+                };
+                let Some(task) = get_activity_task(job, activity)? else {
+                    return Ok(());
+                };
+
+                if !is_dynamic_task(job, activity.activity_type.as_str(), task) {
+                    return Ok(());
+                }
+
+                let job_id = job.id.as_str();
+                let stack = stacks.entry(lifo_tag).or_default();
+
+                match activity.activity_type.as_str() {
+                    "pickup" => stack.push(job_id),
+                    "delivery" => match stack.last().copied() {
+                        Some(expected_job_id) if expected_job_id == job_id => {
+                            stack.pop();
+                        }
+                        Some(expected_job_id) => {
+                            return Err(format!(
+                                "LIFO order is not respected in tour '{}'/{} at activity {} for tag '{}': delivery job '{}' expected job '{}' on top of the stack",
+                                tour.vehicle_id,
+                                tour.shift_index,
+                                activity_idx,
+                                lifo_tag,
+                                job_id,
+                                expected_job_id
+                            )
+                            .into());
+                        }
+                        None => {
+                            return Err(format!(
+                                "LIFO order is not respected in tour '{}'/{} at activity {} for tag '{}': delivery job '{}' has no matching pickup on the stack",
+                                tour.vehicle_id, tour.shift_index, activity_idx, lifo_tag, job_id
+                            )
+                            .into());
+                        }
+                    },
+                    _ => {}
                 }
 
                 Ok(())

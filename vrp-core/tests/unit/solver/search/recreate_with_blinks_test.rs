@@ -1,9 +1,14 @@
 use super::*;
+use crate::construction::features::{CapacityFeatureBuilder, JobSkills, JobSkillsDimension, VehicleSkillsDimension};
 use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
-use crate::helpers::models::domain::TestGoalContextBuilder;
-use crate::helpers::models::problem::{TestSingleBuilder, test_multi_with_id};
+use crate::helpers::models::domain::{TestGoalContextBuilder, test_random};
+use crate::helpers::models::problem::{
+    FleetBuilder, TestSingleBuilder, TestVehicleBuilder, get_job_id, get_vehicle_id, test_driver, test_multi_with_id,
+};
 use crate::helpers::models::solution::{ActivityBuilder, RouteBuilder, RouteContextBuilder};
 use crate::helpers::utils::random::FakeRandom;
+use crate::models::common::{Demand, SingleDimLoad, TimeWindow};
+use crate::models::solution::Registry;
 use crate::models::{ConstraintViolation, FeatureBuilder, FeatureConstraint, ViolationCode};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -106,4 +111,81 @@ fn evaluates_only_first_non_blinked_suffix_for_exhaustive_multi_job() {
     assert_eq!(success.cost, expected.cost);
     assert_eq!(summarize(success), summarize(expected));
     assert_eq!(success.activities.len(), 2);
+}
+
+#[test]
+fn orders_jobs_by_skill_scarcity_then_time_window_start() {
+    let vehicle = |id: &str, skills: &[&str]| {
+        let mut builder = TestVehicleBuilder::default();
+        builder.id(id).dimens_mut().set_vehicle_skills(skills.iter().map(|skill| (*skill).to_string()).collect());
+        builder.build()
+    };
+    let fleet = Arc::new(
+        FleetBuilder::default()
+            .add_driver(test_driver())
+            .add_vehicles(vec![vehicle("v1", &["common", "rare"]), vehicle("v2", &["common"])])
+            .with_group_key_fn(Box::new(|_| {
+                Box::new(|actor| if get_vehicle_id(&actor.vehicle) == "v1" { 0 } else { 1 })
+            }))
+            .build(),
+    );
+    let registry = Registry::new(fleet.as_ref(), test_random());
+    let mut insertion_ctx = TestInsertionContextBuilder::default().with_fleet(fleet).with_registry(registry).build();
+    let job = |id: &str, start: f64, end: f64, skill: &str| {
+        let mut builder = TestSingleBuilder::default();
+        builder.id(id).times(vec![TimeWindow::new(start, end)]).dimens_mut().set_job_skills(JobSkills::new(
+            Some(vec![skill.to_string()]),
+            None,
+            None,
+        ));
+        builder.build_as_job_ref()
+    };
+    insertion_ctx.solution.required = vec![
+        job("common", 0., 100., "common"),
+        job("scarce-late", 20., 40., "rare"),
+        job("scarce-early", 10., 30., "rare"),
+    ];
+
+    SkillScarcityJobSelector::default().prepare(&mut insertion_ctx);
+
+    assert_eq!(
+        insertion_ctx.solution.required.iter().map(get_job_id).cloned().collect::<Vec<_>>(),
+        vec!["scarce-early", "scarce-late", "common"]
+    );
+}
+
+#[test]
+fn orders_jobs_by_route_capacity_scarcity_then_time_window_start() {
+    let vehicle = |id: &str, capacity: i32| TestVehicleBuilder::default().id(id).capacity(capacity).build();
+    let fleet = Arc::new(
+        FleetBuilder::default()
+            .add_driver(test_driver())
+            .add_vehicles(vec![vehicle("large", 10), vehicle("small", 4)])
+            .with_group_key_fn(Box::new(|_| {
+                Box::new(|actor| if get_vehicle_id(&actor.vehicle) == "large" { 0 } else { 1 })
+            }))
+            .build(),
+    );
+    let goal = TestGoalContextBuilder::default()
+        .add_feature(CapacityFeatureBuilder::<SingleDimLoad>::new("capacity").build().unwrap())
+        .build();
+    let registry = Registry::new(fleet.as_ref(), test_random());
+    let mut insertion_ctx =
+        TestInsertionContextBuilder::default().with_goal(goal).with_fleet(fleet).with_registry(registry).build();
+    let job = |id: &str, start: f64, end: f64, demand: i32| {
+        TestSingleBuilder::default()
+            .id(id)
+            .times(vec![TimeWindow::new(start, end)])
+            .demand(Demand::pickup(demand))
+            .build_as_job_ref()
+    };
+    insertion_ctx.solution.required =
+        vec![job("common", 0., 100., 2), job("scarce-late", 20., 40., 8), job("scarce-early", 10., 30., 8)];
+
+    RouteScarcityJobSelector::default().prepare(&mut insertion_ctx);
+
+    assert_eq!(
+        insertion_ctx.solution.required.iter().map(get_job_id).cloned().collect::<Vec<_>>(),
+        vec!["scarce-early", "scarce-late", "common"]
+    );
 }
