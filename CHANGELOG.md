@@ -8,6 +8,24 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.34.0] 2026-08-13
+
+### Added
+
+* add opt-in sampled Blink/SISR initial constructors which prioritize jobs by
+  skill scarcity or route-level hard-constraint scarcity; `blinks-tw-start`
+  and the default dynamic portfolio are unchanged
+* validate `maxRideDuration` and LIFO constraints in pragmatic solutions
+* add end-to-end scheduled-line and incremental-insertion regression coverage
+
+### Fixed
+
+* enforce `maxRideDuration` after changes to any activity in an existing route,
+  including pickup-delivery jobs using configurable capacity
+* recognize configurable-capacity pickup and delivery demand in LIFO constraints
+* score `match-requested-time` against service start after waiting and include
+  insertion delays to downstream requested-time activities
+
 ### Changed
 
 * migrate to rust 2024 edition
