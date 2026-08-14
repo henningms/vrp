@@ -299,7 +299,7 @@ fn append_check_agrees_with_full_solve_on_windowed_route_with_waiting() {
     let (full_problem, full_matrix) =
         build_problem_and_matrix_with_extra(vec![windowed_vehicle(1000)], all_jobs, &extra);
     let solved = solve_with_metaheuristic_and_iterations(full_problem, Some(vec![full_matrix]), 200);
-    let solve_places_candidate = solved.unassigned.as_ref().map_or(true, |u| u.is_empty());
+    let solve_places_candidate = solved.unassigned.as_ref().is_none_or(|u| u.is_empty());
 
     assert!(
         fast.is_feasible,

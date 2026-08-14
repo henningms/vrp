@@ -79,7 +79,7 @@ fn new_with_extra_locations_registers_candidate_coordinates() {
 
     // Registered as an extra location, it resolves to the next free index,
     // appended AFTER all problem coordinates, and grows the matrix dimension.
-    let index = CoordIndex::new_with_extra_locations(&problem, &[candidate_loc.clone()]);
+    let index = CoordIndex::new_with_extra_locations(&problem, std::slice::from_ref(&candidate_loc));
     assert_eq!(index.get_by_loc(&candidate_loc), Some(problem_coord_count));
     assert_eq!(index.max_matrix_index(), problem_coord_count);
 
@@ -87,7 +87,7 @@ fn new_with_extra_locations_registers_candidate_coordinates() {
     // (dedup), so passing it as an extra does not create a phantom column.
     let existing = (1., 0.).to_loc();
     let plain_existing = CoordIndex::new(&problem).get_by_loc(&existing);
-    let dedup = CoordIndex::new_with_extra_locations(&problem, &[existing.clone()]);
+    let dedup = CoordIndex::new_with_extra_locations(&problem, std::slice::from_ref(&existing));
     assert_eq!(dedup.get_by_loc(&existing), plain_existing);
     assert_eq!(dedup.max_matrix_index() + 1, problem_coord_count);
 }
