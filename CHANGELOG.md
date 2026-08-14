@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.34.1] 2026-08-14
+
 ### Fixed
 
 * include waiting before delivery service when enforcing `maxRideDuration`,
