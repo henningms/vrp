@@ -128,7 +128,7 @@ impl MaxRideDurationConstraint {
         }
 
         intervals.values().find_map(|interval| {
-            interval.pickup_departure.zip(interval.delivery_arrival).and_then(|(pickup, delivery)| {
+            interval.pickup_departure.zip(interval.delivery_service_start).and_then(|(pickup, delivery)| {
                 (delivery - pickup > interval.limit).then_some(ConstraintViolation { code: self.code, stopped: false })
             })
         })
@@ -149,7 +149,7 @@ struct RideInterval {
     job: Arc<Multi>,
     limit: Duration,
     pickup_departure: Option<Timestamp>,
-    delivery_arrival: Option<Timestamp>,
+    delivery_service_start: Option<Timestamp>,
 }
 
 fn get_violating_jobs(route_ctx: &RouteContext) -> Vec<Job> {
@@ -163,7 +163,7 @@ fn get_violating_jobs(route_ctx: &RouteContext) -> Vec<Job> {
         .filter(|interval| {
             interval
                 .pickup_departure
-                .zip(interval.delivery_arrival)
+                .zip(interval.delivery_service_start)
                 .is_some_and(|(pickup, delivery)| delivery - pickup > interval.limit)
         })
         .map(|interval| Job::Multi(interval.job))
@@ -184,13 +184,15 @@ fn record_interval(
         job: multi,
         limit,
         pickup_departure: None,
-        delivery_arrival: None,
+        delivery_service_start: None,
     });
 
     if is_pickup(single) {
         interval.pickup_departure = Some(interval.pickup_departure.map_or(departure, |value| value.min(departure)));
     } else if is_delivery(single) {
-        interval.delivery_arrival = Some(interval.delivery_arrival.map_or(arrival, |value| value.max(arrival)));
+        let service_start = arrival.max(activity.place.time.start);
+        interval.delivery_service_start =
+            Some(interval.delivery_service_start.map_or(service_start, |value| value.max(service_start)));
     }
 }
 

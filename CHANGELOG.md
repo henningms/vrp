@@ -8,6 +8,11 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Fixed
+
+* include waiting before delivery service when enforcing `maxRideDuration`,
+  keeping construction and final-solution validation consistent
+
 ## [1.34.0] 2026-08-13
 
 ### Added

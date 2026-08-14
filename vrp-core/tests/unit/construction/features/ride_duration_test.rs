@@ -304,6 +304,56 @@ fn invalid_ride_after_route_change_is_returned_to_unassigned() {
 }
 
 #[test]
+fn delivery_waiting_is_included_in_insertion_ride_duration() {
+    let transport = ScaledTransportCost::new_shared(10.0);
+    let feature = create_max_ride_duration_feature("test", MAX_RIDE_DURATION_CODE, transport).unwrap();
+    let multi = create_configurable_pudo_multi_job(500.0);
+    let pickup = create_pickup_activity(10, 100.0, multi.jobs[0].clone());
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(pickup).build())
+        .build();
+    let mut delivery = create_delivery_activity(11, multi.jobs[1].clone());
+    delivery.place.time = TimeWindow::new(700.0, 1_000.0);
+    let activity_ctx = ActivityContext {
+        index: 1,
+        prev: route_ctx.route().tour.get(1).unwrap(),
+        target: &delivery,
+        next: route_ctx.route().tour.get(2),
+    };
+    let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+    let move_ctx = MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx);
+
+    // Physical arrival is 110, but delivery service cannot begin until 700.
+    // The onboard interval is therefore 600 seconds rather than 10 seconds.
+    let result = feature.constraint.unwrap().evaluate(&move_ctx);
+
+    assert_eq!(result.map(|violation| violation.code), Some(MAX_RIDE_DURATION_CODE));
+}
+
+#[test]
+fn delivery_waiting_is_included_when_invalid_ride_is_returned_to_unassigned() {
+    let multi = create_configurable_pudo_multi_job(500.0);
+    let job = Job::Multi(multi.clone());
+    let pickup = create_pickup_activity(10, 100.0, multi.jobs[0].clone());
+    let mut delivery = create_delivery_activity(20, multi.jobs[1].clone());
+    delivery.place.time = TimeWindow::new(700.0, 1_000.0);
+    delivery.schedule = Schedule::new(400.0, 760.0);
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(pickup).add_activity(delivery).build(),
+        )
+        .build();
+    let mut insertion_ctx = TestInsertionContextBuilder::default().with_routes(vec![route_ctx]).build();
+
+    MaxRideDurationState {}.accept_solution_state(&mut insertion_ctx.solution);
+
+    assert!(!insertion_ctx.solution.routes[0].route().tour.contains(&job));
+    assert!(insertion_ctx.solution.unassigned.contains_key(&job));
+}
+
+#[test]
 fn test_delivery_insertion_violates_max_ride_duration() {
     // Create transport that takes 100 seconds per unit distance
     // Distance from location 10 to 20 = 10 units = 1000 seconds travel
