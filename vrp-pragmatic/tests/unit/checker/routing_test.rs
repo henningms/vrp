@@ -1,5 +1,6 @@
 use super::*;
 use crate::helpers::*;
+use std::sync::Arc;
 use vrp_core::models::examples::create_example_problem;
 
 fn create_test_problem() -> Problem {
@@ -140,4 +141,78 @@ fn can_check_solution_statistic() {
             .into()
         ])
     );
+}
+
+/// The solution format only stores whole-second timestamps: a real (sub-second) departure of
+/// 3.5s round-trips through it as "3". A road leg doesn't care when you leave, but a ferry's
+/// sailing choice is a step function of departure - reproduces the scenario that motivated
+/// bracketing the truncated departure with `departure + 1`: the vehicle's real 3.5s departure
+/// reaches the quay at 4.5s, missing the 4.2s sailing and catching the 20s one instead (arriving
+/// at 26.0s: 3.5 + 1 approach + 15.5 wait + 5 crossing + 1 egress). A checker that only tried the
+/// truncated 3s departure would compute reaching the quay at 4.0s, catch the 4.2s sailing, and
+/// expect an arrival around 10s - sixteen seconds off and far outside the 1s tolerance.
+#[test]
+fn ferry_leg_resolves_correctly_despite_departure_truncated_to_whole_seconds() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings {
+        a_to_b: vec![FerrySailing { dep: 4.2, arr: 4.3 }, FerrySailing { dep: 20., arr: 21. }],
+        b_to_a: vec![],
+    };
+
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+    // the real core problem (with the ferry index published in `Extras`), not
+    // `create_example_problem()` - this test is specifically about the ferry-aware branch of
+    // `check_routing`, which only activates when `Extras` actually carries one.
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+
+    let solution = SolutionBuilder::default()
+        .tour(
+            TourBuilder::default()
+                .stops(vec![
+                    // real departure 3.5s; `schedule_stamp` truncates it to "3" via `format_time`,
+                    // exactly as a real solve's serialized output would.
+                    StopBuilder::default()
+                        .coordinate((0., 0.))
+                        .schedule_stamp(0., 3.5)
+                        .distance(0)
+                        .load(vec![1])
+                        .build_departure(),
+                    // the real, correct arrival, from the true 3.5s departure catching the 20s
+                    // sailing (see the function doc for the arithmetic).
+                    StopBuilder::default()
+                        .coordinate((100., 0.))
+                        .schedule_stamp(26., 26.)
+                        .distance(0)
+                        .load(vec![0])
+                        .build_single("job1", "delivery"),
+                    // the return leg has no B-to-A sailings, so it resolves as the direct 100s
+                    // road leg regardless of departure: 26 + 100 = 126.
+                    StopBuilder::default()
+                        .coordinate((0., 0.))
+                        .schedule_stamp(126., 126.)
+                        .distance(0)
+                        .load(vec![0])
+                        .build_arrival(),
+                ])
+                .statistic(Statistic {
+                    cost: 0.,
+                    distance: 0,
+                    duration: 123, // 126 (final departure) - 3 (truncated first departure)
+                    times: Timing { driving: 123, serving: 0, waiting: 0, break_time: 0, commuting: 0, parking: 0 },
+                })
+                .build(),
+        )
+        .build();
+
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
+
+    assert_eq!(check_routing(&ctx), Ok(()));
 }

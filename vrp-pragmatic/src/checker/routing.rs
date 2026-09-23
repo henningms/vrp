@@ -43,14 +43,38 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
             })
             .transpose()?;
 
-        let get_matrix_data = |from: &PointStop, to: &PointStop| -> GenericResult<(i64, i64)> {
+        // `departure` is the fold's running `arrival_time` from just before this leg (the
+        // truncated departure this leg actually starts from - see the call sites: for a plain
+        // Point-Point leg that's `from`'s own departure, for a Transit-Point leg (resuming after
+        // a break) it's the transit stop's departure, not the point stop before the break).
+        let get_matrix_data = |from: &PointStop, to: &PointStop, departure: i64| -> GenericResult<(i64, i64)> {
             let from_idx = context.get_location_index(&from.location)?;
             let to_idx = context.get_location_index(&to.location)?;
 
             if let Some((transport, route)) = &ferry_aware {
-                let travel_time = TravelTime::Departure(parse_time(&from.time.departure));
-                let distance = transport.distance(route, from_idx, to_idx, travel_time) as i64;
-                let duration = transport.duration(route, from_idx, to_idx, travel_time) as i64;
+                // the solution format only stores whole-second timestamps, so a fractional real
+                // departure (e.g. 3.5s, from a non-integer service duration or profile scale)
+                // round-trips through `departure` as its truncation - harmless for a road
+                // duration, which does not depend on when you leave, but not for a ferry, whose
+                // sailing choice is a step function of departure: resolving at the truncated
+                // instant can catch a sailing the solver's real, later departure actually missed.
+                // Truncation only ever rounds down by less than a second, so the true departure
+                // lies in `[departure, departure + 1)`; trying both endpoints and keeping whichever
+                // reproduces the reported arrival disambiguates the sailing without having to
+                // recover the real fractional departure, which this format cannot represent.
+                let expected_arrival = parse_time(&to.time.arrival) as i64;
+                let resolve = |departure: Float| {
+                    let travel_time = TravelTime::Departure(departure);
+                    let distance = transport.distance(route, from_idx, to_idx, travel_time) as i64;
+                    let duration = transport.duration(route, from_idx, to_idx, travel_time) as i64;
+                    (distance, duration)
+                };
+
+                let candidates = [resolve(departure as Float), resolve(departure as Float + 1.)];
+                let (distance, duration) = candidates
+                    .into_iter()
+                    .min_by_key(|&(_, duration)| (departure + duration - expected_arrival).abs())
+                    .expect("two candidates");
                 return Ok((distance, duration));
             }
 
@@ -78,7 +102,7 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
 
                 let (distance, duration, to_distance) = match (from, to) {
                     (Stop::Point(from), Stop::Point(to)) => {
-                        let (distance, duration) = get_matrix_data(from, to)?;
+                        let (distance, duration) = get_matrix_data(from, to, arrival_time)?;
                         (distance, duration, to.distance)
                     }
                     (prev, Stop::Transit(transit)) => {
@@ -100,7 +124,7 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
                             .unwrap()
                             .as_point()
                             .expect("two consistent transit stops are not supported");
-                        let (distance, duration) = get_matrix_data(from, to)?;
+                        let (distance, duration) = get_matrix_data(from, to, arrival_time)?;
                         (distance, duration, to.distance)
                     }
                 };
