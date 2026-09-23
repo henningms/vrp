@@ -192,12 +192,8 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
 
         // mirrors the writer's own point-stops-only walk (skipping transit/break stops), so a
         // pair here is exactly a pair the writer could have reported a `FerryLeg` for.
-        let point_stops: Vec<(usize, &PointStop)> = tour
-            .stops
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, stop)| stop.as_point().map(|point| (idx, point)))
-            .collect();
+        let point_stops: Vec<(usize, &PointStop)> =
+            tour.stops.iter().enumerate().filter_map(|(idx, stop)| stop.as_point().map(|point| (idx, point))).collect();
 
         point_stops.windows(2).try_for_each(|pair| -> GenericResult<()> {
             let (from_stop_index, from) = pair[0];
@@ -242,8 +238,7 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
 
             match matched {
                 None => {
-                    let road_duration =
-                        road.duration(&route, from_idx, to_idx, TravelTime::Departure(from_departure));
+                    let road_duration = road.duration(&route, from_idx, to_idx, TravelTime::Departure(from_departure));
                     let actual_elapsed = to_arrival - from_departure - break_dwell;
                     if (actual_elapsed - road_duration).abs() > 1. {
                         return Err(format!(
@@ -257,13 +252,25 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
                 }
                 Some((leg_idx, leg)) => {
                     unmatched.remove(&leg_idx);
-                    check_one_ferry_leg(&ferry_transport, road, &route, from_idx, to_idx, from_departure, to_arrival, break_dwell, leg)
+                    check_one_ferry_leg(
+                        &ferry_transport,
+                        road,
+                        &route,
+                        from_idx,
+                        to_idx,
+                        from_departure,
+                        to_arrival,
+                        break_dwell,
+                        leg,
+                    )
                 }
             }
         })
     })?;
 
-    if let Some(&leg_idx) = unmatched.iter().next() {
+    // `.min()`, not an arbitrary hash-set element: with more than one leftover entry, the error
+    // must name the same one on every run, or an assertion on the message text would be flaky.
+    if let Some(&leg_idx) = unmatched.iter().min() {
         let leg = &ferry_legs[leg_idx];
         return Err(format!(
             "ferryLeg for vehicle '{}' names stop indices {}->{} that are not an adjacent point-stop pair in that tour",

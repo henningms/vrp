@@ -48,11 +48,8 @@ pub(crate) fn create_solution(
     let reserved_times_index = problem.extras.get_reserved_times();
     let reserved_times_index = reserved_times_index.as_ref().unwrap_or(&empty_reserved_times);
 
-    let (tours, departures): (Vec<Tour>, Vec<Vec<Timestamp>>) = solution
-        .routes
-        .iter()
-        .map(|r| create_tour(problem, r, &coord_index, reserved_times_index))
-        .unzip();
+    let (tours, departures): (Vec<Tour>, Vec<Vec<Timestamp>>) =
+        solution.routes.iter().map(|r| create_tour(problem, r, &coord_index, reserved_times_index)).unzip();
 
     let statistic = tours.iter().fold(Statistic::default(), |acc, tour| acc + tour.statistic.clone());
 

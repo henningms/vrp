@@ -502,9 +502,13 @@ fn rejects_a_ferry_leg_reporting_a_sailing_not_in_the_timetable() {
 
     let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
     let leg = solution.ferry_legs.as_mut().expect("solution should report the crossed leg").first_mut().unwrap();
-    // no sailing in this crossing's timetable ever departs at 999999s.
-    leg.sailing_departure = 999999.;
-    leg.sailing_arrival = 1000004.;
+    assert_eq!(leg.sailing_departure, 1., "sanity: the real solve caught the only sailing, departing at 1s");
+    // leave `sailing_departure` real (1s, matched above) and corrupt only `sailing_arrival`: the
+    // next-stop-arrival formula is `sailing_departure + crossing.crossingSec`, so it never reads
+    // `sailing_arrival` at all - corrupting both fields (as an earlier version of this test did)
+    // lets the arrival-time check catch the corruption first, leaving the timetable guard this
+    // test names unpinned. No sailing on this crossing ever arrives at 999999s.
+    leg.sailing_arrival = 999999.;
 
     let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
     let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
@@ -512,43 +516,9 @@ fn rejects_a_ferry_leg_reporting_a_sailing_not_in_the_timetable() {
     assert!(ctx.check().is_err(), "an invented sailing must be rejected, not accepted on its say-so");
 }
 
-/// The single most important property of the whole feature: takes a real, valid, checked solve
-/// (boarding buffer 2s) and corrupts its reported sailing to an *earlier* one that genuinely
-/// exists in the crossing's timetable, but departs before the vehicle can reach the quay plus the
-/// buffer - a sailing the vehicle could not physically have boarded - then asserts rejection.
-#[test]
-fn rejects_a_ferry_leg_whose_sailing_departs_before_the_vehicle_can_board() {
-    let mut crossing = create_ferry_crossing("crossing1", (3., 0.), (90., 0.));
-    crossing.crossing_sec = 5.;
-    crossing.boarding_buffer_sec = 2.;
-    // dep 4/arr 9 is real but before earliest boarding (quay arrival 3 + buffer 2 = 5), so the
-    // real solve must catch the dep 10 sailing instead - leaving dep 4/arr 9 in the timetable
-    // purely as the "exists but unboardable" sailing this test corrupts the leg to report.
-    crossing.sailings = FerrySailings {
-        a_to_b: vec![FerrySailing { dep: 4., arr: 9. }, FerrySailing { dep: 10., arr: 15. }],
-        b_to_a: vec![],
-    };
-
-    let vehicle = VehicleType { shifts: vec![create_default_open_vehicle_shift()], ..create_default_vehicle_type() };
-    let problem = Problem {
-        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
-        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
-        ferry_crossings: Some(vec![crossing]),
-        ..create_empty_problem()
-    };
-    let matrix = create_matrix_from_problem(&problem);
-
-    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
-    let leg = solution.ferry_legs.as_mut().expect("solution should report the crossed leg").first_mut().unwrap();
-    assert_eq!(leg.sailing_departure, 10., "sanity: the real solve must have caught the boardable sailing");
-    leg.sailing_departure = 4.;
-    leg.sailing_arrival = 9.;
-
-    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
-    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
-
-    assert!(
-        ctx.check().is_err(),
-        "a sailing that departs before the vehicle can board must be rejected, not accepted"
-    );
-}
+// `rejects_a_ferry_leg_whose_sailing_departs_before_the_vehicle_can_board` (the boarding-buffer
+// guard test) moved to `tests/unit/checker/routing_test.rs`: isolating it needs a hand-built,
+// self-consistent fixture that calls `check_ferry_legs_rules` directly, because `check_routing`'s
+// unrelated leg-by-leg fold independently re-derives the correct sailing from the crossing-aware
+// transport cost and rejects a swapped-sailing shape on its own terms - see that test's doc for
+// why a real solve (which would just catch the correct, boardable sailing) can't reproduce this.
