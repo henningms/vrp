@@ -7,7 +7,7 @@ mod checker_test;
 
 use crate::format::problem::*;
 use crate::format::solution::*;
-use crate::format::{CoordIndex, Location};
+use crate::format::{CoordIndex, Location, ShiftIndexDimension, VehicleTypeDimension};
 use crate::parse_time;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use vrp_core::construction::clustering::vicinity::ClusterConfig;
 use vrp_core::construction::clustering::vicinity::VisitPolicy;
 use vrp_core::models::Problem as CoreProblem;
 use vrp_core::models::common::{Duration, Profile, TimeWindow};
+use vrp_core::models::problem::{Actor, VehicleIdDimension};
 use vrp_core::models::solution::{Commute as DomainCommute, CommuteInfo as DomainCommuteInfo};
 use vrp_core::prelude::{GenericError, GenericResult};
 use vrp_core::solver::processing::ClusterConfigExtraProperty;
@@ -112,6 +113,25 @@ impl CheckerContext {
             .ok_or(format!("cannot get matrix for '{}' profile", profile.matrix))?;
 
         Ok(Profile { index, scale: profile.scale.unwrap_or(1.) })
+    }
+
+    /// Gets the fleet actor for a solution tour, matched by vehicle id, type id and shift index -
+    /// the same identity `read_reserved_times_index` keys the reserved-time index by, so a caller
+    /// building a `Route` to query `core_problem.transport` with must use this actor, not a fresh
+    /// one, or a reserved-time lookup keyed on it would silently never match.
+    fn get_actor(&self, tour: &Tour) -> GenericResult<Arc<Actor>> {
+        self.core_problem
+            .fleet
+            .actors
+            .iter()
+            .find(|actor| {
+                let dimens = &actor.vehicle.dimens;
+                dimens.get_vehicle_id().is_some_and(|id| id == &tour.vehicle_id)
+                    && dimens.get_vehicle_type().is_some_and(|type_id| type_id == &tour.type_id)
+                    && dimens.get_shift_index().is_some_and(|shift_index| *shift_index == tour.shift_index)
+            })
+            .cloned()
+            .ok_or_else(|| format!("cannot find fleet actor for vehicle '{}'", tour.vehicle_id).into())
     }
 
     /// Gets activity operation time range in seconds since Unix epoch.

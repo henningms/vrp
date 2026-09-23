@@ -18,6 +18,7 @@ fn build_problem_and_matrix(
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
     let matrix = create_matrix_from_problem(&problem);
     (problem, matrix)
@@ -129,6 +130,7 @@ fn build_problem_and_matrix_with_extra(
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
     let unique = CoordIndex::new_with_extra_locations(&problem, extra).unique();
     let data: Vec<i64> = unique
@@ -576,6 +578,7 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let matrix = Matrix {
@@ -851,6 +854,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
         plan: Plan { jobs: base_jobs.clone(), ..create_empty_plan() },
         fleet: Fleet { vehicles: vehicles.clone(), ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     eprintln!();
@@ -918,6 +922,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
         plan: Plan { jobs: new_jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let solver_start = Instant::now();
@@ -1286,4 +1291,51 @@ fn cannot_insert_unreachable_candidate_on_open_route() {
         "far candidate with a tight window unreachable at any position must be infeasible; got {:?}",
         result.vehicles
     );
+}
+
+/// The mechanical proof that `check_job` and the full solve agree on ferry crossings: both reach
+/// their transport through `map_to_problem_with_props` -> `get_problem_blocks`, so a
+/// `FeasibilityContext` built from a problem with crossings must carry the same ferry-aware
+/// transport a full solve would install, not the plain road transport.
+#[test]
+fn feasibility_context_transport_is_ferry_aware() {
+    use vrp_core::models::common::Profile;
+    use vrp_core::models::problem::FerryTransportExtraProperty;
+
+    // quays (1,0) and (99,0) sit right beside the vehicle start and the job, so the ferry leg
+    // (1 approach + 5 crossing + 1 egress = 7) is far shorter than the direct road leg (100),
+    // exactly mirroring `problem_reader_test.rs`'s installation-site test.
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 0., arr: 5. }], b_to_a: vec![] };
+
+    let vehicle = create_default_vehicle_type();
+    let vehicle_id = vehicle.vehicle_ids[0].clone();
+    let type_id = vehicle.type_id.clone();
+
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        objectives: None,
+        ferry_crossings: Some(vec![crossing]),
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    // idle vehicle, no stops served - only the ferry-aware transport itself is under test here.
+    let solution_json = build_solution_json(&vehicle_id, &type_id, (0., 0.), vec![], 10);
+
+    let ctx = FeasibilityContext::new(problem, vec![matrix], &solution_json, &[]).expect("cannot build context");
+
+    let ferry_transport = ctx.problem.extras.get_ferry_transport().expect("ferry transport published");
+    assert_eq!(ferry_transport.index.crossings().len(), 1);
+
+    // plan jobs enter the coordinate index before fleet locations, so job1 is 0 and the vehicle's
+    // (0,0) start/end is 1.
+    let profile = Profile::default();
+    let road_duration = ferry_transport.road.duration_approx(&profile, 1, 0);
+    let context_duration = ctx.problem.transport.duration_approx(&profile, 1, 0);
+
+    assert_eq!(road_duration, 100.);
+    assert_eq!(context_duration, 7., "FeasibilityContext's transport must be the ferry-aware one");
 }

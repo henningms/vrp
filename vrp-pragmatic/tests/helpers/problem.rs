@@ -309,6 +309,21 @@ pub fn create_empty_problem() -> Problem {
         plan: create_empty_plan(),
         fleet: Fleet { vehicles: vec![], profiles: vec![], resources: None, capacity_dimensions: None },
         objectives: None,
+        ferry_crossings: None,
+    }
+}
+
+pub fn create_ferry_crossing(id: &str, quay_a: (f64, f64), quay_b: (f64, f64)) -> FerryCrossing {
+    FerryCrossing {
+        id: id.to_string(),
+        quay_a: Location2D { lat: quay_a.0, lng: quay_a.1 },
+        quay_b: Location2D { lat: quay_b.0, lng: quay_b.1 },
+        crossing_sec: 300.,
+        boarding_buffer_sec: 600.,
+        sailings: FerrySailings {
+            a_to_b: vec![FerrySailing { dep: 0., arr: 900. }],
+            b_to_a: vec![FerrySailing { dep: 1800., arr: 2700. }],
+        },
     }
 }
 

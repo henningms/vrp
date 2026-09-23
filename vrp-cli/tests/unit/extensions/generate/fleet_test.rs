@@ -12,6 +12,7 @@ fn can_generate_fleet_of_specific_size() {
             resources: None,
             capacity_dimensions: None,
         },
+        ferry_crossings: None,
         objectives: None,
     };
 

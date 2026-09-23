@@ -14,6 +14,7 @@ fn can_get_locations_serialized() {
             capacity_dimensions: None,
         },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let locations = get_locations_serialized(&problem).unwrap().replace([' ', '\n'], "");
@@ -32,6 +33,7 @@ fn can_get_solution_serialized() {
             capacity_dimensions: None,
         },
         objectives: None,
+        ferry_crossings: None,
     };
     let problem = Arc::new(problem.read_pragmatic().unwrap());
 

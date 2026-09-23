@@ -155,7 +155,7 @@ fn can_merge_activities_with_commute_in_one_stop_impl(
         .collect();
     let route = create_route_with_activities(&problem.fleet, "v1", activities);
 
-    let tour = create_tour(&problem, &route, &coord_index, &Default::default());
+    let (tour, _) = create_tour(&problem, &route, &coord_index, &Default::default());
 
     assert_eq!(expected.len(), tour.stops.len() - 2);
     expected.iter().zip(tour.stops.iter().skip(1)).for_each(|((expected_stop_idx, expected_acts), actual_stop)| {
@@ -203,7 +203,7 @@ fn can_merge_required_break_on_stop_arrival_time_properly() {
     .into_iter()
     .collect();
 
-    let tour = create_tour(&problem, &route, &coord_index, &reserved_times_index);
+    let (tour, _) = create_tour(&problem, &route, &coord_index, &reserved_times_index);
 
     assert_eq!(tour.stops.len(), 3);
     assert_eq!(get_ids_from_tour(&tour).into_iter().flatten().filter(|id| id == "break").count(), 1);

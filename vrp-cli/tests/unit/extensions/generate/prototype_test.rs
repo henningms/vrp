@@ -21,6 +21,7 @@ fn can_generate_jobs_with_time_windows() {
             capacity_dimensions: None,
         },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let result =

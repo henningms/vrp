@@ -27,7 +27,7 @@ impl CoordIndex {
     /// Creates a `CoordIndex` from a problem plus additional locations that are
     /// not part of the stored problem.
     ///
-    /// `extra_locations` are appended AFTER all problem (plan + fleet)
+    /// `extra_locations` are appended AFTER all problem (plan + fleet + ferry quay)
     /// coordinates, so they receive the highest matrix indices. This is used by
     /// `FeasibilityContext` to register the coordinates of a candidate job being
     /// tested for insertion: the candidate is not in the problem, so without
@@ -94,6 +94,17 @@ impl CoordIndex {
                     via.iter().for_each(|stop| index.add(&stop.location));
                 }
             });
+        });
+
+        // process ferry crossings: quays enter the index after every fleet location and
+        // before extra locations. A separate Rust service mirrors this exact ordering when
+        // building the routing matrix, so a divergence here would silently permute every
+        // travel time. `add` deduplicates, so a quay that coincides with an existing job or
+        // fleet location keeps its existing index rather than growing the matrix.
+        problem.ferry_crossings.iter().flatten().for_each(|crossing| {
+            let (quay_a, quay_b) = crossing.quay_locations();
+            index.add(&quay_a);
+            index.add(&quay_b);
         });
 
         // Append extra (candidate) locations after all problem coordinates so
