@@ -4,6 +4,7 @@ mod model_test;
 
 extern crate serde_json;
 
+use super::ferry::FerryCrossing;
 use crate::format::{FormatError, Location, MultiFormatError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -757,6 +758,12 @@ pub struct Problem {
     /// Specifies objective functions in lexicographical order.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub objectives: Option<Vec<Objective>>,
+
+    /// Ferry crossings available to routing. Absent for a problem with no open-water legs, in
+    /// which case the wire format and every downstream code path are unchanged from before
+    /// ferry crossings existed.
+    #[serde(rename = "ferryCrossings", skip_serializing_if = "Option::is_none")]
+    pub ferry_crossings: Option<Vec<FerryCrossing>>,
 }
 
 /// A routing matrix.

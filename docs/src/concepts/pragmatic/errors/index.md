@@ -40,6 +40,13 @@ problem and routing matrix.
 a valid json schema and valid parameters.
 
 
+### E0005
+
+`cannot resolve ferry crossing quay` is returned when a `quayA` or `quayB` coordinate of a `ferryCrossings` entry
+cannot be found in the problem's coordinate index. This means the coordinate set and the index disagree, which would
+otherwise silently permute travel times; check that the quay coordinate is well-formed.
+
+
 ## E1xxx: Validation errors
 
 Errors from E1xxx range are used by validation engine which checks logical correctness of the rich VRP definition.

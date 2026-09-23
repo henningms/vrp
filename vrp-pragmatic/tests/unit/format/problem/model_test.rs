@@ -1,4 +1,5 @@
 use super::*;
+use crate::format::problem::Location2D;
 use crate::helpers::{SIMPLE_MATRIX, SIMPLE_PROBLEM};
 use std::io::BufReader;
 
@@ -63,4 +64,54 @@ fn can_deserialize_matrix() {
 
     assert_eq!(matrix.distances.len(), 16);
     assert_eq!(matrix.travel_times.len(), 16);
+}
+
+const PROBLEM_WITH_FERRY_CROSSING: &str = r#"
+{
+  "plan": { "jobs": [] },
+  "fleet": { "vehicles": [], "profiles": [] },
+  "ferryCrossings": [
+    {
+      "id": "crossing1",
+      "quayA": { "lat": 1.0, "lng": 2.0 },
+      "quayB": { "lat": 3.0, "lng": 4.0 },
+      "crossingSec": 300.0,
+      "boardingBufferSec": 600.0,
+      "sailings": {
+        "aToB": [{ "dep": 0.0, "arr": 900.0 }],
+        "bToA": [{ "dep": 1800.0, "arr": 2700.0 }]
+      }
+    }
+  ]
+}
+"#;
+
+#[test]
+fn can_deserialize_problem_with_ferry_crossings() {
+    let problem = deserialize_problem(BufReader::new(PROBLEM_WITH_FERRY_CROSSING.as_bytes())).ok().unwrap();
+
+    let crossings = problem.ferry_crossings.as_ref().expect("expected ferryCrossings to be present");
+    assert_eq!(crossings.len(), 1);
+
+    let crossing = crossings.first().unwrap();
+    assert_eq!(crossing.id, "crossing1");
+    assert_eq!(crossing.quay_a, Location2D { lat: 1.0, lng: 2.0 });
+    assert_eq!(crossing.quay_b, Location2D { lat: 3.0, lng: 4.0 });
+    assert_eq!(crossing.crossing_sec, 300.0);
+    assert_eq!(crossing.boarding_buffer_sec, 600.0);
+    assert_eq!(crossing.sailings.a_to_b.len(), 1);
+    assert_eq!(crossing.sailings.a_to_b.first().unwrap().dep, 0.0);
+    assert_eq!(crossing.sailings.b_to_a.first().unwrap().arr, 2700.0);
+}
+
+#[test]
+fn serializing_problem_without_ferry_crossings_emits_no_key() {
+    // "empty means unchanged": a problem with no ferry crossings must serialize exactly as it
+    // did before ferry crossings existed.
+    let problem = deserialize_problem(BufReader::new(SIMPLE_PROBLEM.as_bytes())).ok().unwrap();
+    assert!(problem.ferry_crossings.is_none());
+
+    let serialized = serde_json::to_string(&problem).unwrap();
+
+    assert!(!serialized.contains("ferryCrossings"), "serialized problem unexpectedly has a ferryCrossings key");
 }

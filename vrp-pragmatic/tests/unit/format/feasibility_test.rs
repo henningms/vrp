@@ -18,6 +18,7 @@ fn build_problem_and_matrix(
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
     let matrix = create_matrix_from_problem(&problem);
     (problem, matrix)
@@ -129,6 +130,7 @@ fn build_problem_and_matrix_with_extra(
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
     let unique = CoordIndex::new_with_extra_locations(&problem, extra).unique();
     let data: Vec<i64> = unique
@@ -576,6 +578,7 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let matrix = Matrix {
@@ -851,6 +854,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
         plan: Plan { jobs: base_jobs.clone(), ..create_empty_plan() },
         fleet: Fleet { vehicles: vehicles.clone(), ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     eprintln!();
@@ -918,6 +922,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
         plan: Plan { jobs: new_jobs, ..create_empty_plan() },
         fleet: Fleet { vehicles, ..create_default_fleet() },
         objectives: None,
+        ferry_crossings: None,
     };
 
     let solver_start = Instant::now();

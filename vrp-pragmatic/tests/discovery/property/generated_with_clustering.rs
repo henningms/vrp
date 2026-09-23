@@ -74,6 +74,7 @@ prop_compose! {
             },
             fleet,
             objectives: None,
+            ferry_crossings: None,
         }
     }
 }

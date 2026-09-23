@@ -20,6 +20,9 @@ mod reader_test;
 
 mod clustering_reader;
 
+mod ferry;
+pub use self::ferry::{FerryCrossing, FerrySailing, FerrySailings, Location2D, create_ferry_index};
+
 mod fleet_reader;
 pub use self::fleet_reader::create_approx_matrices;
 

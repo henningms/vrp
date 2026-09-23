@@ -174,6 +174,7 @@ mod actual {
                 capacity_dimensions: None,
             },
             objectives: None,
+            ferry_crossings: None,
         })
     }
 }

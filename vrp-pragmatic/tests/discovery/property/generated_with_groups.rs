@@ -50,6 +50,7 @@ prop_compose! {
             plan,
             fleet,
             objectives: None,
+            ferry_crossings: None,
         }
     }
 }

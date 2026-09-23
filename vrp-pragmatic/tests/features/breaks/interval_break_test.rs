@@ -34,6 +34,7 @@ fn can_assign_interval_break_between_jobs() {
             ..create_default_fleet()
         },
         objectives: create_test_objectives(),
+        ferry_crossings: None,
     };
     let matrix = create_matrix_from_problem(&problem);
 

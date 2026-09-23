@@ -72,6 +72,7 @@ fn create_scheduled_run(jobs: Vec<Job>) -> Problem {
             ..create_default_fleet()
         },
         objectives: None,
+        ferry_crossings: None,
     }
 }
 
