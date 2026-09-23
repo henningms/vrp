@@ -78,6 +78,28 @@ fn new_sorts_both_sailing_directions_by_departure_ascending() {
 }
 
 #[test]
+fn new_drops_inverted_sailings_in_every_build_not_just_debug() {
+    // an inverted sailing (arr < dep) is nonsense, and best_arrival's lower-bound prune depends
+    // on arr >= dep holding for real - a debug_assert alone would compile out in release, which
+    // is what the solver ships, so this must be a real filter, not only an assertion.
+    let crossing = FerryCrossing::new(
+        "crossing1".to_string(),
+        1,
+        2,
+        1500.,
+        600.,
+        vec![sailing(0., 900.), sailing(1000., 500.)], // second one inverted: arrives before it departs
+        vec![sailing(1800., 1700.)],                   // inverted
+    );
+
+    let a_to_b = crossing.sailings(FerryDirection::AToB);
+    assert_eq!(a_to_b.len(), 1);
+    assert_eq!(a_to_b[0].dep, 0.);
+
+    assert!(crossing.sailings(FerryDirection::BToA).is_empty());
+}
+
+#[test]
 fn unreachable_duration_threshold_is_a_large_finite_seconds_value() {
     // doc claims: finite (not infinity, so it round-trips through JSON and downstream duration
     // arithmetic stays defined) and, at 1e9 seconds (~31.7 years), far larger than any real
@@ -151,6 +173,13 @@ fn best_departure_prefers_the_crossing_with_the_smaller_total() {
     assert_eq!(result.total_duration, min(30.)); // 10 min wait + 20 min crossing
 }
 
+/// 7 minutes from `from` to either quay, nothing on the egress leg. A zero-road fixture makes
+/// `depart_at` (leaves `from`) and `arrive_quay_at` (reaches the quay) numerically identical,
+/// which would let a mutant conflate the two survive every test; this tells them apart.
+fn seven_minute_approach_road(from: Location, _to: Location) -> Duration {
+    if from == 0 { min(7.) } else { 0. }
+}
+
 #[test]
 fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round_trips() {
     let index = FerryIndex::new(vec![half_hourly_crossing()]);
@@ -159,17 +188,22 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     // deadline (e.g. exactly 13:50) would make the round trip hold by accident, since there'd be
     // only one departure consistent with catching that sailing at all.
     let arrival = min(840.);
-    let path = best_arrival(&index, &zero_road, 0, 3, arrival).expect("reachable");
+    let path = best_arrival(&index, &seven_minute_approach_road, 0, 3, arrival).expect("reachable");
 
     assert_eq!(path.sailing_dep, min(810.));
-    assert_eq!(path.depart_at, min(800.)); // 13:20 - mirrors the 12:50 departure boundary example
-    assert_eq!(path.total_duration, min(40.)); // arrival - depart_at, includes the ten minutes of slack
+    assert_eq!(path.arrive_quay_at, min(800.)); // 13:20 - mirrors the 12:50 departure boundary example
+    // depart_at is 7 minutes before arrive_quay_at (the approach), not the same instant; a
+    // mutant setting depart_at = arrive_quay_at would report this vehicle leaving `from` at
+    // 13:20 instead of 13:13, seven minutes late.
+    assert_eq!(path.depart_at, min(793.)); // 13:13 = arrive_quay_at - the 7 minute approach
+    assert_ne!(path.depart_at, path.arrive_quay_at);
+    assert_eq!(path.total_duration, min(47.)); // arrival - depart_at, includes the ten minutes of slack
 
-    let departure_path = best_departure(&index, &zero_road, 0, 3, path.depart_at).expect("reachable");
+    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at).expect("reachable");
 
     // the round trip criterion is the same sailing, not equal totals: best_departure's total is
     // the journey's own length, which legitimately differs from best_arrival's arrival-anchored
-    // total by exactly the slack to the deadline (40 min vs 30 min here).
+    // total by exactly the slack to the deadline (47 min vs 37 min here).
     assert_eq!(departure_path.crossing_idx, path.crossing_idx);
     assert_eq!(departure_path.direction, path.direction);
     assert_eq!(departure_path.sailing_dep, path.sailing_dep);
@@ -231,6 +265,58 @@ fn best_arrival_finds_the_latest_departure_even_when_arrivals_are_not_in_departu
     let result = best_arrival(&index, &zero_road, 0, 3, 500.).expect("reachable");
 
     assert_eq!(result.sailing_dep, 400.);
+}
+
+#[test]
+fn best_arrival_requires_egress_to_meet_the_deadline_not_just_the_sailing() {
+    // egress (far quay -> destination) must count toward the deadline, not just the sailing's
+    // own arrival. A 20 minute crossing, sailings every 30 minutes, and a 30 minute egress leg.
+    let index = FerryIndex::new(vec![half_hourly_crossing()]);
+    let road = |_from: Location, to: Location| -> Duration { if to == 3 { min(30.) } else { 0. } };
+
+    // 14:10 deadline: the 13:30 sailing (arr 13:50) plus 30 min egress lands at 14:20, too late;
+    // the 13:00 sailing (arr 13:20) plus egress lands at 13:50, within the deadline. A mutant
+    // dropping the `+ egress` term from the feasibility check (`ferry.rs`'s
+    // `sailing.arr + egress <= arrival`) would consider 13:50 <= 14:10 and wrongly pick the
+    // later-departing 13:30 sailing instead - still monotone in the deadline, so both property
+    // tests would miss it too.
+    let result = best_arrival(&index, &road, 0, 3, min(850.)).expect("reachable");
+
+    assert_eq!(result.sailing_dep, min(780.)); // 13:00, not the 13:30 a missing egress term would pick
+}
+
+#[test]
+fn best_arrival_returns_none_when_approach_road_is_unreachable() {
+    let index = FerryIndex::new(vec![half_hourly_crossing()]);
+    // blocks the approach leg from `from` to either quay. Unlike egress, an unreachable
+    // approach does not fail the arrival-side feasibility check on its own (it only tests
+    // `sailing.arr + egress <= arrival`, never `approach`), so without best_path's sentinel
+    // guard this would silently return a `Some` path with `depart_at` pushed about a billion
+    // seconds into the past instead of `None`.
+    let road =
+        |from: Location, _to: Location| -> Duration { if from == 0 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
+
+    let result = best_arrival(&index, &road, 0, 3, min(800.));
+
+    assert!(result.is_none());
+}
+
+#[test]
+fn best_departure_returns_none_when_egress_road_is_unreachable() {
+    let index = FerryIndex::new(vec![half_hourly_crossing()]);
+    // blocks the egress leg from either quay to `to`. Unlike approach, an unreachable egress
+    // does not fail the departure-side sailing search on its own (the search only uses
+    // `approach`; egress is added into `total_duration` afterwards), so without best_path's
+    // sentinel guard this would silently return a `Some` path with a total around a billion
+    // seconds instead of `None`. (The existing approach-unreachable test for this function
+    // passes regardless of the guard, since a sentinel approach pushes `earliest` past every
+    // sailing on its own - this is the counterpart that actually exercises it.)
+    let road =
+        |_from: Location, to: Location| -> Duration { if to == 3 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
+
+    let result = best_departure(&index, &road, 0, 3, min(770.));
+
+    assert!(result.is_none());
 }
 
 #[test]

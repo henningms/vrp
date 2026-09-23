@@ -55,12 +55,15 @@ pub struct FerryCrossing {
 }
 
 impl FerryCrossing {
-    /// Creates a new resolved ferry crossing, sorting each sailing list by departure time.
+    /// Creates a new resolved ferry crossing, dropping any sailing with `arr < dep` and sorting
+    /// each remaining list by departure time.
     ///
-    /// # Panics (debug builds only)
-    ///
-    /// Panics if any sailing has `arr < dep`: an inverted sailing would make a crossing look
-    /// free or negative-duration to the cost function.
+    /// An inverted sailing would make a crossing look free or negative-duration to the cost
+    /// function, and `best_arrival`'s lower-bound prune depends on `arr >= dep` holding for
+    /// every sailing it considers - in every build, not only in debug, where a caller's mistake
+    /// (or bad upstream data: this has happened) would otherwise silently produce a wrong or
+    /// pruned-away answer instead of a panic a test would catch. Filtering out the offending
+    /// rows here, rather than only asserting, makes the invariant true wherever this runs.
     pub fn new(
         id: String,
         quay_a: Location,
@@ -70,9 +73,14 @@ impl FerryCrossing {
         mut sailings_a_to_b: Vec<FerrySailing>,
         mut sailings_b_to_a: Vec<FerrySailing>,
     ) -> Self {
+        let is_valid = |sailing: &FerrySailing| sailing.arr >= sailing.dep;
+        sailings_a_to_b.retain(is_valid);
+        sailings_b_to_a.retain(is_valid);
+
         sailings_a_to_b.sort_by(|a, b| a.dep.total_cmp(&b.dep));
         sailings_b_to_a.sort_by(|a, b| a.dep.total_cmp(&b.dep));
 
+        // belt-and-braces: catches a bug in the filter above itself, in debug builds.
         debug_assert!(sailings_a_to_b.iter().chain(sailings_b_to_a.iter()).all(|sailing| sailing.arr >= sailing.dep));
 
         Self { id, quay_a, quay_b, crossing_sec, boarding_buffer_sec, sailings_a_to_b, sailings_b_to_a }
@@ -141,6 +149,20 @@ pub struct FerryPath {
     pub total_duration: Duration,
 }
 
+/// Everything a `select` closure can determine about a candidate path on its own - every
+/// `FerryPath` field except `crossing_idx`, which only `best_path`'s loop knows (the closure
+/// sees one crossing at a time, not its position in `index`). Keeping `crossing_idx` out of this
+/// type rather than putting a placeholder value in it means there is no field that briefly lies
+/// before `best_path` fixes it up.
+struct FerryCandidate {
+    direction: FerryDirection,
+    depart_at: Timestamp,
+    arrive_quay_at: Timestamp,
+    sailing_dep: Timestamp,
+    sailing_arr: Timestamp,
+    total_duration: Duration,
+}
+
 /// Tries every crossing and direction in `index`, calling `select` for each to build the
 /// candidate that leg would produce (`select` computes its own `total_duration` and applies its
 /// own lower-bound prune against `best_so_far`, since the two callers define "total" - and so
@@ -152,7 +174,7 @@ fn best_path(
     road: &dyn Fn(Location, Location) -> Duration,
     from: Location,
     to: Location,
-    select: impl Fn(&FerryCrossing, FerryDirection, Duration, Duration, Duration) -> Option<FerryPath>,
+    select: impl Fn(&FerryCrossing, FerryDirection, Duration, Duration, Duration) -> Option<FerryCandidate>,
 ) -> Option<FerryPath> {
     let mut best: Option<FerryPath> = None;
 
@@ -187,7 +209,15 @@ fn best_path(
                 continue;
             }
 
-            best = Some(FerryPath { crossing_idx, ..candidate });
+            best = Some(FerryPath {
+                crossing_idx,
+                direction: candidate.direction,
+                depart_at: candidate.depart_at,
+                arrive_quay_at: candidate.arrive_quay_at,
+                sailing_dep: candidate.sailing_dep,
+                sailing_arr: candidate.sailing_arr,
+                total_duration: candidate.total_duration,
+            });
         }
     }
 
@@ -223,8 +253,7 @@ pub fn best_departure(
         let wait = sailing.dep - at_quay;
         let total_duration = approach + wait + crossing.crossing_sec + egress;
 
-        Some(FerryPath {
-            crossing_idx: 0, // overwritten by best_path once a candidate is accepted
+        Some(FerryCandidate {
             direction,
             depart_at: departure,
             arrive_quay_at: at_quay,
@@ -279,8 +308,7 @@ pub fn best_arrival(
         let depart_at = arrive_quay_at - approach;
         let total_duration = arrival - depart_at;
 
-        Some(FerryPath {
-            crossing_idx: 0, // overwritten by best_path once a candidate is accepted
+        Some(FerryCandidate {
             direction,
             depart_at,
             arrive_quay_at,
