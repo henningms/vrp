@@ -5,6 +5,8 @@ mod routing_test;
 use super::*;
 use crate::format_time;
 use crate::utils::combine_error_results;
+use vrp_core::models::problem::{FerryAwareTransportCost, FerryTransportExtraProperty, TransportCost, TravelTime};
+use vrp_core::models::solution::Route;
 use vrp_core::prelude::GenericResult;
 
 /// Checks that matrix routing information is used properly.
@@ -18,12 +20,40 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
     }
     let skip_distance_check = skip_distance_check(&context.solution);
 
+    // absent for a problem with no ferry crossings, so a plain matrix-only problem checks exactly
+    // as it did before this feature existed - the raw-matrix path below is untouched for it.
+    let ferry_transport = context.core_problem.extras.get_ferry_transport();
+
     context.solution.tours.iter().try_for_each::<_, GenericResult<_>>(|tour| {
         let profile = context.get_vehicle_profile(&tour.vehicle_id)?;
+
+        // `get_matrix_data` re-derives a leg straight from the raw routing matrix, which knows
+        // nothing about ferries: a leg the solve crossed by water would be checked against the
+        // road-only number and fail. Resolving through the same `FerryAwareTransportCost` the
+        // solve used - not `core_problem.transport` wholesale, which may also carry the
+        // reserved-time wrapper - keeps this check about routing (ferries included) rather than
+        // about reserved-time bookkeeping, which is a separate, already-existing concern this fix
+        // does not touch.
+        let ferry_aware = ferry_transport
+            .as_ref()
+            .map(|ferry| -> GenericResult<_> {
+                let actor = context.get_actor(tour)?;
+                let transport = FerryAwareTransportCost::new(ferry.road.clone(), ferry.index.clone());
+                Ok((transport, Route { actor, tour: Default::default() }))
+            })
+            .transpose()?;
 
         let get_matrix_data = |from: &PointStop, to: &PointStop| -> GenericResult<(i64, i64)> {
             let from_idx = context.get_location_index(&from.location)?;
             let to_idx = context.get_location_index(&to.location)?;
+
+            if let Some((transport, route)) = &ferry_aware {
+                let travel_time = TravelTime::Departure(parse_time(&from.time.departure));
+                let distance = transport.distance(route, from_idx, to_idx, travel_time) as i64;
+                let duration = transport.duration(route, from_idx, to_idx, travel_time) as i64;
+                return Ok((distance, duration));
+            }
+
             context.get_matrix_data(&profile, from_idx, to_idx)
         };
 

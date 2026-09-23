@@ -117,12 +117,12 @@ fn best_departure_boundary_examples_from_the_brief() {
 
     // reaching the quay at 12:50 with a 10 minute buffer needs dep >= 13:00, so it catches the
     // 13:00 sailing exactly (boundary is inclusive), not the preceding 12:30 one.
-    let reaching_1250 = best_departure(&index, &zero_road, 0, 3, min(770.)).expect("reachable");
+    let reaching_1250 = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("reachable");
     assert_eq!(reaching_1250.sailing_dep, min(780.));
 
     // one minute later, the same buffer pushes the earliest-boardable time past 13:00, so the
     // vehicle misses it and catches the next sailing, 13:30, instead.
-    let reaching_1251 = best_departure(&index, &zero_road, 0, 3, min(771.)).expect("reachable");
+    let reaching_1251 = best_departure(&index, &zero_road, 0, 3, min(771.), Duration::INFINITY).expect("reachable");
     assert_eq!(reaching_1251.sailing_dep, min(810.));
 }
 
@@ -131,7 +131,7 @@ fn best_departure_returns_none_when_all_sailings_have_departed() {
     let index = FerryIndex::new(vec![half_hourly_crossing()]);
 
     // departing at 15:00 pushes the earliest-boardable time past the last sailing (15:00).
-    let result = best_departure(&index, &zero_road, 0, 3, min(900.));
+    let result = best_departure(&index, &zero_road, 0, 3, min(900.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -143,7 +143,7 @@ fn best_departure_returns_none_when_approach_road_is_unreachable() {
     let road =
         |from: Location, _to: Location| -> Duration { if from == 0 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_departure(&index, &road, 0, 3, min(770.));
+    let result = best_departure(&index, &road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -170,7 +170,7 @@ fn best_departure_prefers_the_crossing_with_the_smaller_total() {
     );
     let index = FerryIndex::new(vec![slow, fast]);
 
-    let result = best_departure(&index, &zero_road, 0, 5, min(770.)).expect("reachable");
+    let result = best_departure(&index, &zero_road, 0, 5, min(770.), Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.crossing_idx, 1);
     assert_eq!(result.total_duration, min(30.)); // 10 min wait + 20 min crossing
@@ -191,7 +191,7 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     // deadline (e.g. exactly 13:50) would make the round trip hold by accident, since there'd be
     // only one departure consistent with catching that sailing at all.
     let arrival = min(840.);
-    let path = best_arrival(&index, &seven_minute_approach_road, 0, 3, arrival).expect("reachable");
+    let path = best_arrival(&index, &seven_minute_approach_road, 0, 3, arrival, Duration::INFINITY).expect("reachable");
 
     assert_eq!(path.sailing_dep, min(810.));
     assert_eq!(path.arrive_quay_at, min(800.)); // 13:20 - mirrors the 12:50 departure boundary example
@@ -202,7 +202,7 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     assert_ne!(path.depart_at, path.arrive_quay_at);
     assert_eq!(path.total_duration, min(47.)); // arrival - depart_at, includes the ten minutes of slack
 
-    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at).expect("reachable");
+    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at, Duration::INFINITY).expect("reachable");
 
     // the round trip criterion is the same sailing, not equal totals: best_departure's total is
     // the journey's own length, which legitimately differs from best_arrival's arrival-anchored
@@ -240,7 +240,7 @@ fn best_arrival_prefers_the_crossing_that_allows_leaving_latest_not_the_shortest
 
     // deadline 13:35: short_infrequent forces leaving by 11:00 (depart_at); long_frequent's
     // 12:35 sailing (13:35 arrival) allows leaving 95 minutes later.
-    let result = best_arrival(&index, &zero_road, 0, 5, min(815.)).expect("reachable");
+    let result = best_arrival(&index, &zero_road, 0, 5, min(815.), Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.crossing_idx, 1);
     assert_eq!(result.depart_at, min(755.)); // 12:35, not short_infrequent's 11:00
@@ -265,7 +265,7 @@ fn best_arrival_finds_the_latest_departure_even_when_arrivals_are_not_in_departu
 
     // two sailings meet the 500 deadline (dep 200 -> arr 300, and dep 400 -> arr 450); the
     // later-departing one must win.
-    let result = best_arrival(&index, &zero_road, 0, 3, 500.).expect("reachable");
+    let result = best_arrival(&index, &zero_road, 0, 3, 500., Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.sailing_dep, 400.);
 }
@@ -283,7 +283,7 @@ fn best_arrival_requires_egress_to_meet_the_deadline_not_just_the_sailing() {
     // `sailing.arr + egress <= arrival`) would consider 13:50 <= 14:10 and wrongly pick the
     // later-departing 13:30 sailing instead - still monotone in the deadline, so both property
     // tests would miss it too.
-    let result = best_arrival(&index, &road, 0, 3, min(850.)).expect("reachable");
+    let result = best_arrival(&index, &road, 0, 3, min(850.), Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.sailing_dep, min(780.)); // 13:00, not the 13:30 a missing egress term would pick
 }
@@ -299,7 +299,7 @@ fn best_arrival_returns_none_when_approach_road_is_unreachable() {
     let road =
         |from: Location, _to: Location| -> Duration { if from == 0 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_arrival(&index, &road, 0, 3, min(800.));
+    let result = best_arrival(&index, &road, 0, 3, min(800.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -317,7 +317,7 @@ fn best_departure_returns_none_when_egress_road_is_unreachable() {
     let road =
         |_from: Location, to: Location| -> Duration { if to == 3 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_departure(&index, &road, 0, 3, min(770.));
+    let result = best_departure(&index, &road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -335,7 +335,7 @@ fn best_departure_prune_recheck_keeps_the_true_best_not_whichever_cleared_the_bo
         FerryCrossing::new("far-but-fast".to_string(), 3, 4, min(20.), 0., vec![sailing(min(60.), min(80.))], vec![]);
     let index = FerryIndex::new(vec![near_but_slow, far_but_fast]);
 
-    let result = best_departure(&index, &zero_road, 0, 5, min(0.)).expect("reachable");
+    let result = best_departure(&index, &zero_road, 0, 5, min(0.), Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.crossing_idx, 0);
     assert_eq!(result.total_duration, min(40.));
@@ -354,7 +354,7 @@ fn best_departure_skips_a_degenerate_crossing_whose_quays_are_the_same_location(
     );
     let index = FerryIndex::new(vec![degenerate]);
 
-    let result = best_departure(&index, &zero_road, 0, 3, min(770.));
+    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -372,7 +372,7 @@ fn best_departure_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result = best_departure(&index, &zero_road, 0, 3, min(770.)).expect("normal crossing still reachable");
+    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
 }
@@ -390,7 +390,7 @@ fn best_arrival_skips_a_degenerate_crossing_whose_quays_are_the_same_location() 
     );
     let index = FerryIndex::new(vec![degenerate]);
 
-    let result = best_arrival(&index, &zero_road, 0, 3, min(800.));
+    let result = best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -408,9 +408,42 @@ fn best_arrival_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result = best_arrival(&index, &zero_road, 0, 3, min(800.)).expect("normal crossing still reachable");
+    let result = best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY).expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
+}
+
+#[test]
+fn best_departure_respects_a_seeded_road_bound() {
+    let index = FerryIndex::new(vec![half_hourly_crossing()]);
+
+    // the true best here is 1800s (10 min wait + 20 min crossing, see
+    // best_departure_boundary_examples_from_the_brief); a bound at or below that must prune to
+    // `None` without ever finding it - a caller could not otherwise tell "pruned before looking"
+    // apart from "found but rejected", and only the former is cheap.
+    assert!(best_departure(&index, &zero_road, 0, 3, min(770.), 1799.).is_none());
+
+    // a bound strictly above the true best still finds the exact path an unseeded search would -
+    // seeding must never reject a path that legitimately beats the bound.
+    let unseeded = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("reachable");
+    let seeded = best_departure(&index, &zero_road, 0, 3, min(770.), 1801.).expect("reachable");
+    assert_eq!(seeded, unseeded);
+    assert_eq!(seeded.total_duration, 1800.);
+}
+
+#[test]
+fn best_arrival_respects_a_seeded_road_bound() {
+    let index = FerryIndex::new(vec![half_hourly_crossing()]);
+
+    // the true best here is min(47.) = 2820s (see
+    // best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round_trips).
+    assert!(best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), 2819.).is_none());
+
+    let unseeded =
+        best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), Duration::INFINITY).expect("reachable");
+    let seeded = best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), 2821.).expect("reachable");
+    assert_eq!(seeded, unseeded);
+    assert_eq!(seeded.total_duration, min(47.));
 }
 
 /// Sorted-by-construction sailing list: departures strictly increase, so no explicit sort is
@@ -501,7 +534,7 @@ fn best_departure_is_fifo_leaving_later_never_arrives_earlier() {
         let t1 = rng.gen_range((span_start - 600.0)..=(span_end + 600.0));
         let t2 = t1 + rng.gen_range(0.0..900.0);
 
-        let arrival_time = |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t) {
+        let arrival_time = |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t, Duration::INFINITY) {
             Some(path) => t + path.total_duration,
             None => Duration::INFINITY,
         };
@@ -527,7 +560,7 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
         let a1 = rng.gen_range((span_start - 600.0)..=(span_end + 9600.0));
         let a2 = a1 + rng.gen_range(0.0..900.0);
 
-        let latest_departure = |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a) {
+        let latest_departure = |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a, Duration::INFINITY) {
             Some(path) => path.depart_at,
             None => Duration::NEG_INFINITY,
         };
@@ -547,16 +580,16 @@ mod ferry_aware_transport_cost {
     /// approach (from->quayA, 300s/53) and egress (quayB->to, 600s/89) leg and the given direct
     /// from->to road duration/distance.
     ///
-    /// `one_way_crossing`'s B-to-A direction carries no sailings, so a real (timetable-aware)
-    /// query always excludes it on its own - but `duration_approx`/`distance_approx` have no
-    /// timetable to check, so without deliberately padding B-to-A's own approach/egress
-    /// (from->quayB, quayA->to) durations to 5000, that direction's zero-wait bound (0 + 1200
-    /// crossing + 0 = 1200) would look cheaper than A-to-B's real one (2100) - not a bug in the
-    /// wrapper, just the zero-wait bound being direction-blind by design, but it would make a
-    /// fixture built with the road matrix's untouched-entries default of 0 silently assert on the
-    /// wrong direction. The same two entries double as "trap" distance values (997, 991): only a
-    /// mutant reading the wrong quay for the chosen (A-to-B) direction would ever read them for
-    /// distance, since the real distance path never visits quayB from `from` or `to` from quayA.
+    /// `from`->quayB and quayA->`to` (the B-to-A direction's own approach/egress) are left at the
+    /// matrix's default of 0 - deliberately cheap. `one_way_crossing`'s B-to-A direction carries
+    /// no sailings, so a real (timetable-aware) query always excludes it on its own regardless;
+    /// `best_zero_wait_path` must exclude it too, on the empty sailing list alone, or these two
+    /// legs being cheap would make B-to-A's zero-wait bound look better than A-to-B's real one -
+    /// see `duration_approx_skips_a_direction_with_no_sailings_at_all` below, which asserts
+    /// exactly that exclusion. The same two entries double as "trap" distance values (997, 991):
+    /// only a mutant reading the wrong quay for the chosen (A-to-B) direction would ever read them
+    /// for distance, since the real distance path never visits quayB from `from` or `to` from
+    /// quayA.
     fn ferry_test_transport(direct_duration: Duration, direct_distance: Distance) -> Arc<dyn TransportCost> {
         let size = 4;
         let at = |from: usize, to: usize| from * size + to;
@@ -566,8 +599,6 @@ mod ferry_aware_transport_cost {
         durations[at(0, 1)] = 300.;
         durations[at(2, 3)] = 600.;
         durations[at(0, 3)] = direct_duration;
-        durations[at(0, 2)] = 5000.; // from -> quayB: keeps B-to-A's zero-wait bound from winning
-        durations[at(1, 3)] = 5000.; // quayA -> to: same, for the egress side
 
         distances[at(0, 1)] = 53.;
         distances[at(2, 3)] = 89.;
@@ -651,6 +682,42 @@ mod ferry_aware_transport_cost {
     }
 
     #[test]
+    fn duration_uses_the_arrival_anchored_path_for_travel_time_arrival() {
+        // sailing at 900s, arriving 2100s; deadline 3000s leaves 300s of slack past the sailing's
+        // arrival+egress (2100+600=2700). The correct arrival-anchored total is
+        // arrival - depart_at = 3000 - 600 = 2400 (depart_at = sailing.dep(900) - approach(300)).
+        // Every other test in this module queries `TravelTime::Departure`; a mutant that swapped
+        // the `TravelTime::Arrival` arm to call `best_departure` instead of `best_arrival` would
+        // treat 3000 as a departure, look for a sailing at or after 3000+300=3300 - past the only
+        // sailing at 900 - find none, and silently fall back to the 5000s road leg instead of
+        // failing loudly.
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(15.), min(35.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let duration = ferry_aware.duration(&route, 0, 3, TravelTime::Arrival(3000.));
+
+        assert_eq!(duration, 2400.);
+    }
+
+    #[test]
+    fn distance_uses_the_arrival_anchored_path_for_travel_time_arrival() {
+        // same crossing and deadline as duration_uses_the_arrival_anchored_path_for_travel_time_arrival;
+        // distance must still equal the resolved path's own approach+egress (53+89), not the
+        // direct road distance (5000) a mutant that fails to resolve the arrival-side path (see
+        // that test's comment) would fall back to.
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(15.), min(35.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let distance = ferry_aware.distance(&route, 0, 3, TravelTime::Arrival(3000.));
+
+        assert_eq!(distance, 53. + 89.);
+    }
+
+    #[test]
     fn duration_approx_is_the_zero_wait_total_and_never_exceeds_duration() {
         // the sailing (900s) is well after the quay is reached (300s), forcing a 600s real wait;
         // duration_approx must ignore the timetable and report the zero-wait total (300 approach +
@@ -682,6 +749,25 @@ mod ferry_aware_transport_cost {
         let distance_approx = ferry_aware.distance_approx(&profile, 0, 3);
 
         assert_eq!(distance_approx, 53. + 89.);
+    }
+
+    #[test]
+    fn duration_approx_skips_a_direction_with_no_sailings_at_all() {
+        // B-to-A's own approach/egress legs (from->quayB, quayA->to) are `ferry_test_transport`'s
+        // untouched default of 0 - cheaper than A-to-B's real 300+600 - so if the zero-wait bound
+        // did not exclude a direction with no sailings at all, it would report a phantom B-to-A
+        // total (0 + 1200 crossing + 0 = 1200) instead of A-to-B's real one (2100).
+        // `one_way_crossing`'s B-to-A direction has no sailings ever, so no real query could ever
+        // take it - this is what makes it safe for the zero-wait bound to rule out, unlike merely
+        // being optimistic about a wait it cannot see.
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(5.), min(25.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let profile = Profile::default();
+
+        let duration_approx = ferry_aware.duration_approx(&profile, 0, 3);
+
+        assert_eq!(duration_approx, 2100.);
     }
 
     #[test]
