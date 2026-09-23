@@ -111,14 +111,22 @@ impl FerryIndex {
 }
 
 /// A resolved path across one ferry crossing: which crossing and direction, when the vehicle
-/// must be at the boarding quay, the sailing it catches, and the total duration of the journey
-/// (approach + wait + crossing + egress) that a caller compares against the road alternative.
+/// leaves `from` and must be at the boarding quay, the sailing it catches, and the total
+/// duration a caller compares against the road alternative.
+///
+/// For `best_departure`, `total_duration` is the journey's own length (approach + wait +
+/// crossing + egress) and `depart_at` echoes the given `departure`. For `best_arrival`,
+/// `total_duration` is `arrival - depart_at`: the two are not computed the same way, so a
+/// caller must not assume a value returned by one variant means the same thing on the other.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FerryPath {
     /// Index of the crossing within the `FerryIndex` that produced this path.
     pub crossing_idx: usize,
     /// Direction of travel across the crossing.
     pub direction: FerryDirection,
+    /// Time the vehicle leaves `from`: the given `departure` for `best_departure`, the latest
+    /// feasible departure for `best_arrival`.
+    pub depart_at: Timestamp,
     /// Time the vehicle must be at the boarding quay, seconds on the problem's time base.
     pub arrive_quay_at: Timestamp,
     /// Departure time of the sailing caught, seconds on the problem's time base.
@@ -128,21 +136,23 @@ pub struct FerryPath {
     /// timetable oddity on one sailing can't make it look faster than another on the same
     /// crossing.
     pub sailing_arr: Timestamp,
-    /// Total duration of the journey from `from` to `to`, including approach, wait, the
-    /// crossing itself and egress.
+    /// Total duration a caller compares against the road alternative; see the struct doc for
+    /// how it differs between the two functions that produce a `FerryPath`.
     pub total_duration: Duration,
 }
 
-/// Tries every crossing and direction in `index`, calling `select` for each to find the sailing
-/// (and the time the vehicle must be at the boarding quay) that leg would use, then keeps the
-/// candidate with the smallest total duration. Shared by `best_departure` and `best_arrival`,
-/// which differ only in how they pick a sailing from a crossing's timetable.
+/// Tries every crossing and direction in `index`, calling `select` for each to build the
+/// candidate that leg would produce (`select` computes its own `total_duration` and applies its
+/// own lower-bound prune against `best_so_far`, since the two callers define "total" - and so
+/// what bounds it - differently), then keeps the candidate with the smallest total duration.
+/// Shared by `best_departure` and `best_arrival`, which differ only in how they pick a sailing
+/// and in what a "total" means for that direction of query.
 fn best_path(
     index: &FerryIndex,
     road: &dyn Fn(Location, Location) -> Duration,
     from: Location,
     to: Location,
-    select: impl Fn(&FerryCrossing, FerryDirection, Duration, Duration) -> Option<(Timestamp, FerrySailing)>,
+    select: impl Fn(&FerryCrossing, FerryDirection, Duration, Duration, Duration) -> Option<FerryPath>,
 ) -> Option<FerryPath> {
     let mut best: Option<FerryPath> = None;
 
@@ -168,29 +178,16 @@ fn best_path(
 
             let best_so_far = best.map(|path| path.total_duration).unwrap_or(Duration::INFINITY);
 
-            // waiting only ever adds to the zero-wait bound, so once a cheaper candidate is
-            // found, a crossing whose best possible case can't beat it needs no sailing lookup.
-            let zero_wait_bound = approach + crossing.crossing_sec + egress;
-            if zero_wait_bound >= best_so_far {
+            let Some(candidate) = select(crossing, direction, approach, egress, best_so_far) else { continue };
+
+            // a variant's own prune only bounds total_duration from below, so a candidate that
+            // cleared it can still end up worse than the current best once its actual total is
+            // known; only accept it if it truly is better.
+            if candidate.total_duration >= best_so_far {
                 continue;
             }
 
-            let Some((arrive_quay_at, sailing)) = select(crossing, direction, approach, egress) else { continue };
-
-            let wait = sailing.dep - arrive_quay_at;
-            let total_duration = approach + wait + crossing.crossing_sec + egress;
-            if total_duration >= best_so_far {
-                continue;
-            }
-
-            best = Some(FerryPath {
-                crossing_idx,
-                direction,
-                arrive_quay_at,
-                sailing_dep: sailing.dep,
-                sailing_arr: sailing.arr,
-                total_duration,
-            });
+            best = Some(FerryPath { crossing_idx, ..candidate });
         }
     }
 
@@ -208,20 +205,45 @@ pub fn best_departure(
     to: Location,
     departure: Timestamp,
 ) -> Option<FerryPath> {
-    best_path(index, road, from, to, |crossing, direction, approach, _egress| {
+    best_path(index, road, from, to, |crossing, direction, approach, egress, best_so_far| {
+        // waiting only ever adds to the zero-wait bound, so a crossing whose best possible case
+        // (no wait at all) can't beat what's already found needs no sailing lookup at all.
+        let zero_wait_bound = approach + crossing.crossing_sec + egress;
+        if zero_wait_bound >= best_so_far {
+            return None;
+        }
+
         let at_quay = departure + approach;
         let earliest = at_quay + crossing.boarding_buffer_sec;
         let sailings = crossing.sailings(direction);
         // first sailing departing at or after `earliest`.
         let idx = sailings.partition_point(|sailing| sailing.dep < earliest);
-        sailings.get(idx).map(|sailing| (at_quay, *sailing))
+        let sailing = *sailings.get(idx)?;
+
+        let wait = sailing.dep - at_quay;
+        let total_duration = approach + wait + crossing.crossing_sec + egress;
+
+        Some(FerryPath {
+            crossing_idx: 0, // overwritten by best_path once a candidate is accepted
+            direction,
+            depart_at: departure,
+            arrive_quay_at: at_quay,
+            sailing_dep: sailing.dep,
+            sailing_arr: sailing.arr,
+            total_duration,
+        })
     })
 }
 
-/// The mirror of `best_departure` for a required arrival: the latest sailing whose crossing (plus
-/// egress to `to`) still lands by `arrival`, and the duration of that whole journey. `road` gives
+/// The mirror of `best_departure` for a required arrival: the crossing and sailing that let the
+/// vehicle leave `from` as late as possible while still reaching `to` by `arrival`. `road` gives
 /// the ferries-excluded duration between two locations. Returns `None` when no crossing offers a
 /// usable path.
+///
+/// This does not minimise journey length: a short crossing with one sailing an hour away can
+/// force an earlier departure than a longer crossing sailing every few minutes, so `total_duration`
+/// here is `arrival - depart_at` and minimising it is exactly maximising the latest feasible
+/// departure — the quantity that actually matters for a deadline.
 pub fn best_arrival(
     index: &FerryIndex,
     road: &dyn Fn(Location, Location) -> Duration,
@@ -229,16 +251,42 @@ pub fn best_arrival(
     to: Location,
     arrival: Timestamp,
 ) -> Option<FerryPath> {
-    best_path(index, road, from, to, |crossing, direction, _approach, egress| {
-        let threshold = arrival - egress;
+    best_path(index, road, from, to, |crossing, direction, approach, egress, best_so_far| {
+        // a lower bound on total_duration = arrival - depart_at: every sailing has arr >= dep
+        // (enforced on construction) and a feasible one has arr + egress <= arrival, so
+        // dep <= arrival - egress, and depart_at = dep - buffer - approach follows the same
+        // bound. crossing_sec plays no part in this variant's total, so - unlike the departure
+        // side - it cannot be used here; a crossing whose best possible case can't beat what's
+        // already found needs no sailing lookup at all.
+        let zero_wait_bound = approach + egress + crossing.boarding_buffer_sec;
+        if zero_wait_bound >= best_so_far {
+            return None;
+        }
+
         let sailings = crossing.sailings(direction);
-        // last sailing whose arrival still meets the deadline: `partition_point` needs arr
-        // non-decreasing in the same order as dep, true for any real timetable (a sailing that
-        // departs later cannot arrive earlier on the same crossing).
-        let idx = sailings.partition_point(|sailing| sailing.arr <= threshold);
-        let sailing = *sailings.get(idx.checked_sub(1)?)?;
-        // the vehicle need only be at the quay for the boarding buffer, not any earlier.
+        // sailings are sorted by dep ascending, but real timetables aren't always monotone in
+        // arr too (a later departure can arrive earlier), so a binary search on arr cannot be
+        // trusted; scanning from the end in descending-dep order and taking the first sailing
+        // that meets the deadline is exact regardless, and is cheap given a crossing carries at
+        // most a few dozen sailings a day per direction.
+        let sailing = sailings.iter().rev().find(|sailing| sailing.arr + egress <= arrival)?;
+
+        // the vehicle need only be at the quay for the boarding buffer, not any earlier; using
+        // the buffer directly (rather than re-deriving it by subtracting arrive_quay_at back
+        // out of sailing.dep) avoids a double float subtraction that can drift by a couple of
+        // ULPs and silently break the deadline-monotonicity property below.
         let arrive_quay_at = sailing.dep - crossing.boarding_buffer_sec;
-        Some((arrive_quay_at, sailing))
+        let depart_at = arrive_quay_at - approach;
+        let total_duration = arrival - depart_at;
+
+        Some(FerryPath {
+            crossing_idx: 0, // overwritten by best_path once a candidate is accepted
+            direction,
+            depart_at,
+            arrive_quay_at,
+            sailing_dep: sailing.dep,
+            sailing_arr: sailing.arr,
+            total_duration,
+        })
     })
 }
