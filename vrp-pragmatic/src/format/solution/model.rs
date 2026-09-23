@@ -235,6 +235,9 @@ pub enum FerryLegDirection {
 pub struct FerryLeg {
     /// Vehicle id of the tour that took this leg.
     pub vehicle_id: String,
+    /// Shift index of the tour that took this leg. A vehicle with more than one shift produces
+    /// more than one tour with the same `vehicleId`; this disambiguates which one.
+    pub shift_index: usize,
     /// Index of the departure stop within that tour's `stops`.
     pub from_stop_index: usize,
     /// Index of the arrival stop within that tour's `stops`.

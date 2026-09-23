@@ -48,17 +48,17 @@ pub(crate) fn create_solution(
     let reserved_times_index = problem.extras.get_reserved_times();
     let reserved_times_index = reserved_times_index.as_ref().unwrap_or(&empty_reserved_times);
 
-    let tours = solution
+    let (tours, departures): (Vec<Tour>, Vec<Vec<Timestamp>>) = solution
         .routes
         .iter()
         .map(|r| create_tour(problem, r, &coord_index, reserved_times_index))
-        .collect::<Vec<Tour>>();
+        .unzip();
 
     let statistic = tours.iter().fold(Statistic::default(), |acc, tour| acc + tour.statistic.clone());
 
     let unassigned = create_unassigned(solution);
     let violations = create_violations(solution);
-    let ferry_legs = create_ferry_legs(problem, &solution.routes, &tours, &coord_index);
+    let ferry_legs = create_ferry_legs(problem, &solution.routes, &tours, &departures, &coord_index);
 
     let api_solution = ApiSolution { statistic, tours, unassigned, violations, ferry_legs, extras: None };
 
@@ -72,7 +72,7 @@ fn create_tour(
     route: &Route,
     coord_index: &CoordIndex,
     reserved_times_index: &ReservedTimesIndex,
-) -> Tour {
+) -> (Tour, Vec<Timestamp>) {
     // TODO reduce complexity
     let parking = get_parking_time(problem.extras.as_ref());
 
@@ -87,6 +87,13 @@ fn create_tour(
         stops: vec![],
         statistic: Statistic::default(),
     };
+    // one exact (unrounded) domain departure per point stop pushed below, in the same order -
+    // `tour.stops[i].time.departure` is a whole-second string, but a ferry's sailing choice is a
+    // step function of departure, so `create_ferry_legs` needs the real value this format cannot
+    // carry. Point stops are never removed or reordered by the later break-insertion pass (see
+    // `insert_reserved_times_as_breaks`), only spliced with transit stops in between, so this
+    // stays aligned with the final `tour.stops` when zipped in encountered order.
+    let mut departures: Vec<Timestamp> = Vec::new();
 
     let intervals = get_route_intervals(route, |a| get_activity_type(a).is_some_and(|t| t == "reload"));
 
@@ -130,6 +137,7 @@ fn create_tour(
                 }],
                 parking: None,
             }));
+            departures.push(start.schedule.departure);
             (start_idx + 1, start)
         } else {
             (start_idx, route.tour.get(start_idx - 1).unwrap())
@@ -223,17 +231,22 @@ fn create_tour(
                         },
                         activities: vec![],
                     }));
+                    departures.push(act.schedule.departure);
                 }
 
                 let load = calculate_load(prev_load, act);
 
-                let last = tour.stops.len() - 1;
-                let last = match tour.stops.get_mut(last).unwrap() {
+                let last_idx = tour.stops.len() - 1;
+                let last = match tour.stops.get_mut(last_idx).unwrap() {
                     Stop::Point(point) => point,
                     Stop::Transit(_) => unreachable!(),
                 };
 
                 last.time.departure = format_time(act.schedule.departure);
+                // mirrors the line above: every activity at this stop, not only the one that
+                // opened it, can push its real departure later - the wire string is updated the
+                // same way, so the exact value must track it identically.
+                departures[last_idx] = act.schedule.departure;
                 last.load = load.as_vec();
                 last.activities.push(ApiActivity {
                     job_id,
@@ -316,7 +329,7 @@ fn create_tour(
     tour.vehicle_id.clone_from(vehicle.dimens.get_vehicle_id().unwrap());
     tour.type_id.clone_from(vehicle.dimens.get_vehicle_type().unwrap());
 
-    tour
+    (tour, departures)
 }
 
 /// Re-walks every tour's already-written stops and reports the legs that crossed a ferry.
@@ -325,45 +338,73 @@ fn create_tour(
 /// strictly better than the direct road) the solve itself applied - anchored at each leg's own
 /// departure, exactly as the solve anchored it. This is deterministic re-derivation, not recorded
 /// state: same inputs, same pure function, same answer the solve produced.
+///
+/// Walks *point* stops only, skipping any transit stop (a required break) spliced between them:
+/// the reserved-time wrapper sits outside the ferry-aware one and passes a leg's travel time
+/// straight through it, so a break landing mid-crossing never changes which crossing the solve
+/// resolved - only whether the writer later split its display into an extra stop. `departures`
+/// (see `create_tour`) supplies each point stop's exact domain departure instead of re-parsing the
+/// written whole-second string: a ferry's sailing choice is a step function of departure, and a
+/// truncated instant can resolve a different sailing - or none - from the one the solve caught.
 fn create_ferry_legs(
     problem: &DomainProblem,
     routes: &[Route],
     tours: &[Tour],
+    departures: &[Vec<Timestamp>],
     coord_index: &CoordIndex,
 ) -> Option<Vec<FerryLeg>> {
+    debug_assert_eq!(routes.len(), tours.len());
+    debug_assert_eq!(routes.len(), departures.len());
+
     let ferry_transport = problem.extras.get_ferry_transport()?;
     let transport = FerryAwareTransportCost::new(ferry_transport.road.clone(), ferry_transport.index.clone());
 
     let legs = routes
         .iter()
         .zip(tours.iter())
-        .flat_map(|(route, tour)| {
-            tour.stops.windows(2).enumerate().filter_map(|(from_stop_index, pair)| {
-                // a ferry leg always runs between two concrete locations; a transit stop (a
-                // required break with nowhere of its own) can never be one end of it.
-                let (Stop::Point(from), Stop::Point(to)) = (&pair[0], &pair[1]) else { return None };
+        .zip(departures.iter())
+        .flat_map(|((route, tour), departures)| {
+            // point stop index in the final (post-break-insertion) `stops` array, paired with its
+            // exact domain departure - `departures` holds one entry per point stop in the same
+            // order they were pushed, and break insertion only ever splices transit stops between
+            // them, so a plain zip in encountered order keeps the two aligned.
+            let point_stops: Vec<(usize, &PointStop, Timestamp)> = tour
+                .stops
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, stop)| stop.as_point().map(|point| (idx, point)))
+                .zip(departures.iter().copied())
+                .map(|((idx, point), departure)| (idx, point, departure))
+                .collect();
 
-                let from_idx = coord_index.get_by_loc(&from.location)?;
-                let to_idx = coord_index.get_by_loc(&to.location)?;
-                let departure = parse_time(&from.time.departure);
+            point_stops
+                .windows(2)
+                .filter_map(|pair| {
+                    let (from_stop_index, from, departure) = pair[0];
+                    let (to_stop_index, to, _) = pair[1];
 
-                let path = transport.resolve(route, from_idx, to_idx, TravelTime::Departure(departure))?;
-                let crossing = &ferry_transport.index.crossings()[path.crossing_idx];
+                    let from_idx = coord_index.get_by_loc(&from.location)?;
+                    let to_idx = coord_index.get_by_loc(&to.location)?;
 
-                Some(FerryLeg {
-                    vehicle_id: tour.vehicle_id.clone(),
-                    from_stop_index,
-                    to_stop_index: from_stop_index + 1,
-                    crossing_id: crossing.id.clone(),
-                    direction: match path.direction {
-                        FerryDirection::AToB => FerryLegDirection::AToB,
-                        FerryDirection::BToA => FerryLegDirection::BToA,
-                    },
-                    arrive_quay_at: path.arrive_quay_at,
-                    sailing_departure: path.sailing_dep,
-                    sailing_arrival: path.sailing_arr,
+                    let path = transport.resolve(route, from_idx, to_idx, TravelTime::Departure(departure))?;
+                    let crossing = &ferry_transport.index.crossings()[path.crossing_idx];
+
+                    Some(FerryLeg {
+                        vehicle_id: tour.vehicle_id.clone(),
+                        shift_index: tour.shift_index,
+                        from_stop_index,
+                        to_stop_index,
+                        crossing_id: crossing.id.clone(),
+                        direction: match path.direction {
+                            FerryDirection::AToB => FerryLegDirection::AToB,
+                            FerryDirection::BToA => FerryLegDirection::BToA,
+                        },
+                        arrive_quay_at: path.arrive_quay_at,
+                        sailing_departure: path.sailing_dep,
+                        sailing_arrival: path.sailing_arr,
+                    })
                 })
-            })
+                .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 

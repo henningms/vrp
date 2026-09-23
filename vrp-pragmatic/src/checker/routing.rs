@@ -3,6 +3,7 @@
 mod routing_test;
 
 use super::*;
+use crate::format::solution::FerryLegDirection;
 use crate::format_time;
 use crate::utils::combine_error_results;
 use vrp_core::models::problem::{FerryAwareTransportCost, FerryTransportExtraProperty, TransportCost, TravelTime};
@@ -11,7 +12,7 @@ use vrp_core::prelude::GenericResult;
 
 /// Checks that matrix routing information is used properly.
 pub fn check_routing(context: &CheckerContext) -> Result<(), Vec<GenericError>> {
-    combine_error_results(&[check_routing_rules(context)])
+    combine_error_results(&[check_routing_rules(context), check_ferry_legs_rules(context)])
 }
 
 fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
@@ -150,6 +151,101 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
     })?;
 
     check_solution_statistic(&context.solution)
+}
+
+/// Reconciles every reported `FerryLeg` against the stops it names, independently of the
+/// leg-by-leg fold above: the quay arrival must follow from the previous stop's departure plus
+/// the drive to the quay, and the next stop's arrival must follow from the sailing's arrival plus
+/// the drive from the far quay (plus any required-break dwell spliced in between as its own
+/// transit stop - a leg the writer correctly reports across a break still elapses that break's
+/// time before the next point stop is reached). This is what actually proves `ferryLegs`
+/// describes the solve rather than merely being present: a wrong stop index, a road leg reported
+/// as a crossing (or the reverse), an inverted direction, or a departure anchor that resolved a
+/// different sailing than the one actually caught would all fail here even though nothing above
+/// re-derives a leg's own duration/distance from `ferryLegs` at all.
+fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
+    let ferry_transport = context.core_problem.extras.get_ferry_transport();
+
+    let (Some(ferry_transport), Some(ferry_legs)) = (&ferry_transport, context.solution.ferry_legs.as_ref()) else {
+        // a problem with no crossings can never produce a leg to report; the reverse (crossings
+        // exist, nothing reported) is legitimate whenever no leg actually won against the road.
+        return if ferry_transport.is_none() && context.solution.ferry_legs.is_some() {
+            Err("solution reports ferryLegs but the problem has no ferry crossings".into())
+        } else {
+            Ok(())
+        };
+    };
+
+    let road = ferry_transport.road.as_ref();
+
+    ferry_legs.iter().try_for_each(|leg| -> GenericResult<()> {
+        let tour = context
+            .solution
+            .tours
+            .iter()
+            .find(|tour| tour.vehicle_id == leg.vehicle_id && tour.shift_index == leg.shift_index)
+            .ok_or_else(|| {
+                GenericError::from(format!(
+                    "ferryLeg references unknown vehicle/shift: {}/{}",
+                    leg.vehicle_id, leg.shift_index
+                ))
+            })?;
+
+        let from = tour.stops.get(leg.from_stop_index).and_then(|stop| stop.as_point()).ok_or_else(|| {
+            GenericError::from(format!("ferryLeg fromStopIndex {} is not a point stop", leg.from_stop_index))
+        })?;
+        let to = tour.stops.get(leg.to_stop_index).and_then(|stop| stop.as_point()).ok_or_else(|| {
+            GenericError::from(format!("ferryLeg toStopIndex {} is not a point stop", leg.to_stop_index))
+        })?;
+
+        let crossing = ferry_transport.index.crossings().iter().find(|crossing| crossing.id == leg.crossing_id).ok_or_else(
+            || GenericError::from(format!("ferryLeg references unknown crossing '{}'", leg.crossing_id)),
+        )?;
+
+        let (board_quay, disembark_quay) = match leg.direction {
+            FerryLegDirection::AToB => (crossing.quay_a, crossing.quay_b),
+            FerryLegDirection::BToA => (crossing.quay_b, crossing.quay_a),
+        };
+
+        let actor = context.get_actor(tour)?;
+        let route = Route { actor, tour: Default::default() };
+
+        let from_idx = context.get_location_index(&from.location)?;
+        let to_idx = context.get_location_index(&to.location)?;
+
+        let from_departure = parse_time(&from.time.departure);
+        let expected_quay_arrival =
+            from_departure + road.duration(&route, from_idx, board_quay, TravelTime::Departure(from_departure));
+        if (expected_quay_arrival - leg.arrive_quay_at).abs() > 1. {
+            return Err(format!(
+                "ferryLeg '{}' quay arrival mismatch: expected ~{expected_quay_arrival}, got {}",
+                leg.crossing_id, leg.arrive_quay_at
+            )
+            .into());
+        }
+
+        // any stop strictly between the two point stops a leg names is a transit (required
+        // break) stop spliced in by the writer - its own dwell (departure minus arrival) is real
+        // elapsed time the next point stop's arrival must still include.
+        let break_dwell: Duration = tour.stops[leg.from_stop_index + 1..leg.to_stop_index]
+            .iter()
+            .map(|stop| parse_time(&stop.schedule().departure) - parse_time(&stop.schedule().arrival))
+            .sum();
+
+        let expected_to_arrival = leg.sailing_arrival
+            + road.duration(&route, disembark_quay, to_idx, TravelTime::Departure(leg.sailing_arrival))
+            + break_dwell;
+        let actual_to_arrival = parse_time(&to.time.arrival);
+        if (expected_to_arrival - actual_to_arrival).abs() > 1. {
+            return Err(format!(
+                "ferryLeg '{}' next stop arrival mismatch: expected ~{expected_to_arrival}, got {actual_to_arrival}",
+                leg.crossing_id
+            )
+            .into());
+        }
+
+        Ok(())
+    })
 }
 
 fn check_stop_statistic(

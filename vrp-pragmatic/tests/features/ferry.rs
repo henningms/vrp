@@ -98,9 +98,10 @@ fn rejects_a_solution_with_a_corrupted_ferry_leg_arrival() {
 /// - a symmetric fixture could not tell those apart.
 #[test]
 fn reports_the_ferry_leg_taken_by_a_solved_crossing() {
+    let boarding_buffer_sec = 2.;
     let mut crossing = create_ferry_crossing("crossing1", (3., 0.), (90., 0.));
     crossing.crossing_sec = 5.;
-    crossing.boarding_buffer_sec = 2.;
+    crossing.boarding_buffer_sec = boarding_buffer_sec;
     crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 10., arr: 15. }], b_to_a: vec![] };
 
     let vehicle = VehicleType { shifts: vec![create_default_open_vehicle_shift()], ..create_default_vehicle_type() };
@@ -124,6 +125,7 @@ fn reports_the_ferry_leg_taken_by_a_solved_crossing() {
 
     let leg = &ferry_legs[0];
     assert_eq!(leg.vehicle_id, tour.vehicle_id);
+    assert_eq!(leg.shift_index, tour.shift_index);
     // pinned indices: a mutant that reported the pair (i+1, i+2), or swapped the two, changes
     // these without changing anything else observable about the solve.
     assert_eq!(leg.from_stop_index, 0);
@@ -136,15 +138,9 @@ fn reports_the_ferry_leg_taken_by_a_solved_crossing() {
     assert_eq!(leg.sailing_departure, 10.);
     assert_eq!(leg.sailing_arrival, 15.);
     assert!(
-        leg.sailing_departure >= leg.arrive_quay_at + crossing_boarding_buffer(),
+        leg.sailing_departure >= leg.arrive_quay_at + boarding_buffer_sec,
         "the sailing caught must be at or after the vehicle reaches the quay plus the boarding buffer"
     );
-}
-
-/// Boarding buffer used by `reports_the_ferry_leg_taken_by_a_solved_crossing`, kept as one
-/// constant so the buffer check can't silently drift from the fixture's own value.
-fn crossing_boarding_buffer() -> f64 {
-    2.
 }
 
 /// A closed shift returns the vehicle to its start, but the return sailing list is left empty -
@@ -240,4 +236,134 @@ fn omits_ferry_legs_key_when_the_problem_has_no_crossings() {
     let json = String::from_utf8(writer.into_inner().expect("buffer")).expect("utf8 json");
 
     assert!(!json.contains("ferryLegs"), "a problem with no ferry crossings must not emit the ferryLegs key at all");
+}
+
+/// Builds a problem where the from-point-stop's real departure is fractional (via a vehicle
+/// profile scale, not a fractional job duration - the latter trips an unrelated, pre-existing
+/// checker limitation on matching activities to jobs that has nothing to do with ferries). job0's
+/// arrival/departure and the approach to the quay are both scaled, so the real departure from
+/// job0 is 6.5s, landing at the quay at 7.6s - a value the wire format's whole-second `"6"` could
+/// never reproduce.
+fn scaled_departure_problem(sailings: Vec<FerrySailing>) -> Problem {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: sailings, b_to_a: vec![] };
+
+    let vehicle = VehicleType {
+        shifts: vec![VehicleShift {
+            start: ShiftStart { earliest: format_time(0.), latest: None, location: (-5., 0.).to_loc() },
+            end: None,
+            breaks: None,
+            reloads: None,
+            recharges: None,
+            required_stops: None,
+            via: None,
+        }],
+        profile: VehicleProfile { matrix: "car".to_string(), scale: Some(1.1) },
+        ..create_default_vehicle_type()
+    };
+    Problem {
+        plan: Plan {
+            jobs: vec![create_delivery_job("job0", (0., 0.)), create_delivery_job("job1", (100., 0.))],
+            ..create_empty_plan()
+        },
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    }
+}
+
+/// The real (6.5s) departure reaches the quay at 7.6s, missing a sailing at 7.3s and catching one
+/// at 20s instead. A mutant that anchors on the truncated wire departure ("6") would compute
+/// reaching the quay at 7.1s, catch the 7.3s sailing, and report that one - a real, different
+/// sailing from the one the solve actually caught, not merely an off-by-a-bit timestamp.
+#[test]
+fn anchors_on_the_solves_exact_departure_and_catches_the_sailing_a_truncated_one_would_have_missed() {
+    let problem =
+        scaled_departure_problem(vec![FerrySailing { dep: 7.3, arr: 7.35 }, FerrySailing { dep: 20., arr: 25. }]);
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    let ferry_legs = solution.ferry_legs.as_ref().expect("solution should report the crossed leg");
+    assert_eq!(ferry_legs.len(), 1);
+    assert_eq!(ferry_legs[0].crossing_id, "crossing1");
+    assert_eq!(ferry_legs[0].sailing_departure, 20., "the truncated-anchor sailing at 7.3s must not be reported");
+    assert_eq!(ferry_legs[0].sailing_arrival, 25.);
+    // approximate: `arrive_quay_at` is a real sum of scaled (fractional-in-f64) road distances,
+    // not a clean literal like the sailing times above.
+    assert!(
+        (ferry_legs[0].arrive_quay_at - 7.6).abs() < 1e-6,
+        "expected arrive_quay_at ~= 7.6, got {}",
+        ferry_legs[0].arrive_quay_at
+    );
+}
+
+/// Same real 7.6s quay arrival, but now the *only* sailing is the one at 7.3s that the real
+/// departure misses entirely: the vehicle drives the road instead, so no ferry leg exists at all.
+/// A mutant that anchors on the truncated wire departure ("6") would compute reaching the quay at
+/// 7.1s, catch that 7.3s sailing, and report a ferry leg for a leg that actually drove the road in
+/// full - a phantom crossing a consuming ride plan would splice a quay stop and boarding time into.
+#[test]
+fn anchors_on_the_solves_exact_departure_and_does_not_report_a_sailing_it_missed() {
+    let problem = scaled_departure_problem(vec![FerrySailing { dep: 7.3, arr: 7.35 }]);
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    assert!(solution.ferry_legs.is_none(), "the real departure missed the only sailing; nothing may be reported");
+}
+
+/// A crossing whose only sailing is reachable and catchable, but whose total (1 approach + 25
+/// crossing + 5 egress = 31s) is slower than the 30s direct road: the real solve drives.
+fn slower_than_the_road_problem() -> Problem {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (25., 0.));
+    crossing.crossing_sec = 25.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 26. }], b_to_a: vec![] };
+
+    let vehicle = VehicleType { shifts: vec![create_default_open_vehicle_shift()], ..create_default_vehicle_type() };
+    Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (30., 0.))], ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    }
+}
+
+/// A reimplementation that reports a ferry leg whenever a catchable sailing exists - rather than
+/// resolving through `FerryAwareTransportCost::resolve` and trusting its own "strictly better than
+/// road" comparison - would report one here: the sailing exists and the real departure catches it
+/// with zero wait. Only the actual comparison against the 30s road excludes it, so this is the one
+/// case that tells the real resolver apart from a timetable-presence check standing in for it.
+#[test]
+fn does_not_report_a_leg_whose_only_catchable_sailing_is_slower_than_the_road() {
+    let problem = slower_than_the_road_problem();
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    assert!(solution.ferry_legs.is_none(), "a leg that drove the road must not be reported as a ferry leg");
+}
+
+/// The same fixture as above, but this time the point is the wire bytes: the problem carries a
+/// real, attached crossing (unlike `omits_ferry_legs_key_when_the_problem_has_no_crossings`, whose
+/// problem has none at all), yet nothing crosses it. Production attaches every crossing whose quay
+/// falls within the problem's area, so "crossings attached, nothing taken" is the common case, not
+/// the edge case - a mutant that emits the key whenever the problem *carries* crossings (rather
+/// than whenever a leg actually used one) passes the no-crossings test but fails this one.
+#[test]
+fn omits_ferry_legs_key_when_crossings_are_attached_but_none_are_taken() {
+    let problem = slower_than_the_road_problem();
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+    assert!(solution.ferry_legs.is_none());
+
+    let mut writer = BufWriter::new(Vec::new());
+    serialize_solution(&solution, &mut writer).expect("solution should serialize");
+    let json = String::from_utf8(writer.into_inner().expect("buffer")).expect("utf8 json");
+
+    assert!(!json.contains("ferryLegs"), "crossings attached but unused must still omit the ferryLegs key");
 }

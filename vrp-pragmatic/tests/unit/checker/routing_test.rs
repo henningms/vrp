@@ -216,3 +216,101 @@ fn ferry_leg_resolves_correctly_despite_departure_truncated_to_whole_seconds() {
 
     assert_eq!(check_routing(&ctx), Ok(()));
 }
+
+/// Builds the exact fixture `wrapping_order_charges_both_the_ferry_and_an_overlapping_required_break`
+/// (in `problem_reader_test.rs`) proves elapses 37s domain-side (7s ferry + 30s break), together
+/// with the `Tour`/`FerryLeg` a correct writer reports for it: the break splits the leg's display
+/// into a transit stop, so `fromStopIndex`/`toStopIndex` (0, 2) skip over it rather than naming
+/// adjacent array entries.
+fn break_split_ferry_leg_fixture() -> (Arc<vrp_core::models::Problem>, Problem, Vec<Matrix>, Solution) {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 6. }], b_to_a: vec![] };
+
+    let vehicle_shift = VehicleShift {
+        breaks: Some(vec![VehicleBreak::Required {
+            time: VehicleRequiredBreakTime::ExactTime { earliest: format_time(3.), latest: format_time(4.) },
+            duration: 30.,
+        }]),
+        ..create_default_vehicle_shift()
+    };
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![VehicleType { shifts: vec![vehicle_shift], ..create_default_vehicle_type() }],
+            ..create_default_fleet()
+        },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+
+    let solution = SolutionBuilder::default()
+        .tour(
+            TourBuilder::default()
+                .stops(vec![
+                    StopBuilder::default()
+                        .coordinate((0., 0.))
+                        .schedule_stamp(0., 0.)
+                        .load(vec![1])
+                        .build_departure(),
+                    StopBuilder::new_transit().schedule_stamp(4., 34.).load(vec![1]).build_single("break", "break"),
+                    StopBuilder::default()
+                        .coordinate((100., 0.))
+                        .schedule_stamp(37., 38.)
+                        .load(vec![0])
+                        .build_single("job1", "delivery"),
+                ])
+                .statistic(Statistic::default())
+                .build(),
+        )
+        .ferry_legs(Some(vec![FerryLeg {
+            vehicle_id: "my_vehicle_1".to_string(),
+            shift_index: 0,
+            from_stop_index: 0,
+            to_stop_index: 2,
+            crossing_id: "crossing1".to_string(),
+            direction: FerryLegDirection::AToB,
+            arrive_quay_at: 1.,
+            sailing_departure: 1.,
+            sailing_arrival: 6.,
+        }]))
+        .build();
+
+    (core_problem, problem, vec![matrix], solution)
+}
+
+/// `check_ferry_legs_rules` alone, not `check_routing` as a whole: `check_routing_rules`'s
+/// leg-by-leg fold has a separate, pre-existing gap in how it accounts for a required break's own
+/// travel-to-break duration (reproducible with this exact break window and no ferry involved at
+/// all), unrelated to ferries and out of scope here. Isolating the ferry-specific reconciliation
+/// proves it independently accepts a leg the writer correctly reported across a break, without
+/// that unrelated gap muddying the result.
+#[test]
+fn ferry_leg_reconciles_across_a_required_break_spliced_into_the_leg() {
+    let (core_problem, problem, matrices, solution) = break_split_ferry_leg_fixture();
+    let ctx = CheckerContext::new(core_problem, problem, Some(matrices), solution).expect("valid context");
+
+    assert_eq!(check_ferry_legs_rules(&ctx), Ok(()));
+}
+
+/// A mutant that dropped the break-dwell term from `check_ferry_legs_rules` (comparing the next
+/// stop's arrival against sailing_arrival + egress alone, ignoring any transit stop spliced in
+/// between) would expect 7s here instead of 37s - i.e. it would *reject* the correct, unmutated
+/// fixture above. This test instead corrupts the reported arrival to that wrong-formula value (7s)
+/// and asserts rejection, proving the check is actively comparing rather than vacuously passing.
+#[test]
+fn ferry_leg_rejects_a_next_stop_arrival_that_ignores_the_spliced_break() {
+    let (core_problem, problem, matrices, mut solution) = break_split_ferry_leg_fixture();
+    let stop = solution.tours[0].stops.get_mut(2).expect("job1 stop");
+    *stop.schedule_mut() = Schedule { arrival: format_time(7.), departure: format_time(8.) };
+
+    let ctx = CheckerContext::new(core_problem, problem, Some(matrices), solution).expect("valid context");
+
+    assert!(
+        check_ferry_legs_rules(&ctx).is_err(),
+        "an arrival that ignores the break's 30s dwell must be rejected, not accepted"
+    );
+}

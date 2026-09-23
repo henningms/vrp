@@ -400,6 +400,12 @@ impl SolutionBuilder {
         self
     }
 
+    pub fn ferry_legs(mut self, ferry_legs: Option<Vec<FerryLeg>>) -> Self {
+        self.solution.ferry_legs = ferry_legs;
+
+        self
+    }
+
     pub fn build(mut self) -> Solution {
         self.solution.statistic =
             self.solution.tours.iter().fold(Statistic::default(), |acc, tour| acc + tour.statistic.clone());
