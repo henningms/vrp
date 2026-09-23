@@ -217,6 +217,40 @@ pub struct PointStop {
     pub activities: Vec<Activity>,
 }
 
+/// Direction of travel across a ferry crossing reported on a `FerryLeg`.
+#[derive(Clone, Copy, Deserialize, Serialize, Eq, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum FerryLegDirection {
+    /// From quay A to quay B.
+    AToB,
+    /// From quay B to quay A.
+    BToA,
+}
+
+/// One tour leg that crossed a ferry instead of driving the road directly: which crossing, in
+/// which direction, the sailing caught, and the stop indices bounding the leg so a consumer can
+/// splice a quay stop into the tour without re-deriving which leg took the ferry.
+#[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FerryLeg {
+    /// Vehicle id of the tour that took this leg.
+    pub vehicle_id: String,
+    /// Index of the departure stop within that tour's `stops`.
+    pub from_stop_index: usize,
+    /// Index of the arrival stop within that tour's `stops`.
+    pub to_stop_index: usize,
+    /// Crossing id, carried through from the problem input.
+    pub crossing_id: String,
+    /// Direction of travel across the crossing.
+    pub direction: FerryLegDirection,
+    /// Time the vehicle must be at the boarding quay, seconds on the problem's time base.
+    pub arrive_quay_at: Timestamp,
+    /// Departure time of the sailing caught, seconds on the problem's time base.
+    pub sailing_departure: Timestamp,
+    /// Arrival time of the sailing caught, seconds on the problem's time base.
+    pub sailing_arrival: Timestamp,
+}
+
 /// A tour is list of stops with their activities performed by specific vehicle.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -359,6 +393,12 @@ pub struct Solution {
     /// List of constraint violations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub violations: Option<Vec<Violation>>,
+
+    /// Ferry crossings taken by any tour, one entry per leg that crossed a ferry. Absent (not an
+    /// empty list) when nothing crossed, so a problem with no ferry crossings serializes exactly
+    /// as it did before this field existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ferry_legs: Option<Vec<FerryLeg>>,
 
     /// An extra information.
     #[serde(skip_serializing_if = "Option::is_none")]

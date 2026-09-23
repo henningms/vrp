@@ -10,7 +10,10 @@ use vrp_core::construction::enablers::{ReservedTimesIndex, get_route_intervals};
 use vrp_core::construction::features::JobDemandDimension;
 use vrp_core::construction::heuristics::UnassignmentInfo;
 use vrp_core::models::common::*;
-use vrp_core::models::problem::{JobIdDimension, Multi, TravelTime, VehicleIdDimension};
+use vrp_core::models::problem::{
+    FerryAwareTransportCost, FerryDirection, FerryTransportExtraProperty, JobIdDimension, Multi, TravelTime,
+    VehicleIdDimension,
+};
 use vrp_core::models::solution::{Activity, Route};
 use vrp_core::prelude::Float;
 use vrp_core::rosomaxa::evolution::TelemetryMetrics;
@@ -55,8 +58,9 @@ pub(crate) fn create_solution(
 
     let unassigned = create_unassigned(solution);
     let violations = create_violations(solution);
+    let ferry_legs = create_ferry_legs(problem, &solution.routes, &tours, &coord_index);
 
-    let api_solution = ApiSolution { statistic, tours, unassigned, violations, extras: None };
+    let api_solution = ApiSolution { statistic, tours, unassigned, violations, ferry_legs, extras: None };
 
     let extras = create_extras(problem, &api_solution, solution.telemetry.as_ref(), output_type);
 
@@ -313,6 +317,57 @@ fn create_tour(
     tour.type_id.clone_from(vehicle.dimens.get_vehicle_type().unwrap());
 
     tour
+}
+
+/// Re-walks every tour's already-written stops and reports the legs that crossed a ferry.
+///
+/// Resolves through `FerryAwareTransportCost::resolve` - the same rule (a crossing wins only when
+/// strictly better than the direct road) the solve itself applied - anchored at each leg's own
+/// departure, exactly as the solve anchored it. This is deterministic re-derivation, not recorded
+/// state: same inputs, same pure function, same answer the solve produced.
+fn create_ferry_legs(
+    problem: &DomainProblem,
+    routes: &[Route],
+    tours: &[Tour],
+    coord_index: &CoordIndex,
+) -> Option<Vec<FerryLeg>> {
+    let ferry_transport = problem.extras.get_ferry_transport()?;
+    let transport = FerryAwareTransportCost::new(ferry_transport.road.clone(), ferry_transport.index.clone());
+
+    let legs = routes
+        .iter()
+        .zip(tours.iter())
+        .flat_map(|(route, tour)| {
+            tour.stops.windows(2).enumerate().filter_map(|(from_stop_index, pair)| {
+                // a ferry leg always runs between two concrete locations; a transit stop (a
+                // required break with nowhere of its own) can never be one end of it.
+                let (Stop::Point(from), Stop::Point(to)) = (&pair[0], &pair[1]) else { return None };
+
+                let from_idx = coord_index.get_by_loc(&from.location)?;
+                let to_idx = coord_index.get_by_loc(&to.location)?;
+                let departure = parse_time(&from.time.departure);
+
+                let path = transport.resolve(route, from_idx, to_idx, TravelTime::Departure(departure))?;
+                let crossing = &ferry_transport.index.crossings()[path.crossing_idx];
+
+                Some(FerryLeg {
+                    vehicle_id: tour.vehicle_id.clone(),
+                    from_stop_index,
+                    to_stop_index: from_stop_index + 1,
+                    crossing_id: crossing.id.clone(),
+                    direction: match path.direction {
+                        FerryDirection::AToB => FerryLegDirection::AToB,
+                        FerryDirection::BToA => FerryLegDirection::BToA,
+                    },
+                    arrive_quay_at: path.arrive_quay_at,
+                    sailing_departure: path.sailing_dep,
+                    sailing_arrival: path.sailing_arr,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if legs.is_empty() { None } else { Some(legs) }
 }
 
 fn format_schedule(schedule: &DomainSchedule) -> ApiSchedule {

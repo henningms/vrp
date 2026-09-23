@@ -416,6 +416,7 @@ impl Default for SolutionBuilder {
                 tours: vec![],
                 unassigned: None,
                 violations: None,
+                ferry_legs: None,
                 extras: None,
             },
         }
