@@ -1,6 +1,6 @@
 use crate::checker::CheckerContext;
 use crate::format::problem::*;
-use crate::format::solution::{FerryLegDirection, serialize_solution};
+use crate::format::solution::{FerryLegDirection, Stop, serialize_solution};
 use crate::format_time;
 use crate::helpers::*;
 use std::io::BufWriter;
@@ -366,4 +366,189 @@ fn omits_ferry_legs_key_when_crossings_are_attached_but_none_are_taken() {
     let json = String::from_utf8(writer.into_inner().expect("buffer")).expect("utf8 json");
 
     assert!(!json.contains("ferryLegs"), "crossings attached but unused must still omit the ferryLegs key");
+}
+
+/// A real solve (not a hand-built fixture) proving the writer correctly reports a leg split by a
+/// required break, exercising the exact fix for finding 1 end to end. Uses
+/// `solve_with_metaheuristic_and_iterations_without_check` rather than
+/// `solve_with_cheapest_insertion`: a separate, pre-existing gap in `check_routing_rules`'s own
+/// leg-by-leg fold rejects *any* required break with real travel before it (reproducible with no
+/// ferry crossings at all - see `ferry_leg_reconciles_across_a_required_break_spliced_into_the_leg`
+/// in `tests/unit/checker/routing_test.rs`), so a full checked solve of this scenario isn't
+/// available today - but the solve and the writer's reporting of it are real, and reverting the
+/// point-stops-only walk in `create_ferry_legs` back to a plain `windows(2)` over every stop makes
+/// this test fail (the leg would silently vanish, as it did before the fix).
+#[test]
+fn reports_a_ferry_leg_split_by_a_required_break_from_a_real_solve() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 6. }], b_to_a: vec![] };
+
+    let vehicle_shift = VehicleShift {
+        breaks: Some(vec![VehicleBreak::Required {
+            time: VehicleRequiredBreakTime::ExactTime { earliest: format_time(3.), latest: format_time(4.) },
+            duration: 30.,
+        }]),
+        ..create_default_vehicle_shift()
+    };
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![VehicleType { shifts: vec![vehicle_shift], ..create_default_vehicle_type() }],
+            ..create_default_fleet()
+        },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_metaheuristic_and_iterations_without_check(problem, Some(vec![matrix]), 100);
+
+    let tour = solution.tours.first().expect("job should be assigned to a tour");
+    assert!(
+        matches!(tour.stops.get(1), Some(Stop::Transit(_))),
+        "the break must have split the leg's display into a transit stop at index 1"
+    );
+
+    let ferry_legs = solution.ferry_legs.as_ref().expect("solution should report the crossed leg");
+    assert_eq!(ferry_legs.len(), 1, "exactly one leg crossed a ferry");
+    assert_eq!(ferry_legs[0].from_stop_index, 0);
+    assert_eq!(ferry_legs[0].to_stop_index, 2, "must skip the spliced transit stop, not name it");
+    assert_eq!(ferry_legs[0].crossing_id, "crossing1");
+    assert_eq!(ferry_legs[0].direction, FerryLegDirection::AToB);
+}
+
+/// The cost model charges `crossing.crossingSec`, not the sailing's own `arr - dep`: this
+/// crossing's sailing spans 9s (2 -> 11) while the crossing itself takes only 4s - exactly what
+/// production timetables look like (thirty-three real crossings carry sailings of differing
+/// lengths, since the crossing duration sent is a single number per crossing, not derived from
+/// whichever sailing is actually caught). Before deriving the expected next-stop arrival from
+/// `sailingDeparture + crossingSec` instead of `sailingArrival`, the checker would have computed
+/// 11 + 1 = 12 instead of the real 2 + 4 + 1 = 7 and rejected this correct solve outright.
+#[test]
+fn solves_and_checks_a_crossing_whose_sailing_span_differs_from_its_crossing_duration() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (9., 0.));
+    crossing.crossing_sec = 4.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 2., arr: 11. }], b_to_a: vec![] };
+
+    let vehicle = VehicleType { shifts: vec![create_default_open_vehicle_shift()], ..create_default_vehicle_type() };
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (10., 0.))], ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    // `solve_with_cheapest_insertion` runs the checker and panics on rejection - that panic, not
+    // an assertion here, is what proves the fix.
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    let ferry_legs = solution.ferry_legs.as_ref().expect("solution should report the crossed leg");
+    assert_eq!(ferry_legs.len(), 1);
+    assert_eq!(ferry_legs[0].sailing_departure, 2.);
+    assert_eq!(ferry_legs[0].sailing_arrival, 11.);
+}
+
+/// A leg whose elapsed time the road alone cannot explain must carry a `FerryLeg` entry: takes a
+/// real, valid, checked solve and simply deletes its one reported leg, then asserts the checker
+/// rejects the result. Before `check_ferry_legs_rules` walked every tour's own point-stop pairs
+/// (rather than only validating whatever entries happened to be present), a missing entry was
+/// invisible to the checker - which is exactly how finding 1 escaped in the first place.
+#[test]
+fn rejects_a_solution_missing_the_ferry_leg_entry_for_a_leg_that_crossed() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 6. }], b_to_a: vec![] };
+
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+    assert!(solution.ferry_legs.is_some(), "sanity: the real solve must have crossed the ferry");
+    solution.ferry_legs = None;
+
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
+
+    assert!(ctx.check().is_err(), "a leg the road alone cannot explain must be reported, not silently dropped");
+}
+
+/// Nothing ties `sailingDeparture`/`sailingArrival` back to the timetable except this check: takes
+/// a real, valid, checked solve and corrupts its reported sailing to a pair of timestamps that
+/// exist in neither the crossing's `aToB` nor `bToA` lists, then asserts rejection.
+#[test]
+fn rejects_a_ferry_leg_reporting_a_sailing_not_in_the_timetable() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 6. }], b_to_a: vec![] };
+
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+    let leg = solution.ferry_legs.as_mut().expect("solution should report the crossed leg").first_mut().unwrap();
+    // no sailing in this crossing's timetable ever departs at 999999s.
+    leg.sailing_departure = 999999.;
+    leg.sailing_arrival = 1000004.;
+
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
+
+    assert!(ctx.check().is_err(), "an invented sailing must be rejected, not accepted on its say-so");
+}
+
+/// The single most important property of the whole feature: takes a real, valid, checked solve
+/// (boarding buffer 2s) and corrupts its reported sailing to an *earlier* one that genuinely
+/// exists in the crossing's timetable, but departs before the vehicle can reach the quay plus the
+/// buffer - a sailing the vehicle could not physically have boarded - then asserts rejection.
+#[test]
+fn rejects_a_ferry_leg_whose_sailing_departs_before_the_vehicle_can_board() {
+    let mut crossing = create_ferry_crossing("crossing1", (3., 0.), (90., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 2.;
+    // dep 4/arr 9 is real but before earliest boarding (quay arrival 3 + buffer 2 = 5), so the
+    // real solve must catch the dep 10 sailing instead - leaving dep 4/arr 9 in the timetable
+    // purely as the "exists but unboardable" sailing this test corrupts the leg to report.
+    crossing.sailings = FerrySailings {
+        a_to_b: vec![FerrySailing { dep: 4., arr: 9. }, FerrySailing { dep: 10., arr: 15. }],
+        b_to_a: vec![],
+    };
+
+    let vehicle = VehicleType { shifts: vec![create_default_open_vehicle_shift()], ..create_default_vehicle_type() };
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+    let leg = solution.ferry_legs.as_mut().expect("solution should report the crossed leg").first_mut().unwrap();
+    assert_eq!(leg.sailing_departure, 10., "sanity: the real solve must have caught the boardable sailing");
+    leg.sailing_departure = 4.;
+    leg.sailing_arrival = 9.;
+
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
+
+    assert!(
+        ctx.check().is_err(),
+        "a sailing that departs before the vehicle can board must be rejected, not accepted"
+    );
 }

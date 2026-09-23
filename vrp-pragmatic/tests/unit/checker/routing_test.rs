@@ -210,6 +210,21 @@ fn ferry_leg_resolves_correctly_despite_departure_truncated_to_whole_seconds() {
                 })
                 .build(),
         )
+        // the outbound leg (0 -> 1) crossed; the return leg (1 -> 2) has no B-to-A sailings and
+        // resolves as plain road, so it carries no entry - `check_ferry_legs_rules` requires an
+        // entry only for a leg the road alone cannot explain, and would reject this fixture
+        // (missing entry) without it now that the rule checks both directions.
+        .ferry_legs(Some(vec![FerryLeg {
+            vehicle_id: "my_vehicle_1".to_string(),
+            shift_index: 0,
+            from_stop_index: 0,
+            to_stop_index: 1,
+            crossing_id: "crossing1".to_string(),
+            direction: FerryLegDirection::AToB,
+            arrive_quay_at: 4.5,
+            sailing_departure: 20.,
+            sailing_arrival: 21.,
+        }]))
         .build();
 
     let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
@@ -313,4 +328,65 @@ fn ferry_leg_rejects_a_next_stop_arrival_that_ignores_the_spliced_break() {
         check_ferry_legs_rules(&ctx).is_err(),
         "an arrival that ignores the break's 30s dwell must be rejected, not accepted"
     );
+}
+
+/// A malformed solution document (out-of-order/out-of-range stop indices) must produce an error
+/// from the standalone checker, never a panic - this runs from the CLI on user-supplied files. The
+/// original implementation sliced `tour.stops[leg.from_stop_index + 1..leg.to_stop_index]`
+/// directly with the leg's own (untrusted) indices, which panics when `toStopIndex <=
+/// fromStopIndex`; this constructs exactly that (`from: 1, to: 0` on a two-stop tour) and asserts
+/// `check_ferry_legs_rules` returns `Err` instead of unwinding.
+#[test]
+fn ferry_leg_with_out_of_order_indices_errors_instead_of_panicking() {
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 1., arr: 6. }], b_to_a: vec![] };
+
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem"));
+
+    let solution = SolutionBuilder::default()
+        .tour(
+            TourBuilder::default()
+                .stops(vec![
+                    StopBuilder::default().coordinate((0., 0.)).schedule_stamp(0., 0.).load(vec![1]).build_departure(),
+                    StopBuilder::default()
+                        .coordinate((100., 0.))
+                        .schedule_stamp(7., 7.)
+                        .load(vec![0])
+                        .build_single("job1", "delivery"),
+                ])
+                .statistic(Statistic::default())
+                .build(),
+        )
+        .ferry_legs(Some(vec![FerryLeg {
+            vehicle_id: "my_vehicle_1".to_string(),
+            shift_index: 0,
+            from_stop_index: 1,
+            to_stop_index: 0,
+            crossing_id: "crossing1".to_string(),
+            direction: FerryLegDirection::AToB,
+            arrive_quay_at: 1.,
+            sailing_departure: 1.,
+            sailing_arrival: 6.,
+        }]))
+        .build();
+
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).expect("valid context");
+
+    // catch_unwind, not just `is_err()`: the point of this test is that the old bug produced a
+    // panic (an aborted process from the CLI), not merely a "wrong" Ok/Err value.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check_ferry_legs_rules(&ctx)));
+
+    match result {
+        Ok(check_result) => assert!(check_result.is_err(), "an out-of-order ferryLeg must be rejected, not accepted"),
+        Err(_) => panic!("check_ferry_legs_rules panicked on an out-of-order stop index pair instead of erroring"),
+    }
 }
