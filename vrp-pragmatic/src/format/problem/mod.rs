@@ -6,6 +6,7 @@ use std::io::{BufReader, Read};
 use std::sync::Arc;
 use vrp_core::models::Lock;
 use vrp_core::models::common::TimeWindow;
+use vrp_core::models::problem::FerryTransport;
 use vrp_core::prelude::{ActivityCost, Fleet as CoreFleet, Jobs as CoreJobs, TransportCost};
 use vrp_core::utils::*;
 
@@ -155,6 +156,10 @@ struct ProblemBlocks {
     activity: Arc<dyn ActivityCost>,
     locks: Vec<Arc<Lock>>,
     reserved_times_index: ReservedTimesIndex,
+    /// `None` when the problem has no ferry crossings. Carries the ferry index and the road-only
+    /// transport `transport` was wrapped around, so a later pass can re-walk a tour without
+    /// needing to downcast `transport` back out of its wrapper.
+    ferry_transport: Option<Arc<FerryTransport>>,
 }
 
 /// Mapping between dimension names and their indices.

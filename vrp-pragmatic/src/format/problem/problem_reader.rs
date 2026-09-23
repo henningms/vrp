@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../../../tests/unit/format/problem/problem_reader_test.rs"]
+mod problem_reader_test;
+
 use super::*;
 use crate::format::problem::clustering_reader::create_cluster_config;
 use crate::format::problem::fleet_reader::*;
@@ -9,6 +13,7 @@ use crate::{CoordIndex, parse_time};
 use vrp_core::construction::enablers::*;
 use vrp_core::models::Extras;
 use vrp_core::models::common::{TimeOffset, TimeSpan, TimeWindow};
+use vrp_core::models::problem::{FerryAwareTransportCost, FerryTransport, FerryTransportExtraProperty};
 use vrp_core::solver::processing::{ClusterConfigExtraProperty, ReservedTimesExtraProperty};
 
 pub(super) fn map_to_problem_with_approx(problem: ApiProblem) -> Result<CoreProblem, MultiFormatError> {
@@ -61,7 +66,7 @@ pub(crate) fn map_to_problem_with_props(
 
     let goal = Arc::new(create_goal_context(&api_problem, &blocks, &props).map_err(to_multi_format_error)?);
 
-    let ProblemBlocks { jobs, fleet, transport, activity, locks, reserved_times_index, .. } = blocks;
+    let ProblemBlocks { jobs, fleet, transport, activity, locks, reserved_times_index, ferry_transport, .. } = blocks;
 
     if let Some(config) = create_cluster_config(&api_problem).map_err(to_multi_format_error)? {
         extras.set_cluster_config(Arc::new(config));
@@ -69,6 +74,10 @@ pub(crate) fn map_to_problem_with_props(
 
     if !reserved_times_index.is_empty() {
         extras.set_reserved_times(Arc::new(reserved_times_index));
+    }
+
+    if let Some(ferry_transport) = ferry_transport {
+        extras.set_ferry_transport(ferry_transport);
     }
 
     Ok(CoreProblem { fleet, jobs, locks, goal, activity, transport, extras: Arc::new(extras) })
@@ -232,6 +241,23 @@ fn get_problem_blocks(
             (environment.logger)(format!("fleet index created in {}ms", duration.as_millis()).as_str());
         },
     )?;
+    // ferry-aware first, reserved-time second: a required break overlapping a crossing then
+    // extends the leg, which is the right reading. The reverse order would compute the break
+    // against a road-only duration that the vehicle never actually drives.
+    let ferry_transport = match api_problem.ferry_crossings.as_deref().filter(|crossings| !crossings.is_empty()) {
+        Some(crossings) => {
+            let index = Arc::new(create_ferry_index(crossings, &coord_index)?);
+            Some(Arc::new(FerryTransport { index, road: transport.clone() }))
+        }
+        None => None,
+    };
+    let transport: Arc<dyn TransportCost> = match &ferry_transport {
+        Some(ferry_transport) => {
+            Arc::new(FerryAwareTransportCost::new(ferry_transport.road.clone(), ferry_transport.index.clone()))
+        }
+        None => transport,
+    };
+
     let activity: Arc<dyn ActivityCost> = Arc::new(OnlyVehicleActivityCost::default());
 
     let (transport, activity) = if reserved_times_index.is_empty() {
@@ -272,5 +298,6 @@ fn get_problem_blocks(
         activity,
         locks,
         reserved_times_index,
+        ferry_transport,
     })
 }

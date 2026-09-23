@@ -6,7 +6,12 @@
 #[path = "../../../tests/unit/models/problem/ferry_test.rs"]
 mod ferry_test;
 
-use crate::models::common::{Duration, Location, Timestamp};
+use crate::models::Extras;
+use crate::models::common::{Distance, Duration, Location, Profile, Timestamp};
+use crate::models::solution::Route;
+use std::sync::Arc;
+
+use super::{TransportCost, TravelTime};
 
 /// Above this many seconds, a road-network duration between two locations is "no road", not
 /// "a very slow road". The routing service represents an unreachable pair as a large finite
@@ -318,3 +323,151 @@ pub fn best_arrival(
         })
     })
 }
+
+/// Wraps a road transport cost with ferry awareness: every duration/distance query considers the
+/// road alongside the best crossing in `index` and returns whichever is better, so the solver
+/// plans real ferry crossings without any feature code needing to know ferries exist.
+///
+/// Only `duration`/`distance` and their approximations are overridden; `cost`'s default
+/// implementation already calls into both, so it reaches the ferry-aware numbers for free.
+pub struct FerryAwareTransportCost {
+    inner: Arc<dyn TransportCost>,
+    index: Arc<FerryIndex>,
+}
+
+impl FerryAwareTransportCost {
+    /// Creates a new ferry-aware wrapper around `inner`, considering every crossing in `index`.
+    pub fn new(inner: Arc<dyn TransportCost>, index: Arc<FerryIndex>) -> Self {
+        Self { inner, index }
+    }
+
+    /// Resolves the crossing (if any) that would win a real, timetable-aware query, and the quay
+    /// pair `distance` must route the approach/egress legs through for that same crossing.
+    ///
+    /// `duration` and `distance` are separate trait methods with no shared call state, so this is
+    /// what keeps them from disagreeing about which crossing was taken: both call this, and only
+    /// this decides the winner (by duration, the only axis `best_departure`/`best_arrival`
+    /// compare on) - `distance` never re-derives a "best" crossing from distance figures.
+    fn winning_crossing(
+        &self,
+        route: &Route,
+        from: Location,
+        to: Location,
+        travel_time: TravelTime,
+    ) -> Option<FerryPath> {
+        if self.index.is_empty() {
+            return None;
+        }
+
+        // the sub-legs' own departure/arrival time is unknown until a crossing is chosen (that's
+        // circular), so every road query a crossing needs is anchored to the same travel time as
+        // the outer from->to query - an approximation, but the same one `DynamicTransportCost`
+        // makes when it anchors a reserved-time lookup to the leg's own timestamps.
+        let road = |a: Location, b: Location| self.inner.duration(route, a, b, travel_time);
+        let path = match travel_time {
+            TravelTime::Departure(departure) => best_departure(&self.index, &road, from, to, departure),
+            TravelTime::Arrival(arrival) => best_arrival(&self.index, &road, from, to, arrival),
+        }?;
+
+        if path.total_duration >= self.inner.duration(route, from, to, travel_time) {
+            return None;
+        }
+
+        Some(path)
+    }
+
+    /// The time-independent counterpart of `winning_crossing`: the same duration-based
+    /// comparison, but against a zero-wait total instead of a real sailing, since
+    /// `duration_approx`/`distance_approx` have no timestamp to look one up against.
+    fn winning_crossing_approx(&self, profile: &Profile, from: Location, to: Location) -> Option<FerryPath> {
+        if self.index.is_empty() {
+            return None;
+        }
+
+        let road = |a: Location, b: Location| self.inner.duration_approx(profile, a, b);
+        let path = best_path(&self.index, &road, from, to, |crossing, direction, approach, egress, best_so_far| {
+            let total_duration = approach + crossing.crossing_sec + egress;
+            if total_duration >= best_so_far {
+                return None;
+            }
+
+            Some(FerryCandidate {
+                direction,
+                depart_at: 0.,
+                arrive_quay_at: approach,
+                sailing_dep: 0.,
+                sailing_arr: 0.,
+                total_duration,
+            })
+        })?;
+
+        if path.total_duration >= self.inner.duration_approx(profile, from, to) {
+            return None;
+        }
+
+        Some(path)
+    }
+
+    /// The quay pair a chosen `FerryPath` routes its approach/egress legs through: the first is
+    /// where the vehicle boards (reached by road from `from`), the second where it disembarks
+    /// (continues by road to `to`). `AToB` boards at `quay_a`, `BToA` at `quay_b`.
+    fn quays_for(&self, path: &FerryPath) -> (Location, Location) {
+        let crossing = &self.index.crossings()[path.crossing_idx];
+        match path.direction {
+            FerryDirection::AToB => (crossing.quay_a, crossing.quay_b),
+            FerryDirection::BToA => (crossing.quay_b, crossing.quay_a),
+        }
+    }
+}
+
+impl TransportCost for FerryAwareTransportCost {
+    fn duration_approx(&self, profile: &Profile, from: Location, to: Location) -> Duration {
+        self.winning_crossing_approx(profile, from, to)
+            .map(|path| path.total_duration)
+            .unwrap_or_else(|| self.inner.duration_approx(profile, from, to))
+    }
+
+    fn distance_approx(&self, profile: &Profile, from: Location, to: Location) -> Distance {
+        match self.winning_crossing_approx(profile, from, to) {
+            Some(path) => {
+                let (from_quay, to_quay) = self.quays_for(&path);
+                self.inner.distance_approx(profile, from, from_quay) + self.inner.distance_approx(profile, to_quay, to)
+            }
+            None => self.inner.distance_approx(profile, from, to),
+        }
+    }
+
+    fn duration(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Duration {
+        self.winning_crossing(route, from, to, travel_time)
+            .map(|path| path.total_duration)
+            .unwrap_or_else(|| self.inner.duration(route, from, to, travel_time))
+    }
+
+    fn distance(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Distance {
+        match self.winning_crossing(route, from, to, travel_time) {
+            Some(path) => {
+                let (from_quay, to_quay) = self.quays_for(&path);
+                self.inner.distance(route, from, from_quay, travel_time)
+                    + self.inner.distance(route, to_quay, to, travel_time)
+            }
+            None => self.inner.distance(route, from, to, travel_time),
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.inner.size()
+    }
+}
+
+/// Ferry index plus the pre-wrap road transport, published in the core problem's `Extras` so a
+/// later solution-writing pass can re-walk a tour to report which sailing was taken: it needs the
+/// unwrapped road duration to isolate the ferry leg from the rest, and there is no way to recover
+/// either by downcasting the wrapped `Arc<dyn TransportCost>` the problem actually solves with.
+pub struct FerryTransport {
+    /// Resolved ferry crossings available to the solve.
+    pub index: Arc<FerryIndex>,
+    /// The road-only transport cost `FerryAwareTransportCost` was built around.
+    pub road: Arc<dyn TransportCost>,
+}
+
+custom_extra_property!(pub FerryTransport typeof FerryTransport);

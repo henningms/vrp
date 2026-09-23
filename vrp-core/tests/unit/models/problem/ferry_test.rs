@@ -1,6 +1,9 @@
 use super::*;
+use crate::helpers::models::solution::test_actor_with_profile;
+use crate::models::solution::Route;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 fn sailing(dep: Timestamp, arr: Timestamp) -> FerrySailing {
     FerrySailing { dep, arr }
@@ -533,5 +536,185 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
             latest_departure(a1) <= latest_departure(a2) + 1e-6,
             "a later deadline must never force an earlier departure: a1={a1} a2={a2}"
         );
+    }
+}
+
+mod ferry_aware_transport_cost {
+    use super::*;
+    use crate::models::problem::SimpleTransportCost;
+
+    /// Builds a 4-location `SimpleTransportCost` (0=from, 1=quayA, 2=quayB, 3=to) with a fixed
+    /// approach (from->quayA, 300s/53) and egress (quayB->to, 600s/89) leg and the given direct
+    /// from->to road duration/distance.
+    ///
+    /// `one_way_crossing`'s B-to-A direction carries no sailings, so a real (timetable-aware)
+    /// query always excludes it on its own - but `duration_approx`/`distance_approx` have no
+    /// timetable to check, so without deliberately padding B-to-A's own approach/egress
+    /// (from->quayB, quayA->to) durations to 5000, that direction's zero-wait bound (0 + 1200
+    /// crossing + 0 = 1200) would look cheaper than A-to-B's real one (2100) - not a bug in the
+    /// wrapper, just the zero-wait bound being direction-blind by design, but it would make a
+    /// fixture built with the road matrix's untouched-entries default of 0 silently assert on the
+    /// wrong direction. The same two entries double as "trap" distance values (997, 991): only a
+    /// mutant reading the wrong quay for the chosen (A-to-B) direction would ever read them for
+    /// distance, since the real distance path never visits quayB from `from` or `to` from quayA.
+    fn ferry_test_transport(direct_duration: Duration, direct_distance: Distance) -> Arc<dyn TransportCost> {
+        let size = 4;
+        let at = |from: usize, to: usize| from * size + to;
+        let mut durations = vec![0.; size * size];
+        let mut distances = vec![0.; size * size];
+
+        durations[at(0, 1)] = 300.;
+        durations[at(2, 3)] = 600.;
+        durations[at(0, 3)] = direct_duration;
+        durations[at(0, 2)] = 5000.; // from -> quayB: keeps B-to-A's zero-wait bound from winning
+        durations[at(1, 3)] = 5000.; // quayA -> to: same, for the egress side
+
+        distances[at(0, 1)] = 53.;
+        distances[at(2, 3)] = 89.;
+        distances[at(0, 3)] = direct_distance;
+        distances[at(0, 2)] = 997.; // trap: from -> quayB
+        distances[at(1, 3)] = 991.; // trap: quayA -> to
+
+        Arc::new(SimpleTransportCost::new(durations, distances).expect("valid matrix"))
+    }
+
+    /// A single A-to-B crossing (quays 1 and 2, matching `ferry_test_transport`'s quays) with one
+    /// sailing and no B-to-A service - the empty direction lets a test's numbers describe the
+    /// A-to-B leg unambiguously, since `best_path` tries both directions but B-to-A always finds
+    /// no sailing regardless of road values.
+    fn one_way_crossing(
+        crossing_sec: Duration,
+        boarding_buffer_sec: Duration,
+        sailing_dep: Timestamp,
+        sailing_arr: Timestamp,
+    ) -> FerryIndex {
+        let crossing = FerryCrossing::new(
+            "aware".to_string(),
+            1,
+            2,
+            crossing_sec,
+            boarding_buffer_sec,
+            vec![sailing(sailing_dep, sailing_arr)],
+            vec![],
+        );
+        FerryIndex::new(vec![crossing])
+    }
+
+    fn test_route() -> Route {
+        Route { actor: test_actor_with_profile(0), tour: Default::default() }
+    }
+
+    #[test]
+    fn duration_prefers_inner_when_road_is_faster() {
+        // direct road (500s) beats every ferry option (>=2100s even with zero wait), so duration
+        // must equal the plain road duration - a mutant that always returns the ferry total would
+        // report 2100 here instead.
+        let inner = ferry_test_transport(500., 500.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(5.), min(25.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner.clone(), index);
+        let route = test_route();
+
+        let duration = ferry_aware.duration(&route, 0, 3, TravelTime::Departure(0.));
+
+        assert_eq!(duration, inner.duration(&route, 0, 3, TravelTime::Departure(0.)));
+        assert_eq!(duration, 500.);
+    }
+
+    #[test]
+    fn duration_prefers_ferry_when_it_wins() {
+        // ferry total: 300 approach + 0 wait (sailing departs exactly at quay arrival) + 1200
+        // crossing + 600 egress = 2100s, far under the 5000s direct road leg - a wrapper that
+        // never consults the ferry index would report 5000 here.
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(5.), min(25.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let duration = ferry_aware.duration(&route, 0, 3, TravelTime::Departure(0.));
+
+        assert_eq!(duration, 2100.);
+    }
+
+    #[test]
+    fn distance_sums_the_approach_and_egress_of_the_crossing_duration_chose() {
+        // same winning ferry path as `duration_prefers_ferry_when_it_wins`; distance must equal
+        // that path's own approach+egress (53+89), never the direct road distance (5000, a
+        // ferry-blind mutant) and never the trap entries (997/991, a swapped-quay mutant).
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(5.), min(25.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let distance = ferry_aware.distance(&route, 0, 3, TravelTime::Departure(0.));
+
+        assert_eq!(distance, 53. + 89.);
+    }
+
+    #[test]
+    fn duration_approx_is_the_zero_wait_total_and_never_exceeds_duration() {
+        // the sailing (900s) is well after the quay is reached (300s), forcing a 600s real wait;
+        // duration_approx must ignore the timetable and report the zero-wait total (300 approach +
+        // 1200 crossing + 600 egress = 2100), strictly less than the real, wait-inclusive duration
+        // (2700) - a mutant that drops the crossing_sec term, or that reuses duration()'s
+        // timetable lookup instead of a zero-wait bound, would report something other than these
+        // exact numbers.
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(15.), min(35.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+        let profile = route.actor.vehicle.profile.clone();
+
+        let duration_approx = ferry_aware.duration_approx(&profile, 0, 3);
+        let duration = ferry_aware.duration(&route, 0, 3, TravelTime::Departure(0.));
+
+        assert_eq!(duration_approx, 2100.);
+        assert_eq!(duration, 2700.);
+        assert!(duration_approx <= duration);
+    }
+
+    #[test]
+    fn distance_approx_sums_the_approach_and_egress_of_the_crossing_duration_approx_chose() {
+        let inner = ferry_test_transport(5000., 5000.);
+        let index = Arc::new(one_way_crossing(min(20.), 0., min(5.), min(25.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let profile = Profile::default();
+
+        let distance_approx = ferry_aware.distance_approx(&profile, 0, 3);
+
+        assert_eq!(distance_approx, 53. + 89.);
+    }
+
+    #[test]
+    fn empty_index_leaves_every_method_equal_to_inner() {
+        let inner = ferry_test_transport(500., 400.);
+        let index = Arc::new(FerryIndex::default());
+        let ferry_aware = FerryAwareTransportCost::new(Arc::clone(&inner), index);
+        let route = test_route();
+        let profile = route.actor.vehicle.profile.clone();
+
+        assert_eq!(
+            ferry_aware.duration(&route, 0, 3, TravelTime::Departure(0.)),
+            inner.duration(&route, 0, 3, TravelTime::Departure(0.))
+        );
+        assert_eq!(
+            ferry_aware.distance(&route, 0, 3, TravelTime::Departure(0.)),
+            inner.distance(&route, 0, 3, TravelTime::Departure(0.))
+        );
+        assert_eq!(ferry_aware.duration_approx(&profile, 0, 3), inner.duration_approx(&profile, 0, 3));
+        assert_eq!(ferry_aware.distance_approx(&profile, 0, 3), inner.distance_approx(&profile, 0, 3));
+        assert_eq!(ferry_aware.size(), inner.size());
+    }
+
+    #[test]
+    fn ferry_transport_extra_property_round_trips() {
+        let road: Arc<dyn TransportCost> = ferry_test_transport(0., 0.);
+        let index = Arc::new(FerryIndex::default());
+        let mut extras = Extras::default();
+
+        extras.set_ferry_transport(Arc::new(FerryTransport { index: Arc::clone(&index), road: Arc::clone(&road) }));
+
+        let stored = extras.get_ferry_transport().expect("ferry transport stored");
+        assert!(Arc::ptr_eq(&stored.road, &road));
+        assert!(Arc::ptr_eq(&stored.index, &index));
     }
 }
