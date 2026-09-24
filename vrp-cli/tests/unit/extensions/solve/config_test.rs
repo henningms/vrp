@@ -159,6 +159,7 @@ fn can_read_blinks_recreate_variants() {
 
 #[test]
 fn can_disable_infeasible_dynamic_diversification() {
+    // `lkhSearch` was removed together with LKH; older configs which still set it must keep parsing.
     let json = r#"{
       "hyper": {
         "type": "dynamic-selective",
@@ -171,11 +172,7 @@ fn can_disable_infeasible_dynamic_diversification() {
     let config = read_config(BufReader::new(json.as_bytes())).unwrap();
     assert!(matches!(
         config.hyper,
-        Some(HyperType::DynamicSelective {
-            infeasible_diversification: Some(false),
-            lkh_search: Some(false),
-            bounded_recreates: Some(true)
-        })
+        Some(HyperType::DynamicSelective { infeasible_diversification: Some(false), bounded_recreates: Some(true) })
     ));
 }
 

@@ -116,9 +116,6 @@ pub enum InitialConstruction {
 pub struct HeuristicSearchConfig {
     /// Enables diversification through temporarily infeasible solutions.
     pub infeasible_diversification: bool,
-    /// Has no effect: upstream removed the Lin-Kernighan-Helsgaun search from the portfolios. Kept so
-    /// that existing configurations keep deserializing and building.
-    pub lkh_search: bool,
     /// Uses sampled SISR for alternative-goal recreates and omits the
     /// unproductive farthest weak arm in the dynamic portfolio.
     pub bounded_recreates: bool,
@@ -126,7 +123,7 @@ pub struct HeuristicSearchConfig {
 
 impl Default for HeuristicSearchConfig {
     fn default() -> Self {
-        Self { infeasible_diversification: true, lkh_search: true, bounded_recreates: false }
+        Self { infeasible_diversification: true, bounded_recreates: false }
     }
 }
 
@@ -225,13 +222,6 @@ impl VrpConfigBuilder {
         self
     }
 
-    /// Has no effect: upstream removed the LKH intra-route search from the default portfolio. Kept
-    /// for API compatibility.
-    pub fn set_lkh_search(mut self, enabled: bool) -> Self {
-        self.heuristic_search.lkh_search = enabled;
-        self
-    }
-
     /// Enables or disables bounded dynamic recreates. It is disabled by
     /// default for backwards compatibility.
     pub fn set_bounded_recreates(mut self, enabled: bool) -> Self {
@@ -277,21 +267,7 @@ pub fn get_default_telemetry_mode(logger: InfoLogger) -> TelemetryMode {
 
 /// Gets default heuristic.
 pub fn get_default_heuristic(problem: Arc<Problem>, environment: Arc<Environment>) -> TargetHeuristic {
-    get_default_heuristic_with_diversification(problem, environment, true)
-}
-
-/// Gets the default dynamic heuristic and controls whether its diversification
-/// portfolio can search in relaxed, temporarily infeasible space.
-pub fn get_default_heuristic_with_diversification(
-    problem: Arc<Problem>,
-    environment: Arc<Environment>,
-    infeasible_diversification: bool,
-) -> TargetHeuristic {
-    get_default_heuristic_with_search_config(
-        problem,
-        environment,
-        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
-    )
+    get_default_heuristic_with_search_config(problem, environment, HeuristicSearchConfig::default())
 }
 
 /// Gets the default dynamic heuristic with explicit optional-operator controls.
@@ -311,21 +287,7 @@ pub fn get_static_heuristic(
     problem: Arc<Problem>,
     environment: Arc<Environment>,
 ) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
-    get_static_heuristic_with_diversification(problem, environment, true)
-}
-
-/// Gets the default static heuristic with optional infeasible-space
-/// diversification.
-pub fn get_static_heuristic_with_diversification(
-    problem: Arc<Problem>,
-    environment: Arc<Environment>,
-    infeasible_diversification: bool,
-) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
-    get_static_heuristic_with_search_config(
-        problem,
-        environment,
-        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
-    )
+    get_static_heuristic_with_search_config(problem, environment, HeuristicSearchConfig::default())
 }
 
 /// Gets the default static heuristic with explicit optional-operator controls.
@@ -361,22 +323,11 @@ pub fn get_static_heuristic_from_heuristic_group(
     environment: Arc<Environment>,
     heuristic_group: TargetHeuristicGroup,
 ) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
-    get_static_heuristic_from_heuristic_group_with_diversification(problem, environment, heuristic_group, true)
-}
-
-/// Gets a static heuristic using the supplied search group and optional
-/// infeasible-space diversification.
-pub fn get_static_heuristic_from_heuristic_group_with_diversification(
-    problem: Arc<Problem>,
-    environment: Arc<Environment>,
-    heuristic_group: TargetHeuristicGroup,
-    infeasible_diversification: bool,
-) -> StaticSelective<RefinementContext, GoalContext, InsertionContext> {
     get_static_heuristic_from_heuristic_group_with_search_config(
         problem,
         environment,
         heuristic_group,
-        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
+        HeuristicSearchConfig::default(),
     )
 }
 
@@ -401,20 +352,7 @@ pub fn get_dynamic_heuristic(
     problem: Arc<Problem>,
     environment: Arc<Environment>,
 ) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
-    get_dynamic_heuristic_with_diversification(problem, environment, true)
-}
-
-/// Gets the dynamic heuristic with optional infeasible-space diversification.
-pub fn get_dynamic_heuristic_with_diversification(
-    problem: Arc<Problem>,
-    environment: Arc<Environment>,
-    infeasible_diversification: bool,
-) -> DynamicSelective<RefinementContext, GoalContext, InsertionContext> {
-    get_dynamic_heuristic_with_search_config(
-        problem,
-        environment,
-        HeuristicSearchConfig { infeasible_diversification, ..HeuristicSearchConfig::default() },
-    )
+    get_dynamic_heuristic_with_search_config(problem, environment, HeuristicSearchConfig::default())
 }
 
 /// Gets the dynamic heuristic with explicit optional-operator controls.
