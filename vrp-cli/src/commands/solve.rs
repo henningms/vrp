@@ -41,6 +41,7 @@ const CONFIG_ARG_NAME: &str = "config";
 const LOG_ARG_NAME: &str = "log";
 const CHECK_ARG_NAME: &str = "check";
 const SEARCH_MODE_ARG_NAME: &str = "search-mode";
+const PARALLELISM_ARG_NAME: &str = "parallelism";
 const HEURISTIC_ARG_NAME: &str = "heuristic";
 const EXPERIMENTAL_ARG_NAME: &str = "experimental";
 const ROUNDED_ARG_NAME: &str = "round";
@@ -211,6 +212,17 @@ pub fn get_solve_app() -> Command {
                 .required(false)
                 .value_parser(["broad", "deep"])
                 .default_value("broad"),
+        )
+        .arg(
+            Arg::new(PARALLELISM_ARG_NAME)
+                .help(
+                    "Deprecated: sizes the global worker pool to num_thread_pools * threads_per_pool. \
+                     Upstream replaced per-operator thread pools with one shared scheduler, so prefer \
+                     the RAYON_NUM_THREADS environment variable. Format: \"num_thread_pools,threads_per_pool\"",
+                )
+                .long(PARALLELISM_ARG_NAME)
+                .short('p')
+                .required(false),
         )
         .arg(
             Arg::new(HEURISTIC_ARG_NAME)
@@ -479,7 +491,30 @@ fn get_environment(matches: &ArgMatches) -> GenericResult<Arc<Environment>> {
     let quota = Some(create_interruption_quota(max_time));
     let is_experimental = matches.get_one::<bool>(EXPERIMENTAL_ARG_NAME).copied().unwrap_or(false);
 
+    if let Some(num_threads) = get_legacy_parallelism_threads(matches)? {
+        // The global pool can be built only once per process; keep solving on the existing one.
+        if let Err(err) = rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global() {
+            eprintln!("cannot apply parallelism setting, using existing worker pool: {err}");
+        }
+    }
+
     Ok(Arc::new(Environment { quota, is_experimental, ..Environment::default() }))
+}
+
+/// Maps the removed `num_thread_pools,threads_per_pool` setting to a total worker count, so that
+/// existing invocations keep the same overall CPU budget on upstream's shared scheduler.
+fn get_legacy_parallelism_threads(matches: &ArgMatches) -> GenericResult<Option<usize>> {
+    matches
+        .get_one::<String>(PARALLELISM_ARG_NAME)
+        .map(|arg| {
+            match arg.split(',').map(|value| value.trim().parse::<usize>().ok()).collect::<Vec<_>>().as_slice() {
+                [Some(num_thread_pools), Some(threads_per_pool)] if *num_thread_pools > 0 && *threads_per_pool > 0 => {
+                    Ok(num_thread_pools * threads_per_pool)
+                }
+                _ => Err("cannot parse parallelism parameter".into()),
+            }
+        })
+        .transpose()
 }
 
 fn get_matrix_files(matches: &ArgMatches) -> Option<Vec<File>> {

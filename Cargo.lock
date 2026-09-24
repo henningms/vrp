@@ -1615,6 +1615,7 @@ dependencies = [
  "js-sys",
  "num_cpus",
  "pyo3",
+ "rayon",
  "schemars",
  "serde",
  "serde_json",
