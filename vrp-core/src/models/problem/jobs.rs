@@ -7,7 +7,7 @@ use crate::models::common::*;
 use crate::models::problem::{Costs, Fleet, TransportCost};
 use crate::utils::{Either, short_type_name};
 use rosomaxa::prelude::{Float, GenericError, GenericResult, InfoLogger};
-use rosomaxa::utils::{Timer, parallel_collect};
+use rosomaxa::utils::{ParallelismPolicy, Timer, parallel_collect};
 use std::cmp::Ordering::Less;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
@@ -422,7 +422,7 @@ fn create_index(
                 starts.dedup();
 
                 // create job index
-                let item = parallel_collect(&jobs, |job| {
+                let item = parallel_collect(&jobs, ParallelismPolicy::Default, |job| {
                     // Hoisted out of the inner loop: these are the same for every
                     // one of the N jobs compared against, so collecting them per
                     // pair meant an allocation per pair (~36M on a 6k-job problem).

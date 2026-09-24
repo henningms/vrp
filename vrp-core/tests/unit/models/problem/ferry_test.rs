@@ -452,11 +452,11 @@ fn best_arrival_respects_a_seeded_road_bound() {
 /// guaranteed to be monotone in `arr` - real timetables aren't either (see
 /// `best_arrival_finds_the_latest_departure_even_when_arrivals_are_not_in_departure_order`).
 fn random_sorted_sailings(rng: &mut SmallRng, count: usize) -> Vec<FerrySailing> {
-    let mut dep = rng.gen_range(0.0..2000.0);
+    let mut dep = rng.random_range(0.0..2000.0);
     (0..count)
         .map(|_| {
-            dep += rng.gen_range(1.0..600.0);
-            let arr = dep + rng.gen_range(60.0..3600.0);
+            dep += rng.random_range(1.0..600.0);
+            let arr = dep + rng.random_range(60.0..3600.0);
             sailing(dep, arr)
         })
         .collect()
@@ -474,7 +474,7 @@ const RANDOM_CASE_TO: Location = 1;
 fn random_case(
     rng: &mut SmallRng,
 ) -> (FerryIndex, impl Fn(Location, Location) -> Duration + use<>, Timestamp, Timestamp) {
-    let crossing_count = rng.gen_range(1..=3);
+    let crossing_count = rng.random_range(1..=3);
     let mut crossings = Vec::with_capacity(crossing_count);
     let mut road_matrix: HashMap<(Location, Location), Duration> = HashMap::new();
     let mut span_start = Timestamp::INFINITY;
@@ -484,8 +484,8 @@ fn random_case(
         let quay_a = 100 + i * 10 + 1;
         let quay_b = 100 + i * 10 + 2;
 
-        let a_to_b_count = rng.gen_range(1..=6);
-        let b_to_a_count = rng.gen_range(1..=6);
+        let a_to_b_count = rng.random_range(1..=6);
+        let b_to_a_count = rng.random_range(1..=6);
         let a_to_b = random_sorted_sailings(rng, a_to_b_count);
         let b_to_a = random_sorted_sailings(rng, b_to_a_count);
         for s in a_to_b.iter().chain(b_to_a.iter()) {
@@ -493,8 +493,8 @@ fn random_case(
             span_end = span_end.max(s.dep);
         }
 
-        let crossing_sec = rng.gen_range(60.0..7200.0);
-        let boarding_buffer_sec = rng.gen_range(0.0..1800.0);
+        let crossing_sec = rng.random_range(60.0..7200.0);
+        let boarding_buffer_sec = rng.random_range(0.0..1800.0);
         crossings.push(FerryCrossing::new(
             format!("c{i}"),
             quay_a,
@@ -510,7 +510,7 @@ fn random_case(
         {
             // 10% unreachable: exercises the sentinel-skip path inside the property, not just a
             // dedicated unit test.
-            let duration = if rng.gen_bool(0.1) { UNREACHABLE_DURATION_THRESHOLD } else { rng.gen_range(1.0..500.0) };
+            let duration = if rng.random_bool(0.1) { UNREACHABLE_DURATION_THRESHOLD } else { rng.random_range(1.0..500.0) };
             road_matrix.insert(pair, duration);
         }
     }
@@ -531,8 +531,8 @@ fn best_departure_is_fifo_leaving_later_never_arrives_earlier() {
 
         // sampled inside (and a little around) the timetable's own span, so most cases compare
         // two real ferry paths rather than two `None`s.
-        let t1 = rng.gen_range((span_start - 600.0)..=(span_end + 600.0));
-        let t2 = t1 + rng.gen_range(0.0..900.0);
+        let t1 = rng.random_range((span_start - 600.0)..=(span_end + 600.0));
+        let t2 = t1 + rng.random_range(0.0..900.0);
 
         let arrival_time = |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t, Duration::INFINITY) {
             Some(path) => t + path.total_duration,
@@ -557,8 +557,8 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
 
         // padded well past the last departure so a deadline can plausibly fall after a sailing's
         // crossing (up to 7200s) plus egress (up to 500) plus buffer (up to 1800).
-        let a1 = rng.gen_range((span_start - 600.0)..=(span_end + 9600.0));
-        let a2 = a1 + rng.gen_range(0.0..900.0);
+        let a1 = rng.random_range((span_start - 600.0)..=(span_end + 9600.0));
+        let a2 = a1 + rng.random_range(0.0..900.0);
 
         let latest_departure = |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a, Duration::INFINITY) {
             Some(path) => path.depart_at,

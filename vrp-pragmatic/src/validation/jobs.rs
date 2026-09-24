@@ -143,7 +143,7 @@ fn check_e1104_no_reserved_ids(ctx: &ValidationContext) -> Result<(), FormatErro
 
 /// Checks that job has at least one job task.
 fn check_e1105_empty_jobs(ctx: &ValidationContext) -> Result<(), FormatError> {
-    let ids = ctx.jobs().filter(|job| ctx.tasks(job).is_empty()).map(|job| job.id.clone()).collect::<Vec<_>>();
+    let ids = ctx.jobs().filter(|job| job_tasks(job).next().is_none()).map(|job| job.id.clone()).collect::<Vec<_>>();
 
     if ids.is_empty() {
         Ok(())
@@ -161,8 +161,7 @@ fn check_e1106_negative_duration(ctx: &ValidationContext) -> Result<(), FormatEr
     let ids = ctx
         .jobs()
         .filter(|job| {
-            ctx.tasks(job)
-                .iter()
+            job_tasks(job)
                 .flat_map(|task| task.places.iter().map(|place| place.duration))
                 .any(|duration| duration.is_sign_negative())
         })
@@ -185,9 +184,7 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
     let ids = ctx
         .jobs()
         .filter(|job| {
-            ctx.tasks(job)
-                .iter()
-                .any(|task| task.demand.as_ref().is_some_and(|demand| demand.iter().any(|&dim| dim < 0)))
+            job_tasks(job).any(|task| task.demand.as_ref().is_some_and(|demand| demand.iter().any(|&dim| dim < 0)))
         })
         .map(|job| job.id.clone())
         .collect::<Vec<_>>();
@@ -207,7 +204,7 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
 fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids: Vec<String> = ctx
         .jobs()
-        .filter(|job| ctx.tasks(job).iter().any(|task| task.demand.is_some() && task.named_demand.is_some()))
+        .filter(|job| job_tasks(job).any(|task| task.demand.is_some() && task.named_demand.is_some()))
         .map(|job| job.id.clone())
         .collect();
 
@@ -231,7 +228,7 @@ fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
     if dimension_names.is_empty() {
         let ids: Vec<String> = ctx
             .jobs()
-            .filter(|job| ctx.tasks(job).iter().any(|task| task.named_demand.is_some()))
+            .filter(|job| job_tasks(job).any(|task| task.named_demand.is_some()))
             .map(|job| job.id.clone())
             .collect();
 
@@ -247,7 +244,7 @@ fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
         let ids: Vec<String> = ctx
             .jobs()
             .filter(|job| {
-                ctx.tasks(job).iter().any(|task| {
+                job_tasks(job).any(|task| {
                     task.named_demand
                         .as_ref()
                         .is_some_and(|named| named.keys().any(|key| !dimension_names.contains(key)))

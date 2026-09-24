@@ -1,5 +1,6 @@
 use super::*;
 use std::fs::File;
+use std::io::Cursor;
 use vrp_core::models::examples::create_example_problem;
 
 #[test]
@@ -36,7 +37,7 @@ fn can_read_full_config() {
             max_node_size,
             spread_factor,
             distribution_factor,
-            rebalance_memory,
+            max_network_size,
             exploration_ratio,
         } => {
             assert_eq!(selection_size, Some(8));
@@ -44,7 +45,7 @@ fn can_read_full_config() {
             assert_eq!(max_node_size, Some(2));
             assert_eq!(spread_factor, Some(0.75));
             assert_eq!(distribution_factor, Some(0.75));
-            assert_eq!(rebalance_memory, Some(100));
+            assert_eq!(max_network_size, Some(300));
             assert_eq!(exploration_ratio, Some(0.9));
         }
         _ => unreachable!(),
@@ -109,10 +110,6 @@ fn can_read_full_config() {
     let environment = config.environment.expect("no environment config");
     assert_eq!(environment.is_experimental, Some(false));
 
-    let parallelism = environment.parallelism.expect("no parallelism config");
-    assert_eq!(parallelism.num_thread_pools, 6);
-    assert_eq!(parallelism.threads_per_pool, 8);
-
     let logging = environment.logging.expect("no logging config");
     assert!(logging.enabled);
     assert_eq!(logging.prefix, Some("[config.full]".to_string()));
@@ -154,7 +151,7 @@ fn can_read_blinks_recreate_variants() {
     let HyperType::StaticSelective { operators: Some(operators) } = config.hyper.unwrap() else { unreachable!() };
     let SearchOperatorType::RuinRecreate { recreates, .. } = &operators[0] else { unreachable!() };
 
-    assert!(matches!(recreates[0], RecreateMethod::Blinks { weight: 1 }));
+    assert!(matches!(recreates[0], RecreateMethod::Blinks { weight: 1, job_order: None }));
     assert!(matches!(recreates[1], RecreateMethod::BlinksSampled { weight: 2 }));
     assert!(matches!(recreates[2], RecreateMethod::BlinksTimeWindowStart { weight: 3 }));
     assert!(matches!(recreates[3], RecreateMethod::BlinksSampledTimeWindowStart { weight: 4 }));
@@ -180,6 +177,43 @@ fn can_disable_infeasible_dynamic_diversification() {
             bounded_recreates: Some(true)
         })
     ));
+}
+
+#[test]
+fn can_configure_blinks_job_order() {
+    let method: RecreateMethod = serde_json::from_str(r#"{"type":"blinks","weight":2,"jobOrder":"far"}"#).unwrap();
+
+    match method {
+        RecreateMethod::Blinks { weight: 2, job_order: Some(BlinksJobOrder::Far) } => {}
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn cannot_read_removed_parallelism_config() {
+    let config = r#"{"environment":{"parallelism":{"numThreadPools":6,"threadsPerPool":8}}}"#;
+
+    let error = read_config(BufReader::new(Cursor::new(config))).unwrap_err();
+
+    assert!(error.to_string().contains("unknown field `parallelism`"));
+}
+
+#[test]
+fn can_reject_invalid_decomposition_config() {
+    let create = |min, max, repeat| SearchOperatorType::Decomposition {
+        routes: MinMaxConfig { min, max },
+        repeat,
+        probability: OperatorProbabilityType::Scalar { scalar: 1. },
+    };
+    let environment = Arc::new(Environment::default());
+    let problem = create_example_problem();
+
+    let get_error =
+        |operator| create_operator(problem.clone(), environment.clone(), &operator).err().unwrap().to_string();
+
+    assert!(get_error(create(2, 4, 0)).contains("repeat must be at least 1"));
+    assert!(get_error(create(1, 4, 1)).contains("min routes must be at least 2"));
+    assert!(get_error(create(4, 2, 1)).contains("min routes cannot exceed max routes"));
 }
 
 #[test]
