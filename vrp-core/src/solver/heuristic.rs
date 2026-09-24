@@ -573,21 +573,15 @@ mod builder {
                 true,
                 random.clone(),
             )),
-            InitialConstruction::BlinksSampledTimeWindowEnd => Arc::new(RecreateWithBlinks::new_with_job_ordering(
-                BlinkJobOrder::TimeWindowEnd,
-                true,
-                random.clone(),
-            )),
-            InitialConstruction::BlinksSampledSkillScarcity => Arc::new(RecreateWithBlinks::new_with_job_ordering(
-                BlinkJobOrder::SkillScarcity,
-                true,
-                random.clone(),
-            )),
-            InitialConstruction::BlinksSampledRouteScarcity => Arc::new(RecreateWithBlinks::new_with_job_ordering(
-                BlinkJobOrder::RouteScarcity,
-                true,
-                random.clone(),
-            )),
+            InitialConstruction::BlinksSampledTimeWindowEnd => {
+                Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::TimeWindowEnd, true, random.clone()))
+            }
+            InitialConstruction::BlinksSampledSkillScarcity => {
+                Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::SkillScarcity, true, random.clone()))
+            }
+            InitialConstruction::BlinksSampledRouteScarcity => {
+                Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::RouteScarcity, true, random.clone()))
+            }
             InitialConstruction::Farthest => Arc::new(RecreateWithFarthest::new(random.clone())),
             InitialConstruction::Regret => Arc::new(RecreateWithRegret::new(2, 3, random.clone())),
             InitialConstruction::Gaps => {
@@ -998,11 +992,8 @@ mod dynamic {
         bounded_recreates: bool,
     ) -> Vec<(Arc<dyn Recreate>, String, Float)> {
         let blinks: Arc<dyn Recreate> = Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random.clone()));
-        let blinks_tw_start: Arc<dyn Recreate> = Arc::new(RecreateWithBlinks::new_with_job_ordering(
-            BlinkJobOrder::TimeWindowStart,
-            false,
-            random.clone(),
-        ));
+        let blinks_tw_start: Arc<dyn Recreate> =
+            Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::TimeWindowStart, false, random.clone()));
         let (cheapest, cheapest_name): (Arc<dyn Recreate>, &str) = if bounded_recreates {
             (Arc::new(RecreateWithCheapest::with_cap(random.clone(), BOUNDED_RECREATE_JOB_CAP)), "cheapest_capped")
         } else {

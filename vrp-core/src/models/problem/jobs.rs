@@ -296,13 +296,12 @@ impl Jobs {
         self.neighbourhood.get_or_init(|| {
             let NeighbourhoodSource { fleet, transport, logger } = &self.source;
             let index = create_index(fleet.as_ref(), self.jobs.clone(), transport.as_ref(), logger);
-            let clusters =
-                create_job_clusters(&self.jobs, fleet.as_ref(), Some(3), None, |profile, job| {
-                    neighbors(&index, profile, job)
-                })
-                // The only failure mode is an empty profile list, rejected in
-                // `Jobs::new`, so this cannot fire.
-                .expect("job clustering failed despite profiles being validated at construction");
+            let clusters = create_job_clusters(&self.jobs, fleet.as_ref(), Some(3), None, |profile, job| {
+                neighbors(&index, profile, job)
+            })
+            // The only failure mode is an empty profile list, rejected in
+            // `Jobs::new`, so this cannot fire.
+            .expect("job clustering failed despite profiles being validated at construction");
 
             JobNeighbourhood { index, clusters }
         })
@@ -439,10 +438,7 @@ fn create_index(
                         .enumerate()
                         .filter(|(_, j)| **j != *job)
                         .map(|(index, j)| {
-                            (
-                                index,
-                                get_cost_between_job_locations(profile, avg_costs, transport, &outer_locations, j),
-                            )
+                            (index, get_cost_between_job_locations(profile, avg_costs, transport, &outer_locations, j))
                         })
                         .collect();
 

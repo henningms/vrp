@@ -78,7 +78,8 @@ impl ProblemBuilder {
     }
 
     pub fn with_jobs(&mut self, jobs: Vec<Job>) -> &mut Self {
-        self.0.jobs = Arc::new(Jobs::new(self.0.fleet.clone(), jobs, self.0.transport.clone(), &test_logger()).unwrap());
+        self.0.jobs =
+            Arc::new(Jobs::new(self.0.fleet.clone(), jobs, self.0.transport.clone(), &test_logger()).unwrap());
         self
     }
 

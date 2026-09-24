@@ -470,11 +470,7 @@ fn threshold_counts(values: &[f64], thresholds: &[f64]) -> Vec<ThresholdCount> {
 }
 
 fn share(count: usize, total: usize) -> f64 {
-    if total == 0 {
-        0.
-    } else {
-        count as f64 / total as f64
-    }
+    if total == 0 { 0. } else { count as f64 / total as f64 }
 }
 
 #[cfg(test)]

@@ -139,11 +139,7 @@ impl JobSelector for UnassignedJobSelector {
 
     fn select<'a>(&'a self, insertion_ctx: &'a InsertionContext) -> Box<dyn Iterator<Item = &'a Job> + 'a> {
         Box::new(
-            insertion_ctx
-                .solution
-                .required
-                .iter()
-                .filter(|job| insertion_ctx.solution.unassigned.contains_key(*job)),
+            insertion_ctx.solution.required.iter().filter(|job| insertion_ctx.solution.unassigned.contains_key(*job)),
         )
     }
 }
@@ -345,12 +341,10 @@ impl ResultSelector for SoloAwareResultSelector {
                 }
 
                 let routes = &insertion_ctx.solution.routes;
-                let lhs_in_use = routes
-                    .iter()
-                    .any(|rc| rc.route().actor == lhs.actor && rc.route().tour.job_count() > 0);
-                let rhs_in_use = routes
-                    .iter()
-                    .any(|rc| rc.route().actor == rhs.actor && rc.route().tour.job_count() > 0);
+                let lhs_in_use =
+                    routes.iter().any(|rc| rc.route().actor == lhs.actor && rc.route().tour.job_count() > 0);
+                let rhs_in_use =
+                    routes.iter().any(|rc| rc.route().actor == rhs.actor && rc.route().tour.job_count() > 0);
 
                 match (lhs_in_use, rhs_in_use) {
                     (false, true) => left,

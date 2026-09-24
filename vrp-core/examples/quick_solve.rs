@@ -32,12 +32,7 @@ fn define_problem(goal: GoalContext, transport: Arc<dyn TransportCost>) -> Gener
         .map(|idx| {
             VehicleBuilder::default()
                 .id(format!("v{idx}").as_str())
-                .add_detail(
-                    VehicleDetailBuilder::default()
-                        .set_start_location(0)
-                        .set_end_location(0)
-                        .build()?,
-                )
+                .add_detail(VehicleDetailBuilder::default().set_start_location(0).set_end_location(0).build()?)
                 .capacity(SingleDimLoad::new(4))
                 .build()
         })
@@ -94,10 +89,7 @@ fn main() -> GenericResult<()> {
     println!("Total cost: {:.2}", solution.cost);
     println!("Routes: {}", solution.routes.len());
     println!("Unassigned jobs: {}", solution.unassigned.len());
-    println!(
-        "\nRoute details:\n{:?}",
-        solution.get_locations().map(Iterator::collect::<Vec<_>>).collect::<Vec<_>>()
-    );
+    println!("\nRoute details:\n{:?}", solution.get_locations().map(Iterator::collect::<Vec<_>>).collect::<Vec<_>>());
 
     // Verify we got a valid solution quickly
     assert!(elapsed.as_millis() < 1000, "Should complete in under 1 second");

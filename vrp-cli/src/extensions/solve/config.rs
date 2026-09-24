@@ -666,19 +666,11 @@ fn create_recreate_method(method: &RecreateMethod, environment: Arc<Environment>
             (Arc::new(RecreateWithBlinks::new_sampled_with_defaults(random.clone())), *weight)
         }
         RecreateMethod::BlinksTimeWindowStart { weight } => (
-            Arc::new(RecreateWithBlinks::new_with_job_ordering(
-                BlinkJobOrder::TimeWindowStart,
-                false,
-                random.clone(),
-            )),
+            Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::TimeWindowStart, false, random.clone())),
             *weight,
         ),
         RecreateMethod::BlinksSampledTimeWindowStart { weight } => (
-            Arc::new(RecreateWithBlinks::new_with_job_ordering(
-                BlinkJobOrder::TimeWindowStart,
-                true,
-                random.clone(),
-            )),
+            Arc::new(RecreateWithBlinks::new_with_job_ordering(BlinkJobOrder::TimeWindowStart, true, random.clone())),
             *weight,
         ),
         RecreateMethod::SkipRandom { weight } => (Arc::new(RecreateWithSkipRandom::new(random)), *weight),

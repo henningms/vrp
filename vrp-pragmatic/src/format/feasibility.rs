@@ -10,8 +10,8 @@ mod feasibility_test;
 
 use crate::format::problem::job_reader::convert_api_job_to_core;
 use crate::format::problem::{
-    deserialize_matrix, deserialize_problem, get_problem_properties, map_to_problem_with_props, ApiProblem, Matrix,
-    ProblemProperties,
+    ApiProblem, Matrix, ProblemProperties, deserialize_matrix, deserialize_problem, get_problem_properties,
+    map_to_problem_with_props,
 };
 use crate::format::solution::map_code_reason;
 use crate::format::solution::read_init_solution;
@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::sync::Arc;
 use vrp_core::construction::heuristics::{
-    apply_insertion_success, eval_job_insertion_in_route, BestResultSelector, EvaluationContext, InsertionPosition,
-    InsertionResult, LegSelection, ResultSelector, UnassignmentInfo,
+    BestResultSelector, EvaluationContext, InsertionPosition, InsertionResult, LegSelection, ResultSelector,
+    UnassignmentInfo, apply_insertion_success, eval_job_insertion_in_route,
 };
 use vrp_core::models::problem::VehicleIdDimension;
 use vrp_core::prelude::*;
@@ -111,8 +111,7 @@ impl FeasibilityContext {
         solution_json: &str,
         extra_locations: &[Location],
     ) -> Result<Self, GenericError> {
-        let properties = get_problem_properties(&api_problem, &matrices)
-            .with_all_constraints_enabled();
+        let properties = get_problem_properties(&api_problem, &matrices).with_all_constraints_enabled();
 
         let coord_index = crate::format::CoordIndex::new_with_extra_locations(&api_problem, extra_locations);
         let core_problem: CoreProblem =
@@ -123,28 +122,19 @@ impl FeasibilityContext {
         let random: Arc<dyn Random> = Arc::new(DefaultRandom::default());
         let environment = Arc::new(Environment::default());
 
-        let solution = read_init_solution(
-            BufReader::new(solution_json.as_bytes()),
-            core_problem.clone(),
-            random,
-        )?;
+        let solution = read_init_solution(BufReader::new(solution_json.as_bytes()), core_problem.clone(), random)?;
 
-        let insertion_ctx =
-            InsertionContext::new_from_solution(core_problem.clone(), (solution, None), environment);
+        let insertion_ctx = InsertionContext::new_from_solution(core_problem.clone(), (solution, None), environment);
 
         Ok(Self { problem: core_problem, insertion_ctx, api_problem, properties })
     }
 
     /// Checks whether the given candidate API job can be feasibly inserted.
     pub fn check_job(&self, candidate: &ApiJob) -> Result<FeasibilityResult, GenericError> {
-        let coord_index = self
-            .problem
-            .extras
-            .get_coord_index()
-            .ok_or_else(|| GenericError::from("cannot get coord index"))?;
+        let coord_index =
+            self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
 
-        let core_job =
-            convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
+        let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 
         let result_selector = BestResultSelector::default();
         let goal = &self.problem.goal;
@@ -157,33 +147,14 @@ impl FeasibilityContext {
         // the registry. Chaining them in mirrors the core solver's route
         // selector (`construction::heuristics::selectors`) so a candidate can be
         // placed onto an idle shift instead of being reported infeasible.
-        let routes = self
-            .insertion_ctx
-            .solution
-            .routes
-            .iter()
-            .chain(self.insertion_ctx.solution.registry.next_route_all());
+        let routes =
+            self.insertion_ctx.solution.routes.iter().chain(self.insertion_ctx.solution.registry.next_route_all());
 
         for route_ctx in routes {
             let actor = &route_ctx.route().actor;
-            let vehicle_id = actor
-                .vehicle
-                .dimens
-                .get_vehicle_id()
-                .cloned()
-                .unwrap_or_default();
-            let type_id = actor
-                .vehicle
-                .dimens
-                .get_vehicle_type()
-                .cloned()
-                .unwrap_or_default();
-            let shift_index = actor
-                .vehicle
-                .dimens
-                .get_shift_index()
-                .copied()
-                .unwrap_or_default();
+            let vehicle_id = actor.vehicle.dimens.get_vehicle_id().cloned().unwrap_or_default();
+            let type_id = actor.vehicle.dimens.get_vehicle_type().cloned().unwrap_or_default();
+            let shift_index = actor.vehicle.dimens.get_shift_index().copied().unwrap_or_default();
 
             let eval_ctx = EvaluationContext {
                 goal,
@@ -241,14 +212,10 @@ impl FeasibilityContext {
     /// After this call the insertion context is updated as if the job had been assigned,
     /// so subsequent `check_job` / `accept_job` calls see the new state.
     pub fn accept_job(&mut self, candidate: &ApiJob) -> Result<VehicleFeasibility, GenericError> {
-        let coord_index = self
-            .problem
-            .extras
-            .get_coord_index()
-            .ok_or_else(|| GenericError::from("cannot get coord index"))?;
+        let coord_index =
+            self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
 
-        let core_job =
-            convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
+        let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 
         let result_selector = BestResultSelector::default();
         let goal = &self.problem.goal;
@@ -260,12 +227,8 @@ impl FeasibilityContext {
         // cheapest insertion, and `apply_insertion_success` pulls a chosen
         // registry route into `solution.routes`, so committing onto an idle
         // vehicle works with the existing core machinery.
-        let routes = self
-            .insertion_ctx
-            .solution
-            .routes
-            .iter()
-            .chain(self.insertion_ctx.solution.registry.next_route_all());
+        let routes =
+            self.insertion_ctx.solution.routes.iter().chain(self.insertion_ctx.solution.registry.next_route_all());
 
         for route_ctx in routes {
             let eval_ctx = EvaluationContext {
@@ -291,24 +254,9 @@ impl FeasibilityContext {
         match best {
             InsertionResult::Success(success) => {
                 let actor = &success.actor;
-                let vehicle_id = actor
-                    .vehicle
-                    .dimens
-                    .get_vehicle_id()
-                    .cloned()
-                    .unwrap_or_default();
-                let type_id = actor
-                    .vehicle
-                    .dimens
-                    .get_vehicle_type()
-                    .cloned()
-                    .unwrap_or_default();
-                let shift_index = actor
-                    .vehicle
-                    .dimens
-                    .get_shift_index()
-                    .copied()
-                    .unwrap_or_default();
+                let vehicle_id = actor.vehicle.dimens.get_vehicle_id().cloned().unwrap_or_default();
+                let type_id = actor.vehicle.dimens.get_vehicle_type().cloned().unwrap_or_default();
+                let shift_index = actor.vehicle.dimens.get_shift_index().copied().unwrap_or_default();
                 let cost_delta: Float = success.cost.iter().sum();
 
                 apply_insertion_success(&mut self.insertion_ctx, success);
@@ -323,9 +271,7 @@ impl FeasibilityContext {
                     violations: vec![],
                 })
             }
-            InsertionResult::Failure(_) => {
-                Err("no feasible insertion found for candidate job".into())
-            }
+            InsertionResult::Failure(_) => Err("no feasible insertion found for candidate job".into()),
         }
     }
 
@@ -334,18 +280,13 @@ impl FeasibilityContext {
     /// Builds a domain `Solution` from the internal `InsertionContext` and converts it
     /// to the pragmatic API format. Useful for persisting state or rebuilding the context later.
     pub fn to_solution_json(&self) -> Result<String, GenericError> {
-        use crate::format::solution::{create_solution, PragmaticOutputType, serialize_solution};
+        use crate::format::solution::{PragmaticOutputType, create_solution, serialize_solution};
         use std::io::BufWriter;
 
         let cost = self.insertion_ctx.get_total_cost().unwrap_or(0.);
 
-        let routes: Vec<vrp_core::models::solution::Route> = self
-            .insertion_ctx
-            .solution
-            .routes
-            .iter()
-            .map(|rc| rc.route().deep_copy())
-            .collect();
+        let routes: Vec<vrp_core::models::solution::Route> =
+            self.insertion_ctx.solution.routes.iter().map(|rc| rc.route().deep_copy()).collect();
 
         let registry = self.insertion_ctx.solution.registry.resources().deep_copy();
 
@@ -354,30 +295,16 @@ impl FeasibilityContext {
             .solution
             .unassigned
             .iter()
-            .chain(
-                self.insertion_ctx
-                    .solution
-                    .required
-                    .iter()
-                    .map(|job| (job, &UnassignmentInfo::Unknown)),
-            )
+            .chain(self.insertion_ctx.solution.required.iter().map(|job| (job, &UnassignmentInfo::Unknown)))
             .map(|(job, info)| (job.clone(), info.clone()))
             .collect();
 
-        let domain_solution = vrp_core::models::Solution {
-            cost,
-            registry,
-            routes,
-            unassigned,
-            telemetry: None,
-        };
+        let domain_solution = vrp_core::models::Solution { cost, registry, routes, unassigned, telemetry: None };
 
-        let api_solution =
-            create_solution(&self.problem, &domain_solution, &PragmaticOutputType::OnlyPragmatic);
+        let api_solution = create_solution(&self.problem, &domain_solution, &PragmaticOutputType::OnlyPragmatic);
 
         let mut writer = BufWriter::new(Vec::new());
-        serialize_solution(&api_solution, &mut writer)
-            .map_err(|e| GenericError::from(e.to_string()))?;
+        serialize_solution(&api_solution, &mut writer).map_err(|e| GenericError::from(e.to_string()))?;
 
         String::from_utf8(writer.into_inner().map_err(|e| GenericError::from(e.to_string()))?)
             .map_err(|e| GenericError::from(e.to_string()))
@@ -394,20 +321,17 @@ pub fn check_insertion_feasibility(
     solution_json: &str,
     candidate_job_json: &str,
 ) -> Result<String, GenericError> {
-    let api_problem: crate::format::problem::Problem =
-        deserialize_problem(BufReader::new(problem_json.as_bytes()))
-            .map_err(|e: crate::format::MultiFormatError| e.to_string())?;
+    let api_problem: crate::format::problem::Problem = deserialize_problem(BufReader::new(problem_json.as_bytes()))
+        .map_err(|e: crate::format::MultiFormatError| e.to_string())?;
 
     let matrices: Vec<Matrix> = matrices_json
         .into_iter()
         .map(|m| {
-            deserialize_matrix(BufReader::new(m.as_bytes()))
-                .map_err(|e: crate::format::MultiFormatError| e.to_string())
+            deserialize_matrix(BufReader::new(m.as_bytes())).map_err(|e: crate::format::MultiFormatError| e.to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let candidate: ApiJob =
-        serde_json::from_str(candidate_job_json).map_err(|e: serde_json::Error| e.to_string())?;
+    let candidate: ApiJob = serde_json::from_str(candidate_job_json).map_err(|e: serde_json::Error| e.to_string())?;
 
     let extra_locations = job_locations(&candidate);
     let ctx = FeasibilityContext::new(api_problem, matrices, solution_json, &extra_locations)?;

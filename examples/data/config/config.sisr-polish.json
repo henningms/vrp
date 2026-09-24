@@ -44,7 +44,6 @@
   },
   "termination": { "maxTime": 120 },
   "environment": {
-    "parallelism": { "numThreadPools": 1, "threadsPerPool": 8 },
     "logging": { "enabled": true }
   },
   "telemetry": {

@@ -202,7 +202,8 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     assert_ne!(path.depart_at, path.arrive_quay_at);
     assert_eq!(path.total_duration, min(47.)); // arrival - depart_at, includes the ten minutes of slack
 
-    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at, Duration::INFINITY).expect("reachable");
+    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at, Duration::INFINITY)
+        .expect("reachable");
 
     // the round trip criterion is the same sailing, not equal totals: best_departure's total is
     // the journey's own length, which legitimately differs from best_arrival's arrival-anchored
@@ -372,7 +373,8 @@ fn best_departure_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("normal crossing still reachable");
+    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY)
+        .expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
 }
@@ -408,7 +410,8 @@ fn best_arrival_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result = best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY).expect("normal crossing still reachable");
+    let result =
+        best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY).expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
 }
@@ -510,7 +513,8 @@ fn random_case(
         {
             // 10% unreachable: exercises the sentinel-skip path inside the property, not just a
             // dedicated unit test.
-            let duration = if rng.random_bool(0.1) { UNREACHABLE_DURATION_THRESHOLD } else { rng.random_range(1.0..500.0) };
+            let duration =
+                if rng.random_bool(0.1) { UNREACHABLE_DURATION_THRESHOLD } else { rng.random_range(1.0..500.0) };
             road_matrix.insert(pair, duration);
         }
     }
@@ -534,10 +538,12 @@ fn best_departure_is_fifo_leaving_later_never_arrives_earlier() {
         let t1 = rng.random_range((span_start - 600.0)..=(span_end + 600.0));
         let t2 = t1 + rng.random_range(0.0..900.0);
 
-        let arrival_time = |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t, Duration::INFINITY) {
-            Some(path) => t + path.total_duration,
-            None => Duration::INFINITY,
-        };
+        let arrival_time =
+            |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t, Duration::INFINITY)
+            {
+                Some(path) => t + path.total_duration,
+                None => Duration::INFINITY,
+            };
 
         assert!(arrival_time(t1) <= arrival_time(t2) + 1e-6, "leaving later must not arrive earlier: t1={t1} t2={t2}");
     }
@@ -560,10 +566,11 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
         let a1 = rng.random_range((span_start - 600.0)..=(span_end + 9600.0));
         let a2 = a1 + rng.random_range(0.0..900.0);
 
-        let latest_departure = |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a, Duration::INFINITY) {
-            Some(path) => path.depart_at,
-            None => Duration::NEG_INFINITY,
-        };
+        let latest_departure =
+            |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a, Duration::INFINITY) {
+                Some(path) => path.depart_at,
+                None => Duration::NEG_INFINITY,
+            };
 
         assert!(
             latest_departure(a1) <= latest_departure(a2) + 1e-6,
