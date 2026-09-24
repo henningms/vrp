@@ -201,7 +201,7 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
 }
 
 /// Checks that demand and namedDemand are mutually exclusive.
-fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9101_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids: Vec<String> = ctx
         .jobs()
         .filter(|job| job_tasks(job).any(|task| task.demand.is_some() && task.named_demand.is_some()))
@@ -212,7 +212,7 @@ fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> 
         Ok(())
     } else {
         Err(FormatError::new(
-            "E1108".to_string(),
+            "E9101".to_string(),
             "demand and namedDemand are mutually exclusive".to_string(),
             format!("remove either demand or namedDemand for jobs: '{}'", ids.join(", ")),
         ))
@@ -220,7 +220,7 @@ fn check_e1108_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> 
 }
 
 /// Checks that namedDemand keys exist in capacityDimensions.
-fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9102_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<(), FormatError> {
     let dimension_names: std::collections::HashSet<_> =
         ctx.problem.fleet.capacity_dimensions.as_ref().map(|names| names.iter().cloned().collect()).unwrap_or_default();
 
@@ -234,7 +234,7 @@ fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
 
         if !ids.is_empty() {
             return Err(FormatError::new(
-                "E1109".to_string(),
+                "E9102".to_string(),
                 "namedDemand used without capacityDimensions".to_string(),
                 format!("define capacityDimensions on fleet or use positional demand for jobs: '{}'", ids.join(", ")),
             ));
@@ -255,7 +255,7 @@ fn check_e1109_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
 
         if !ids.is_empty() {
             return Err(FormatError::new(
-                "E1109".to_string(),
+                "E9102".to_string(),
                 "namedDemand contains unknown dimension names".to_string(),
                 format!("use dimension names from capacityDimensions for jobs: '{}'", ids.join(", ")),
             ));
@@ -276,8 +276,8 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1105_empty_jobs(ctx),
         check_e1106_negative_duration(ctx),
         check_e1107_negative_demand(ctx),
-        check_e1108_demand_named_demand_mutual_exclusion(ctx),
-        check_e1109_named_demand_dimensions_exist(ctx),
+        check_e9101_demand_named_demand_mutual_exclusion(ctx),
+        check_e9102_named_demand_dimensions_exist(ctx),
     ])
     .map_err(From::from)
 }

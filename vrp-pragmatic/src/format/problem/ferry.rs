@@ -89,7 +89,7 @@ pub fn create_ferry_index(
     let resolve = |crossing_id: &str, location: &Location, label: &str| {
         coord_index.get_by_loc(location).ok_or_else(|| {
             MultiFormatError::from(vec![FormatError::new(
-                "E0005".to_string(),
+                "E9001".to_string(),
                 "cannot resolve ferry crossing quay".to_string(),
                 format!(
                     "ensure '{label}' of ferry crossing '{crossing_id}' is present in the problem's coordinate index"

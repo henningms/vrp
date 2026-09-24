@@ -62,7 +62,7 @@ are already published. So, I stick to it for now.
 * emit typescript declarations for the WebAssembly binding, so problems and solutions are typed
 * add `validate_pragmatic` to the python binding
 * add a javascript/node example
-* add `E0005`, `E1305` and `E1313` errors (upstream `E1309`, renumbered in this fork because `E1309` is the capacity configurations check)
+* add `E0005`, `E1305` and `E1309` errors
 
 ### Fixed
 

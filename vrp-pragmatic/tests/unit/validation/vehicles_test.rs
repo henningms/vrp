@@ -179,7 +179,7 @@ parameterized_test! {can_detect_fleet_without_vehicle_types, (has_vehicle_type, 
 
 can_detect_fleet_without_vehicle_types! {
     case01: (true, None),
-    case02: (false, Some("E1313".to_string())),
+    case02: (false, Some("E1309".to_string())),
 }
 
 fn can_detect_fleet_without_vehicle_types_impl(has_vehicle_type: bool, expected: Option<String>) {
@@ -192,7 +192,7 @@ fn can_detect_fleet_without_vehicle_types_impl(has_vehicle_type: bool, expected:
     };
 
     let result =
-        check_e1313_fleet_has_vehicle_types(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+        check_e1309_fleet_has_vehicle_types(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
 
     assert_eq!(result.err().map(|err| err.code), expected);
 }

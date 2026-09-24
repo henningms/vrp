@@ -83,13 +83,6 @@ Note that `solve_pragmatic` validates its input before solving, so a logically i
 `E1xxx` validation error rather than being solved into a meaningless solution.
 
 
-### E0005
-
-`cannot resolve ferry crossing quay` is returned when a `quayA` or `quayB` coordinate of a `ferryCrossings` entry
-cannot be found in the problem's coordinate index. This means the coordinate set and the index disagree, which would
-otherwise silently permute travel times; check that the quay coordinate is well-formed.
-
-
 ## E1xxx: Validation errors
 
 Errors from E1xxx range are used by validation engine which checks logical correctness of the rich VRP definition.
@@ -583,7 +576,7 @@ Alternatively, you can switch to time window definition and keep `start.latest` 
 - required vehicle reload is used with resource id, which is not specified in `fleet.resources`
 
 
-#### E1313
+#### E1309
 
 `fleet has no vehicle types` is returned when `fleet.vehicles` is empty, and `fleet has no vehicles` when the types it
 contains produce no vehicles at all, for example because every one of them has no `vehicleIds` or no `shifts`. Either way
@@ -745,3 +738,47 @@ keep only one cost objective in the list of objectives.
 
 `missing value objective` error is returned when plan has jobs with value set, but user defined objective doesn't
 include the `maximize-value` objective.
+
+
+## E9xxx: Fork-specific errors
+
+Errors from the E9xxx range are reserved for features which exist only in this fork. Upstream uses the E0xxx and E1xxx
+ranges, so keeping fork errors here avoids code collisions when upstream adds new errors. The second digit follows the
+upstream categories: E90xx general, E91xx jobs, E93xx vehicles.
+
+### E9001
+
+`cannot resolve ferry crossing quay` is returned when a `quayA` or `quayB` coordinate of a `ferryCrossings` entry
+cannot be found in the problem's coordinate index. This means the coordinate set and the index disagree, which would
+otherwise silently permute travel times; check that the quay coordinate is well-formed.
+
+### E9101
+
+`demand and namedDemand are mutually exclusive` is returned when a job task specifies both `demand` and `namedDemand`.
+To fix it, remove one of them.
+
+### E9102
+
+`namedDemand used without capacityDimensions` is returned when a job uses `namedDemand`, but `fleet.capacityDimensions`
+is not defined, and `namedDemand contains unknown dimension names` when it uses a name which is not listed in
+`fleet.capacityDimensions`.
+
+### E9301
+
+`capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,
+remove one of them.
+
+### E9302
+
+`inconsistent capacity configuration dimensions` is returned when capacity configurations of a vehicle type have
+different number of dimensions.
+
+### E9303
+
+`capacity dimensions count mismatch` is returned when the number of vehicle capacity dimensions does not match
+`fleet.capacityDimensions`.
+
+### E9304
+
+`vehicle has no capacity defined` is returned when a vehicle type specifies neither `capacity` nor
+`capacityConfigurations`.

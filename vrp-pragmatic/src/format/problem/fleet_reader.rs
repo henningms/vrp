@@ -208,7 +208,7 @@ pub(super) fn read_fleet(
     // says which vehicle type is at fault; this is the backstop for anything it does not cover.
     if vehicles.is_empty() {
         return Err(vec![FormatError::new(
-            "E1313".to_string(),
+            "E1309".to_string(),
             "fleet has no vehicles".to_string(),
             "add a vehicle type with at least one vehicle id and one shift".to_string(),
         )]
