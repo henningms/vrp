@@ -10,6 +10,7 @@ use vrp_core::models::problem::{FerryCrossing as CoreFerryCrossing, FerryIndex, 
 /// it can never be a matrix reference or a custom placeholder, since resolving it into a fresh
 /// routing matrix index is the whole point of a crossing.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Location2D {
     /// Latitude.
@@ -27,6 +28,7 @@ impl From<&Location2D> for Location {
 /// A single scheduled sailing, seconds on the problem's own time base (the same base as job
 /// time windows). The backend converts from wall-clock times; this format never parses a date.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct FerrySailing {
     /// Departure time, seconds.
@@ -37,6 +39,7 @@ pub struct FerrySailing {
 
 /// Sailings for both directions of a ferry crossing.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct FerrySailings {
     /// Sailings from quay A to quay B.
@@ -48,6 +51,7 @@ pub struct FerrySailings {
 /// A ferry crossing: two quays connected by scheduled sailings, letting a route cross open
 /// water instead of (or in addition to) the road network.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct FerryCrossing {
     /// Unique crossing id.
@@ -85,7 +89,7 @@ pub fn create_ferry_index(
     let resolve = |crossing_id: &str, location: &Location, label: &str| {
         coord_index.get_by_loc(location).ok_or_else(|| {
             MultiFormatError::from(vec![FormatError::new(
-                "E0005".to_string(),
+                "E9001".to_string(),
                 "cannot resolve ferry crossing quay".to_string(),
                 format!(
                     "ensure '{label}' of ferry crossing '{crossing_id}' is present in the problem's coordinate index"

@@ -148,6 +148,44 @@ fn check_e1304_vehicle_reload_time_is_correct(ctx: &ValidationContext) -> Result
     }
 }
 
+/// Checks that the fleet defines at least one vehicle type.
+///
+/// Without one there is nothing to route with, and the problem cannot be solved at all.
+fn check_e1309_fleet_has_vehicle_types(ctx: &ValidationContext) -> Result<(), FormatError> {
+    if ctx.vehicles().next().is_some() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E1309".to_string(),
+            "fleet has no vehicle types".to_string(),
+            "add at least one vehicle type to the fleet".to_string(),
+        ))
+    }
+}
+
+/// Checks that each vehicle type declares at least one concrete vehicle.
+///
+/// A type with no ids contributes no vehicles, so it is either a mistake or dead weight in the
+/// definition. When it is the only type, the fleet ends up empty and the problem cannot be solved
+/// at all.
+fn check_e1305_vehicle_types_have_vehicle_ids(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let type_ids = ctx
+        .vehicles()
+        .filter(|vehicle| vehicle.vehicle_ids.is_empty())
+        .map(|vehicle| vehicle.type_id.clone())
+        .collect::<Vec<_>>();
+
+    if type_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E1305".to_string(),
+            "vehicle type has no vehicle ids".to_string(),
+            format!("add at least one vehicle id or remove the vehicle type: {}", type_ids.join(", ")),
+        ))
+    }
+}
+
 /// Checks that vehicle area restrictions are valid.
 fn check_e1306_vehicle_has_no_zero_costs(ctx: &ValidationContext) -> Result<(), FormatError> {
     let type_ids = ctx
@@ -291,7 +329,7 @@ fn get_shift_time_window(shift: &VehicleShift) -> Option<TimeWindow> {
 }
 
 /// Checks that capacity and capacityConfigurations are mutually exclusive.
-fn check_e1309_capacity_configurations_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9301_capacity_configurations_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let type_ids: Vec<String> = ctx
         .vehicles()
         .filter(|vehicle| vehicle.capacity.is_some() && vehicle.capacity_configurations.is_some())
@@ -302,7 +340,7 @@ fn check_e1309_capacity_configurations_mutual_exclusion(ctx: &ValidationContext)
         Ok(())
     } else {
         Err(FormatError::new(
-            "E1309".to_string(),
+            "E9301".to_string(),
             "capacity and capacityConfigurations are mutually exclusive".to_string(),
             format!("remove either capacity or capacityConfigurations for vehicle types: '{}'", type_ids.join(", ")),
         ))
@@ -310,7 +348,7 @@ fn check_e1309_capacity_configurations_mutual_exclusion(ctx: &ValidationContext)
 }
 
 /// Checks that all capacity configurations have consistent dimensions.
-fn check_e1310_capacity_configurations_dimensions(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9302_capacity_configurations_dimensions(ctx: &ValidationContext) -> Result<(), FormatError> {
     let type_ids: Vec<String> = ctx
         .vehicles()
         .filter(|vehicle| {
@@ -326,7 +364,7 @@ fn check_e1310_capacity_configurations_dimensions(ctx: &ValidationContext) -> Re
         Ok(())
     } else {
         Err(FormatError::new(
-            "E1310".to_string(),
+            "E9302".to_string(),
             "inconsistent capacity configuration dimensions".to_string(),
             format!("ensure all configurations have same number of dimensions for: '{}'", type_ids.join(", ")),
         ))
@@ -334,7 +372,7 @@ fn check_e1310_capacity_configurations_dimensions(ctx: &ValidationContext) -> Re
 }
 
 /// Checks that capacityDimensions count matches capacity dimension count.
-fn check_e1311_capacity_dimensions_count(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9303_capacity_dimensions_count(ctx: &ValidationContext) -> Result<(), FormatError> {
     if let Some(dim_names) = &ctx.problem.fleet.capacity_dimensions {
         let expected_size = dim_names.len();
 
@@ -356,7 +394,7 @@ fn check_e1311_capacity_dimensions_count(ctx: &ValidationContext) -> Result<(), 
 
         if !type_ids.is_empty() {
             return Err(FormatError::new(
-                "E1311".to_string(),
+                "E9303".to_string(),
                 "capacity dimensions count mismatch".to_string(),
                 format!(
                     "capacityDimensions has {} names but vehicles have different counts: '{}'",
@@ -370,7 +408,7 @@ fn check_e1311_capacity_dimensions_count(ctx: &ValidationContext) -> Result<(), 
 }
 
 /// Checks that vehicle must have either capacity or capacityConfigurations.
-fn check_e1312_vehicle_has_capacity(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9304_vehicle_has_capacity(ctx: &ValidationContext) -> Result<(), FormatError> {
     let type_ids: Vec<String> = ctx
         .vehicles()
         .filter(|vehicle| vehicle.capacity.is_none() && vehicle.capacity_configurations.is_none())
@@ -381,7 +419,7 @@ fn check_e1312_vehicle_has_capacity(ctx: &ValidationContext) -> Result<(), Forma
         Ok(())
     } else {
         Err(FormatError::new(
-            "E1312".to_string(),
+            "E9304".to_string(),
             "vehicle has no capacity defined".to_string(),
             format!("specify either capacity or capacityConfigurations for vehicle types: '{}'", type_ids.join(", ")),
         ))
@@ -396,13 +434,15 @@ pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError
         check_e1302_vehicle_shift_time(ctx),
         check_e1303_vehicle_breaks_time_is_correct(ctx),
         check_e1304_vehicle_reload_time_is_correct(ctx),
+        check_e1305_vehicle_types_have_vehicle_ids(ctx),
         check_e1306_vehicle_has_no_zero_costs(ctx),
         check_e1307_vehicle_offset_break_rescheduling(ctx),
         check_e1308_vehicle_reload_resources(ctx),
-        check_e1309_capacity_configurations_mutual_exclusion(ctx),
-        check_e1310_capacity_configurations_dimensions(ctx),
-        check_e1311_capacity_dimensions_count(ctx),
-        check_e1312_vehicle_has_capacity(ctx),
+        check_e9301_capacity_configurations_mutual_exclusion(ctx),
+        check_e9302_capacity_configurations_dimensions(ctx),
+        check_e9303_capacity_dimensions_count(ctx),
+        check_e9304_vehicle_has_capacity(ctx),
+        check_e1309_fleet_has_vehicle_types(ctx),
     ])
     .map_err(From::from)
 }

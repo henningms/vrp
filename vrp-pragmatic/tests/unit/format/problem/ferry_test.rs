@@ -64,5 +64,5 @@ fn returns_format_error_when_quay_does_not_resolve() {
 
     let error = create_ferry_index(&[crossing], &coord_index).expect_err("expected a format error");
 
-    assert_eq!(error.errors.first().map(|err| err.code.as_str()), Some("E0005"));
+    assert_eq!(error.errors.first().map(|err| err.code.as_str()), Some("E9001"));
 }

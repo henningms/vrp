@@ -39,12 +39,48 @@ problem and routing matrix.
 `cannot read config` is returned when algorithm configuration cannot be created. To fix it, make sure that config has
 a valid json schema and valid parameters.
 
-
 ### E0005
 
-`cannot resolve ferry crossing quay` is returned when a `quayA` or `quayB` coordinate of a `ferryCrossings` entry
-cannot be found in the problem's coordinate index. This means the coordinate set and the index disagree, which would
-otherwise silently permute travel times; check that the quay coordinate is well-formed.
+`cannot serialize <document>` is returned when a result cannot be written out, for example a solution or the list of
+routing locations. This should not happen: please submit a bug and share the original problem and routing matrix.
+
+### E0006
+
+`language binding panicked`, `cannot read <argument> argument` or `cannot serialize <argument> argument as json` is
+returned when a C, Python or WebAssembly adapter cannot safely pass a value to the shared solver contract. Check that
+the supplied value has the type documented by the binding. A panic or a failure to return an already serialized result
+is an internal error: please submit a bug and share the original input.
+
+
+## Error reporting in the language bindings
+
+The C, Python and WebAssembly bindings all report failures as a json array of these errors, so they can be inspected
+programmatically instead of being matched as text. Each entry has a `code`, a `cause` and a suggested `action`, plus
+optional `details`. `vrp-cli/bindings/generate.sh` can generate a machine-readable schema at
+`vrp-cli/bindings/schemas/error.schema.json`.
+
+Python raises `OSError`:
+
+```python
+import json, vrp_cli
+try:
+    vrp_cli.solve_pragmatic(problem=problem, matrices=[], config=config)
+except OSError as err:
+    codes = [error["code"] for error in json.loads(str(err))]
+```
+
+Javascript throws an `Error`:
+
+```js
+try {
+  vrp.solve_pragmatic(problem, [], config);
+} catch (err) {
+  const codes = JSON.parse(err.message).map((error) => error.code);
+}
+```
+
+Note that `solve_pragmatic` validates its input before solving, so a logically inconsistent definition is reported as an
+`E1xxx` validation error rather than being solved into a meaningless solution.
 
 
 ## E1xxx: Validation errors
@@ -467,6 +503,24 @@ Additionally, reload time should be inside vehicle shift it is specified:
 }
 ```
 
+#### E1305
+
+`vehicle type has no vehicle ids` is returned when a vehicle type declares an empty `vehicleIds` list:
+
+```json
+{
+  "typeId": "vehicle",
+  /** Error: no concrete vehicles of this type exist **/
+  "vehicleIds": [],
+  /** omitted **/
+}
+```
+
+Such a type contributes no vehicles, so it is either a mistake or dead weight in the definition. To fix the issue, add at
+least one vehicle id or remove the vehicle type. When it is the only type, the fleet ends up empty and the problem cannot
+be solved at all: that case is also reported while reading the problem, even when validation is skipped.
+
+
 #### E1306
 
 `time and duration costs are zeros` is returned when both time and duration costs are zeros in vehicle type definition:
@@ -520,6 +574,13 @@ Alternatively, you can switch to time window definition and keep `start.latest` 
 
 - `fleet.resources` has vehicle reloads with the same `id`
 - required vehicle reload is used with resource id, which is not specified in `fleet.resources`
+
+
+#### E1309
+
+`fleet has no vehicle types` is returned when `fleet.vehicles` is empty, and `fleet has no vehicles` when the types it
+contains produce no vehicles at all, for example because every one of them has no `vehicleIds` or no `shifts`. Either way
+there is nothing to route with. To fix the issue, define a vehicle type with at least one vehicle id and one shift.
 
 
 ### E15xx: Routing profiles
@@ -677,3 +738,47 @@ keep only one cost objective in the list of objectives.
 
 `missing value objective` error is returned when plan has jobs with value set, but user defined objective doesn't
 include the `maximize-value` objective.
+
+
+## E9xxx: Fork-specific errors
+
+Errors from the E9xxx range are reserved for features which exist only in this fork. Upstream uses the E0xxx and E1xxx
+ranges, so keeping fork errors here avoids code collisions when upstream adds new errors. The second digit follows the
+upstream categories: E90xx general, E91xx jobs, E93xx vehicles.
+
+### E9001
+
+`cannot resolve ferry crossing quay` is returned when a `quayA` or `quayB` coordinate of a `ferryCrossings` entry
+cannot be found in the problem's coordinate index. This means the coordinate set and the index disagree, which would
+otherwise silently permute travel times; check that the quay coordinate is well-formed.
+
+### E9101
+
+`demand and namedDemand are mutually exclusive` is returned when a job task specifies both `demand` and `namedDemand`.
+To fix it, remove one of them.
+
+### E9102
+
+`namedDemand used without capacityDimensions` is returned when a job uses `namedDemand`, but `fleet.capacityDimensions`
+is not defined, and `namedDemand contains unknown dimension names` when it uses a name which is not listed in
+`fleet.capacityDimensions`.
+
+### E9301
+
+`capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,
+remove one of them.
+
+### E9302
+
+`inconsistent capacity configuration dimensions` is returned when capacity configurations of a vehicle type have
+different number of dimensions.
+
+### E9303
+
+`capacity dimensions count mismatch` is returned when the number of vehicle capacity dimensions does not match
+`fleet.capacityDimensions`.
+
+### E9304
+
+`vehicle has no capacity defined` is returned when a vehicle type specifies neither `capacity` nor
+`capacityConfigurations`.

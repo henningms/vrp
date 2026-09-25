@@ -131,16 +131,19 @@ fn can_specify_heuristic_setting() {
 }
 
 #[test]
-fn can_specify_parallelism() {
+fn can_map_legacy_parallelism_to_total_threads() {
     for (params, result) in [
-        (vec!["--parallelism", "3,1"], Ok(3_usize)),
+        (vec!["--parallelism", "3,2"], Ok(Some(6_usize))),
+        (vec!["--parallelism", "1,8"], Ok(Some(8))),
         (vec!["--parallelism", "3"], Err("cannot parse parallelism parameter".into())),
+        (vec!["--parallelism", "0,8"], Err("cannot parse parallelism parameter".into())),
+        (vec![], Ok(None)),
     ] {
         let matches = get_solomon_matches(params.as_slice());
 
-        let thread_pool_size = get_environment(&matches).map(|e| e.parallelism.thread_pool_size());
+        let threads = get_legacy_parallelism_threads(&matches);
 
-        assert_eq!(thread_pool_size, result);
+        assert_eq!(threads, result);
     }
 }
 
@@ -213,15 +216,6 @@ fn can_disable_infeasible_diversification_without_config_file() {
         "--config",
         "config.json",
     ];
-    assert!(get_solve_app().try_get_matches_from(args).is_err());
-}
-
-#[test]
-fn can_disable_lkh_search_without_config_file() {
-    let matches = get_solomon_matches(&["--disable-lkh-search"]);
-    assert_eq!(matches.get_one::<bool>(DISABLE_LKH_SEARCH_ARG_NAME), Some(&true));
-
-    let args = vec!["solve", "solomon", SOLOMON_PROBLEM_PATH, "--disable-lkh-search", "--config", "config.json"];
     assert!(get_solve_app().try_get_matches_from(args).is_err());
 }
 

@@ -33,7 +33,6 @@ const INITIAL_MAX_SIZE_ARG_NAME: &str = "initial-max-size";
 const CONSTRUCTION_JOB_CAP_ARG_NAME: &str = "construction-job-cap";
 const INITIAL_CONSTRUCTION_ARG_NAME: &str = "initial-construction";
 const DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME: &str = "disable-infeasible-diversification";
-const DISABLE_LKH_SEARCH_ARG_NAME: &str = "disable-lkh-search";
 const BOUNDED_RECREATES_ARG_NAME: &str = "bounded-recreates";
 const OUT_RESULT_ARG_NAME: &str = "out-result";
 const GET_LOCATIONS_ARG_NAME: &str = "get-locations";
@@ -139,14 +138,6 @@ pub fn get_solve_app() -> Command {
                 .conflicts_with(CONFIG_ARG_NAME)
         )
         .arg(
-            Arg::new(DISABLE_LKH_SEARCH_ARG_NAME)
-                .help("Disables LKH intra-route cost optimization in the built-in search portfolio")
-                .long(DISABLE_LKH_SEARCH_ARG_NAME)
-                .required(false)
-                .action(ArgAction::SetTrue)
-                .conflicts_with(CONFIG_ARG_NAME)
-        )
-        .arg(
             Arg::new(BOUNDED_RECREATES_ARG_NAME)
                 .help("Uses the bounded SISR-heavy dynamic recreate portfolio")
                 .long(BOUNDED_RECREATES_ARG_NAME)
@@ -215,10 +206,14 @@ pub fn get_solve_app() -> Command {
         )
         .arg(
             Arg::new(PARALLELISM_ARG_NAME)
-                .help("Specifies data parallelism settings in format \"num_thread_pools,threads_per_pool\"")
+                .help(
+                    "Deprecated: sizes the global worker pool to num_thread_pools * threads_per_pool. \
+                     Upstream replaced per-operator thread pools with one shared scheduler, so prefer \
+                     the RAYON_NUM_THREADS environment variable. Format: \"num_thread_pools,threads_per_pool\"",
+                )
                 .long(PARALLELISM_ARG_NAME)
                 .short('p')
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new(HEURISTIC_ARG_NAME)
@@ -404,7 +399,6 @@ fn from_cli_parameters(
             .get_one::<bool>(DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME)
             .copied()
             .unwrap_or(false),
-        lkh_search: !matches.get_one::<bool>(DISABLE_LKH_SEARCH_ARG_NAME).copied().unwrap_or(false),
         bounded_recreates: matches.get_one::<bool>(BOUNDED_RECREATES_ARG_NAME).copied().unwrap_or(false),
     };
     let mode = matches.get_one::<String>(SEARCH_MODE_ARG_NAME);
@@ -415,7 +409,6 @@ fn from_cli_parameters(
         .set_heuristic(get_heuristic(matches, problem.clone(), environment.clone(), heuristic_search)?)
         .set_initial_construction(initial_construction)
         .set_infeasible_diversification(heuristic_search.infeasible_diversification)
-        .set_lkh_search(heuristic_search.lkh_search)
         .set_bounded_recreates(heuristic_search.bounded_recreates);
 
     if let Some(initial_max_size) = initial_max_size {
@@ -466,7 +459,7 @@ fn get_init_size(matches: &ArgMatches) -> GenericResult<Option<usize>> {
     matches
         .get_one::<String>(INIT_SIZE_ARG_NAME)
         .map(|size| {
-            if let Some(value) = size.parse::<usize>().ok().filter(|&value| value >= 1) {
+            if let Some(value) = size.parse::<usize>().ok().filter(|&value| value > 0) {
                 Ok(Some(value))
             } else {
                 Err(format!("init size must be an integer bigger than 0, got '{size}'").into())
@@ -487,30 +480,30 @@ fn get_environment(matches: &ArgMatches) -> GenericResult<Arc<Environment>> {
     let quota = Some(create_interruption_quota(max_time));
     let is_experimental = matches.get_one::<bool>(EXPERIMENTAL_ARG_NAME).copied().unwrap_or(false);
 
+    if let Some(num_threads) = get_legacy_parallelism_threads(matches)? {
+        // The global pool can be built only once per process; keep solving on the existing one.
+        if let Err(err) = rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global() {
+            eprintln!("cannot apply parallelism setting, using existing worker pool: {err}");
+        }
+    }
+
+    Ok(Arc::new(Environment { quota, is_experimental, ..Environment::default() }))
+}
+
+/// Maps the removed `num_thread_pools,threads_per_pool` setting to a total worker count, so that
+/// existing invocations keep the same overall CPU budget on upstream's shared scheduler.
+fn get_legacy_parallelism_threads(matches: &ArgMatches) -> GenericResult<Option<usize>> {
     matches
         .get_one::<String>(PARALLELISM_ARG_NAME)
         .map(|arg| {
-            if let [num_thread_pools, threads_per_pool] =
-                arg.split(',').filter_map(|line| line.parse::<usize>().ok()).collect::<Vec<_>>().as_slice()
-            {
-                let parallelism = Parallelism::new(*num_thread_pools, *threads_per_pool);
-                let logger: InfoLogger = if matches.get_one::<bool>(LOG_ARG_NAME).copied().unwrap_or(false) {
-                    Arc::new(|msg: &str| println!("{msg}"))
-                } else {
-                    Arc::new(|_: &str| {})
-                };
-                Ok(Arc::new(Environment::new(
-                    Arc::new(DefaultRandom::default()),
-                    quota.clone(),
-                    parallelism,
-                    logger,
-                    is_experimental,
-                )))
-            } else {
-                Err("cannot parse parallelism parameter".into())
+            match arg.split(',').map(|value| value.trim().parse::<usize>().ok()).collect::<Vec<_>>().as_slice() {
+                [Some(num_thread_pools), Some(threads_per_pool)] if *num_thread_pools > 0 && *threads_per_pool > 0 => {
+                    Ok(num_thread_pools * threads_per_pool)
+                }
+                _ => Err("cannot parse parallelism parameter".into()),
             }
         })
-        .unwrap_or_else(|| Ok(Arc::new(Environment { quota, is_experimental, ..Environment::default() })))
+        .transpose()
 }
 
 fn get_matrix_files(matches: &ArgMatches) -> Option<Vec<File>> {

@@ -19,11 +19,8 @@ fn can_assign_solo_and_other_jobs_sequentially() {
         ..create_empty_problem()
     };
 
-    let solution = solve_with_metaheuristic_and_iterations(
-        problem.clone(),
-        Some(vec![create_matrix_from_problem(&problem)]),
-        500,
-    );
+    let solution =
+        solve_with_metaheuristic_and_iterations(problem.clone(), Some(vec![create_matrix_from_problem(&problem)]), 500);
 
     assert!(solution.unassigned.is_none(), "solo and other job should both be assigned sequentially");
 }

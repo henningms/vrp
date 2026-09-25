@@ -87,7 +87,6 @@
 //!     .set_initial_max_size(1)
 //!     .set_initial_construction(InitialConstruction::BlinksTimeWindowStart)
 //!     .set_infeasible_diversification(false)
-//!     .set_lkh_search(false)
 //!     .set_bounded_recreates(true)
 //!     .prebuild()?
 //!     .with_max_time(Some(60))

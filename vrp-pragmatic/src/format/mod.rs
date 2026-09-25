@@ -29,9 +29,13 @@ pub mod solution;
 
 /// Represents a location type.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub enum Location {
     /// A location type represented by geocoordinate with latitude and longitude.
+    // NOTE: an untagged variant has no discriminator to derive a name from, so name it explicitly
+    // to keep generated models readable
+    #[cfg_attr(feature = "schema", schemars(title = "LocationCoordinate"))]
     Coordinate {
         /// Latitude.
         lat: f64,
@@ -40,12 +44,14 @@ pub enum Location {
     },
 
     /// A location type represented by index reference in routing matrix.
+    #[cfg_attr(feature = "schema", schemars(title = "LocationReference"))]
     Reference {
         /// An index in routing matrix.
         index: usize,
     },
 
     /// A custom location type with no reference in matrix.
+    #[cfg_attr(feature = "schema", schemars(title = "LocationCustom"))]
     Custom {
         /// Specifies a custom location type.
         r#type: CustomLocationType,
@@ -94,6 +100,7 @@ impl std::fmt::Display for Location {
 
 /// A custom location type which has no reference to matrix.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum CustomLocationType {
     /// Unknown location type which has a zero distance/duration to any other location.
     #[serde(rename(deserialize = "unknown", serialize = "unknown"))]
@@ -102,6 +109,7 @@ pub enum CustomLocationType {
 
 /// A format error.
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FormatError {
     /// An error code in registry.
     pub code: String,
@@ -196,9 +204,11 @@ const GROUP_CONSTRAINT_CODE: ViolationCode = ViolationCode(12);
 const COMPATIBILITY_CONSTRAINT_CODE: ViolationCode = ViolationCode(13);
 const RELOAD_RESOURCE_CONSTRAINT_CODE: ViolationCode = ViolationCode(14);
 const RECHARGE_CONSTRAINT_CODE: ViolationCode = ViolationCode(15);
-const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(16);
-const MAX_RIDE_DURATION_CONSTRAINT_CODE: ViolationCode = ViolationCode(17);
-const SOLO_RIDING_CONSTRAINT_CODE: ViolationCode = ViolationCode(18);
+// Fork-only constraints use codes from 1001 upwards, so that new upstream constraints, which are numbered
+// sequentially from 1, cannot collide with them.
+const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(1001);
+const MAX_RIDE_DURATION_CONSTRAINT_CODE: ViolationCode = ViolationCode(1002);
+const SOLO_RIDING_CONSTRAINT_CODE: ViolationCode = ViolationCode(1003);
 
 /// An job id to job index.
 pub type JobIndex = HashMap<String, CoreJob>;
