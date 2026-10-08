@@ -50,7 +50,7 @@ fn run_examples(base_path: &str) {
         let (core_problem, problem, matrices) = if let Some(matrices) = matrices {
             let matrices = matrices
                 .iter()
-                .map(|path| deserialize_matrix(open_file(format!["{base_path}/{path}.json"].as_str())))
+                .map(|path| deserialize_matrix(open_file(format!("{base_path}/{path}.json").as_str())))
                 .collect::<Result<Vec<Matrix>, _>>()
                 .unwrap_or_else(|errors| panic!("cannot read matrix: {errors}"));
             ((problem.clone(), matrices.clone()).read_pragmatic(), problem, Some(matrices))
@@ -85,7 +85,7 @@ fn open_file(path: &str) -> BufReader<File> {
 }
 
 fn get_pragmatic_problem(base_path: &str, name: &str) -> Problem {
-    deserialize_problem(open_file(format!["{base_path}/{name}.problem.json"].as_str())).unwrap()
+    deserialize_problem(open_file(format!("{base_path}/{name}.problem.json").as_str())).unwrap()
 }
 
 fn get_pragmatic_solution(problem: &CoreProblem, solution: &CoreSolution) -> Solution {
