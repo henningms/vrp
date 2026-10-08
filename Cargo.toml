@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.37.0"
+version = "1.38.0"
 # let-chains are used across the workspace and stabilised in 1.88; 1.85 (edition 2024) is not sufficient
 rust-version = "1.88"
 authors = ["Ilya Builuk <ilya.builuk@gmail.com>"]

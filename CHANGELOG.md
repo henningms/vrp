@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.38.0] 2026-10-08
+
 ### Added
 
 * infer the `site` of pickup-delivery jobs without one when `minimize-site-mixing` or `minimize-site-visits` is
