@@ -24,7 +24,8 @@ consists of the following properties:
 - **soloRiding** (optional): when `true`, ensures this pickup-delivery job rides alone in vehicle:
   no other pickup-delivery job can be onboard between its pickup and delivery.
 - **site** (optional): a site key, e.g. the school a rider travels to or from. Used by the
-  `minimize-site-mixing` objective; it has no effect otherwise.
+  `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
+  pickup-delivery job has no `site`, these objectives infer one (see objectives).
 
 A job should have at least one task property specified.
 

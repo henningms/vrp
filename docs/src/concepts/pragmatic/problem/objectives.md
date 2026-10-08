@@ -71,6 +71,13 @@ These objectives provide some extra control on job assignment:
 * `minimize-site-visits`: minimizes site visits, i.e. distinct job `site` keys summed over runs. Every run serving a
     site counts as one unit, which pushes riders of the same site into the same run.
 
+  Jobs without a `site` get one inferred from their locations: a site is a place which pickup-delivery jobs connect
+    with many different places (ends within 150 m count as one place), such as a school which morning trips arrive at
+    and afternoon trips leave from, each from another home. A job's site is its end connected with the most different
+    places, at least 2; jobs where both ends are connected with as many places get no site. Counting places rather than
+    jobs keeps a dense housing area from outweighing a small school. Matrix-index locations only match the same
+    index. An explicit `site` always wins.
+
   To trade mixing or visits against cost, combine it with a cost objective in a `multi-objective` with the `weighted-sum`
     strategy: the weight is the cost of one extra site in a run.
 

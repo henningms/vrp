@@ -7,6 +7,7 @@ use crate::format::problem::clustering_reader::create_cluster_config;
 use crate::format::problem::fleet_reader::*;
 use crate::format::problem::goal_reader::create_goal_context;
 use crate::format::problem::job_reader::{read_jobs_with_extra_locks, read_locks};
+use crate::format::problem::site_reader::with_inferred_sites;
 use crate::format::{FormatError, JobIndex};
 use crate::validation::ValidationContext;
 use crate::{CoordIndex, parse_time};
@@ -50,6 +51,7 @@ pub(crate) fn map_to_problem_with_props(
     props_override: Option<ProblemProperties>,
 ) -> Result<CoreProblem, MultiFormatError> {
     ValidationContext::new(&api_problem, Some(&matrices), &coord_index).validate()?;
+    let api_problem = with_inferred_sites(api_problem);
 
     let mut extras = Extras::default();
 
