@@ -150,6 +150,8 @@ fn get_objective_feature_layer(
             .set_activity_cost(blocks.activity.clone())
             .build_minimize_duration(),
         Objective::MinimizeTours => create_minimize_tours_feature("min_tours"),
+        Objective::MinimizeSiteMixing => create_site_mixing_feature("min_site_mixing"),
+        Objective::MinimizeSiteVisits => create_site_visits_feature("min_site_visits"),
         Objective::MaximizeTours => create_maximize_tours_feature("max_tours"),
         Objective::MaximizeValue { breaks } => create_maximize_total_job_value_feature(
             "max_value",

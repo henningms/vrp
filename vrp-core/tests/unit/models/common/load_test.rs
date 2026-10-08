@@ -146,3 +146,14 @@ mod multi {
         assert!(demand.has_dynamic());
     }
 }
+
+mod configurable {
+    use crate::models::common::{ConfigurableLoad, Load};
+
+    #[test]
+    fn default_load_is_empty() {
+        assert!(!ConfigurableLoad::default().is_not_empty());
+        assert!(!ConfigurableLoad::from_load(vec![0, 0]).is_not_empty());
+        assert!(ConfigurableLoad::from_load(vec![0, 1]).is_not_empty());
+    }
+}

@@ -30,6 +30,7 @@ pub fn create_job(id: &str) -> Job {
         lifo_tag: None,
         fixed_order: None,
         max_ride_duration: None,
+        site: None,
     }
 }
 

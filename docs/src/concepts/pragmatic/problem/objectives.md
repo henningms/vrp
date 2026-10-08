@@ -64,6 +64,15 @@ These objectives provide some extra control on job assignment:
     * `jobRadius`: a radius of neighbourhood, minimum is 1
 
   This objective is supposed to be on the same level within cost ones.
+* `minimize-site-mixing`: minimizes mixing of job `site` keys within a run, i.e. a stretch of a tour with at least
+    one pickup-delivery job on board. Every distinct site beyond the first one in a run counts as one unit, so a run
+    serving one school costs nothing. Jobs without a site keep the vehicle loaded, but add no site.
+
+* `minimize-site-visits`: minimizes site visits, i.e. distinct job `site` keys summed over runs. Every run serving a
+    site counts as one unit, which pushes riders of the same site into the same run.
+
+  To trade mixing or visits against cost, combine it with a cost objective in a `multi-objective` with the `weighted-sum`
+    strategy: the weight is the cost of one extra site in a run.
 
 
 ### Work balance objectives

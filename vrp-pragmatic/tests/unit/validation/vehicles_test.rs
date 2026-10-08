@@ -196,3 +196,35 @@ fn can_detect_fleet_without_vehicle_types_impl(has_vehicle_type: bool, expected:
 
     assert_eq!(result.err().map(|err| err.code), expected);
 }
+
+parameterized_test! {can_detect_too_many_capacity_configurations, (configurations, expected), {
+    can_detect_too_many_capacity_configurations_impl(configurations, expected);
+}}
+
+can_detect_too_many_capacity_configurations! {
+    case01: (8, None),
+    case02: (9, Some("E9305".to_string())),
+}
+
+fn can_detect_too_many_capacity_configurations_impl(configurations: i32, expected: Option<String>) {
+    let problem = Problem {
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                capacity: None,
+                capacity_configurations: Some(
+                    (0..configurations)
+                        .map(|seats| CapacityConfiguration { name: None, capacities: vec![seats, 1] })
+                        .collect(),
+                ),
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+
+    let result =
+        check_e9305_capacity_configurations_count(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+
+    assert_eq!(result.err().map(|err| err.code), expected);
+}

@@ -238,3 +238,124 @@ fn can_merge_jobs_with_demand_impl(
         (Err(ViolationCode(result)), Err(expected)) => assert_eq!(result, expected),
     }
 }
+
+mod runs {
+    //! Pickup-delivery riders are on board only between their pickup and delivery, so capacity is checked
+    //! per run (a stretch with riders on board), not over the rest of the tour.
+    use super::*;
+    use crate::models::common::{ConfigurableLoad, LoadOps};
+    use crate::models::problem::Multi;
+    use std::sync::Arc;
+
+    /// A pickup-delivery job; the job is returned too, as activities reach it through a weak link.
+    fn pudo<T: LoadOps>(pickup: Demand<T>, delivery: Demand<T>) -> (Arc<Multi>, Activity, Activity) {
+        let mut p = TestSingleBuilder::default();
+        p.demand(pickup);
+        let mut d = TestSingleBuilder::default();
+        d.demand(delivery);
+        let multi = Multi::new_shared(vec![p.build_shared(), d.build_shared()], Dimensions::default());
+        let pickup = ActivityBuilder::default().job(Some(multi.jobs[0].clone())).build();
+        let delivery = ActivityBuilder::default().job(Some(multi.jobs[1].clone())).build();
+
+        (multi, pickup, delivery)
+    }
+
+    fn single_rider() -> (Arc<Multi>, Activity, Activity) {
+        pudo(Demand::<SingleDimLoad>::pudo_pickup(1), Demand::pudo_delivery(1))
+    }
+
+    /// Seats and wheelchair places as configurable load.
+    fn configurable_rider(seats: i32, wheelchairs: i32) -> (Arc<Multi>, Activity, Activity) {
+        let load = || ConfigurableLoad::from_load(vec![seats, wheelchairs]);
+        pudo(
+            Demand { pickup: (ConfigurableLoad::default(), load()), delivery: Default::default() },
+            Demand { pickup: Default::default(), delivery: (ConfigurableLoad::default(), load()) },
+        )
+    }
+
+    fn evaluate<T: LoadOps>(
+        vehicle: Vehicle,
+        tour: Vec<Activity>,
+        target: &Activity,
+        index: usize,
+    ) -> Option<ConstraintViolation> {
+        let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(vehicle).build();
+        let mut route_ctx = RouteContextBuilder::default()
+            .with_route(RouteBuilder::default().with_vehicle(&fleet, "v1").add_activities(tour).build())
+            .build();
+        let feature = CapacityFeatureBuilder::<T>::new("capacity").set_violation_code(VIOLATION_CODE).build().unwrap();
+        feature.state.unwrap().accept_route_state(&mut route_ctx);
+        let activity_ctx = ActivityContext {
+            index,
+            prev: route_ctx.route().tour.get(index).unwrap(),
+            target,
+            next: route_ctx.route().tour.get(index + 1),
+        };
+        let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+
+        feature.constraint.unwrap().evaluate(&MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx))
+    }
+
+    fn configurable_vehicle() -> Vehicle {
+        // two seats, or one seat and one wheelchair place
+        let mut builder = TestVehicleBuilder::default();
+        builder.id("v1").dimens_mut().set_vehicle_capacity(ConfigurableLoad::new(vec![vec![2, 0], vec![1, 1]]));
+        builder.build()
+    }
+
+    #[test]
+    fn can_pick_up_rider_before_a_later_full_run() {
+        let (_a, ap, ad) = single_rider();
+        let (_b, bp, _) = single_rider();
+
+        // [start, ap, ad]: b is picked up before a's run, which fills the vehicle
+        assert_eq!(evaluate::<SingleDimLoad>(create_test_vehicle(1), vec![ap, ad], &bp, 0), None);
+    }
+
+    #[test]
+    fn can_deliver_rider_before_a_later_full_run() {
+        let (_a, ap, ad) = single_rider();
+        let (_b, bp, bd) = single_rider();
+
+        // [start, bp, ap, ad]: b is delivered before a is picked up
+        assert_eq!(evaluate::<SingleDimLoad>(create_test_vehicle(1), vec![bp, ap, ad], &bd, 1), None);
+    }
+
+    #[test]
+    fn cannot_keep_rider_on_board_through_a_full_run() {
+        let (_a, ap, ad) = single_rider();
+        let (_b, bp, bd) = single_rider();
+
+        // [start, bp, ap, ad]: delivering b after a's pickup has two riders on board
+        assert_eq!(
+            evaluate::<SingleDimLoad>(create_test_vehicle(1), vec![bp, ap, ad], &bd, 2),
+            create_constraint_violation(false)
+        );
+    }
+
+    #[test]
+    fn can_use_different_configuration_in_a_later_run() {
+        let (_c, cp, cd) = configurable_rider(1, 0);
+        let (_a, ap, ad) = configurable_rider(0, 1);
+        let (_b, bp, _) = configurable_rider(1, 0);
+
+        // [start, cp, cd, ap, ad]: two seated riders in the morning, a wheelchair in the afternoon
+        assert_eq!(evaluate::<ConfigurableLoad>(configurable_vehicle(), vec![cp, cd, ap, ad], &bp, 1), None);
+    }
+
+    #[test]
+    fn keeps_one_configuration_within_a_run() {
+        let (_c, cp, cd) = configurable_rider(1, 0);
+        let (_a, ap, ad) = configurable_rider(0, 1);
+        let (_b, bp, bd) = configurable_rider(1, 0);
+        let tour = || vec![cp.deep_copy(), bp.deep_copy(), cd.deep_copy(), ap.deep_copy(), ad.deep_copy()];
+
+        // b delivered after c: the morning run peaks at two seats
+        assert_eq!(evaluate::<ConfigurableLoad>(configurable_vehicle(), tour(), &bd, 3), None);
+        // b kept on board until after a's pickup: one run needs two seats and a wheelchair place
+        assert_eq!(
+            evaluate::<ConfigurableLoad>(configurable_vehicle(), tour(), &bd, 4),
+            create_constraint_violation(false)
+        );
+    }
+}

@@ -17,6 +17,7 @@ pub fn create_empty_job() -> Job {
         lifo_tag: None,
         fixed_order: None,
         max_ride_duration: None,
+        site: None,
     }
 }
 

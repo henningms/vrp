@@ -8,6 +8,24 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.37.0] 2026-10-08
+
+### Added
+
+* add `minimize-site-mixing` and `minimize-site-visits` objectives with an optional job `site` key: a run (a stretch
+  of a tour with pickup-delivery load on board) costs one unit per site beyond the first (mixing) or per site (visits).
+  Combine them with a cost objective in a `weighted-sum` multi-objective to price mixing, e.g. riders of different
+  schools sharing a vehicle
+* validate that a vehicle type has at most 8 capacity configurations (E9305) instead of panicking
+
+### Fixed
+
+* check pickup-delivery capacity per run: a pickup is checked at its own position and the job's last activity checks
+  the peak of the run it ends up in, instead of adding the load to the rest of the tour. This accepts riders before a
+  later full run, catches overloads between a pickup and its delivery, and lets capacity configurations differ
+  between runs while one configuration holds within a run. Tours with reload intervals keep the previous check
+* treat an empty `ConfigurableLoad` (no dimensions) as empty, like `MultiDimLoad`
+
 ## [1.34.1] 2026-08-14
 
 ### Fixed

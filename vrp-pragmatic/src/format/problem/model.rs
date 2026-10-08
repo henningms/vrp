@@ -202,6 +202,11 @@ pub struct Job {
     /// Only applies to jobs with both pickups and deliveries.
     #[serde(skip_serializing_if = "Option::is_none", rename = "maxRideDuration")]
     pub max_ride_duration: Option<Float>,
+
+    /// A site key, e.g. the school a rider travels to or from. Used by the `minimize-site-mixing`
+    /// objective, which penalizes riders of different sites being on board at the same time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
 }
 
 // region Clustering
@@ -690,6 +695,14 @@ pub enum Objective {
 
     /// An objective to minimize total tour amount.
     MinimizeTours,
+
+    /// An objective to minimize mixing of job sites within a run (a stretch of a tour with riders on
+    /// board): every distinct site beyond the first one in a run counts as one unit.
+    MinimizeSiteMixing,
+
+    /// An objective to minimize site visits: distinct job sites summed over runs, so every run serving
+    /// a site counts as one unit. Pushes riders of the same site into the same run.
+    MinimizeSiteVisits,
 
     /// An objective to maximize total tour amount.
     MaximizeTours,
