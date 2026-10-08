@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.37.0] 2026-10-08
+
 ### Added
 
 * add `minimize-site-mixing` and `minimize-site-visits` objectives with an optional job `site` key: a run (a stretch
