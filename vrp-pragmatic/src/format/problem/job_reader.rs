@@ -10,7 +10,7 @@ use std::sync::Arc;
 use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
-        JobPreferences as FeatureJobPreferences, JobPreferencesDimension, JobRequestedTimesDimension,
+        JobPreferences as FeatureJobPreferences, JobPreferencesDimension, JobRequestedTimesDimension, JobSiteDimension,
         JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
         LifoTagDimension,
     },
@@ -660,6 +660,15 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
 
     if let Some(solo_riding) = job.solo_riding {
         dimens.set_job_solo_riding(solo_riding);
+    }
+
+    if let Some(site) = &job.site {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        site.hash(&mut hasher);
+        dimens.set_job_site(hasher.finish());
     }
 
     if let Some(skills) = get_skills(&job.skills) {

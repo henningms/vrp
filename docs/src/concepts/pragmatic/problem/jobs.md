@@ -23,6 +23,8 @@ consists of the following properties:
   the same tour. This is useful to avoid mixing cargo, such as hazardous goods and food.
 - **soloRiding** (optional): when `true`, ensures this pickup-delivery job rides alone in vehicle:
   no other pickup-delivery job can be onboard between its pickup and delivery.
+- **site** (optional): a site key, e.g. the school a rider travels to or from. Used by the
+  `minimize-site-mixing` objective; it has no effect otherwise.
 
 A job should have at least one task property specified.
 

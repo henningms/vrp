@@ -97,6 +97,7 @@ prop_compose! {
             lifo_tag: None,
             fixed_order: None,
             max_ride_duration: None,
+            site: None,
         }
     }
 }
@@ -148,6 +149,7 @@ prop_compose! {
             lifo_tag: None,
             fixed_order: None,
             max_ride_duration: None,
+            site: None,
         }
     }
 }

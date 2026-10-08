@@ -76,6 +76,7 @@ pub(crate) fn generate_plan(
                 lifo_tag: job_proto.lifo_tag.clone(),
                 fixed_order: job_proto.fixed_order,
                 max_ride_duration: job_proto.max_ride_duration,
+                site: job_proto.site.clone(),
             }
         })
         .collect();
