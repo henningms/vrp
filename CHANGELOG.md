@@ -8,6 +8,12 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* infer the `site` of pickup-delivery jobs without one when `minimize-site-mixing` or `minimize-site-visits` is
+  used: the job's end connected with the most different places (at least 2), merging ends within 150 m. An explicit
+  `site` still wins
+
 ## [1.37.0] 2026-10-08
 
 ### Added

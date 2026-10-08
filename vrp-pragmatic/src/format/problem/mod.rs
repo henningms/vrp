@@ -31,6 +31,8 @@ mod goal_reader;
 pub(crate) mod job_reader;
 
 mod problem_reader;
+
+mod site_reader;
 pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props};
 use self::problem_reader::{map_to_problem_with_approx, map_to_problem_with_matrices};
 
