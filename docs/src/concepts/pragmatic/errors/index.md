@@ -782,3 +782,8 @@ different number of dimensions.
 
 `vehicle has no capacity defined` is returned when a vehicle type specifies neither `capacity` nor
 `capacityConfigurations`.
+
+### E9305
+
+`too many capacity configurations` is returned when a vehicle type specifies more than 8 capacity configurations. To
+fix it, remove configurations which another configuration covers (no smaller in any dimension), or merge them.

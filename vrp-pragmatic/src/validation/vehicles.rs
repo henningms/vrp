@@ -7,7 +7,7 @@ use crate::utils::combine_error_results;
 use crate::validation::common::get_time_windows;
 use crate::{parse_time, parse_time_safe};
 use std::collections::HashSet;
-use vrp_core::models::common::TimeWindow;
+use vrp_core::models::common::{MAX_CONFIGURATIONS, TimeWindow};
 
 /// Checks that fleet has no vehicle with duplicate type ids.
 fn check_e1300_no_vehicle_types_with_duplicate_type_ids(ctx: &ValidationContext) -> Result<(), FormatError> {
@@ -426,6 +426,29 @@ fn check_e9304_vehicle_has_capacity(ctx: &ValidationContext) -> Result<(), Forma
     }
 }
 
+/// Checks that a vehicle has no more capacity configurations than supported.
+fn check_e9305_capacity_configurations_count(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let type_ids: Vec<String> = ctx
+        .vehicles()
+        .filter(|vehicle| vehicle.capacity_configurations.as_ref().is_some_and(|c| c.len() > MAX_CONFIGURATIONS))
+        .map(|vehicle| vehicle.type_id.clone())
+        .collect();
+
+    if type_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9305".to_string(),
+            "too many capacity configurations".to_string(),
+            format!(
+                "use at most {MAX_CONFIGURATIONS} capacity configurations, e.g. by removing ones covered by another, \
+                 for vehicle types: '{}'",
+                type_ids.join(", ")
+            ),
+        ))
+    }
+}
+
 /// Validates vehicles from the fleet.
 pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -442,6 +465,7 @@ pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError
         check_e9302_capacity_configurations_dimensions(ctx),
         check_e9303_capacity_dimensions_count(ctx),
         check_e9304_vehicle_has_capacity(ctx),
+        check_e9305_capacity_configurations_count(ctx),
         check_e1309_fleet_has_vehicle_types(ctx),
     ])
     .map_err(From::from)

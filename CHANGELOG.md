@@ -14,6 +14,7 @@ are already published. So, I stick to it for now.
   of a tour with pickup-delivery load on board) costs one unit per site beyond the first (mixing) or per site (visits).
   Combine them with a cost objective in a `weighted-sum` multi-objective to price mixing, e.g. riders of different
   schools sharing a vehicle
+* validate that a vehicle type has at most 8 capacity configurations (E9305) instead of panicking
 
 ### Fixed
 
