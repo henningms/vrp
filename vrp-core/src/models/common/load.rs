@@ -367,7 +367,7 @@ impl Display for MultiDimLoad {
 }
 
 /// Maximum number of capacity configurations supported.
-const MAX_CONFIGURATIONS: usize = 8;
+pub const MAX_CONFIGURATIONS: usize = 8;
 
 /// Specifies a load type with multiple mutually exclusive capacity configurations.
 ///
@@ -444,7 +444,7 @@ impl ConfigurableLoad {
 
 impl Load for ConfigurableLoad {
     fn is_not_empty(&self) -> bool {
-        self.size == 0 || self.load.iter().any(|v| *v != 0)
+        self.load[..self.size].iter().any(|v| *v != 0)
     }
 
     fn max_load(self, other: Self) -> Self {
