@@ -265,6 +265,30 @@ fn check_e9102_named_demand_dimensions_exist(ctx: &ValidationContext) -> Result<
     Ok(())
 }
 
+/// Checks that no job has an empty `oneOf` skill group, which no vehicle could ever satisfy.
+fn check_e9103_no_empty_one_of_skill_group(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let ids = ctx
+        .jobs()
+        .filter(|job| {
+            job.skills
+                .as_ref()
+                .and_then(|skills| skills.one_of.as_ref())
+                .is_some_and(|groups| groups.iter().any(|group| group.is_empty()))
+        })
+        .map(|job| job.id.clone())
+        .collect::<Vec<_>>();
+
+    if ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9103".to_string(),
+            "job has an empty oneOf skill group".to_string(),
+            format!("remove empty groups from skills.oneOf in jobs with ids: '{}'", ids.join(", ")),
+        ))
+    }
+}
+
 /// Validates jobs from the plan.
 pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -278,6 +302,7 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1107_negative_demand(ctx),
         check_e9101_demand_named_demand_mutual_exclusion(ctx),
         check_e9102_named_demand_dimensions_exist(ctx),
+        check_e9103_no_empty_one_of_skill_group(ctx),
     ])
     .map_err(From::from)
 }

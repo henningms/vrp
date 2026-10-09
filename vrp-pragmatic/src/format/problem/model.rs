@@ -50,9 +50,9 @@ pub struct JobSkills {
     /// Vehicle should have all of these skills defined.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub all_of: Option<Vec<String>>,
-    /// Vehicle should have at least one of these skills defined.
+    /// Vehicle should have at least one skill of every group.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub one_of: Option<Vec<String>>,
+    pub one_of: Option<Vec<Vec<String>>>,
     /// Vehicle should have none of these skills defined.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub none_of: Option<Vec<String>>,

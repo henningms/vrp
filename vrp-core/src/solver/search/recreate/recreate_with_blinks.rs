@@ -457,9 +457,8 @@ impl JobSelector for SkillScarcityJobSelector {
                 .required
                 .iter()
                 .map(|job| {
-                    let skill_key = JobSkillKey::new(job);
-                    let compatible_routes = *compatible_counts.entry(skill_key.clone()).or_insert_with(|| {
-                        routes.iter().filter(|route_ctx| skill_key.is_compatible(route_ctx)).count()
+                    let compatible_routes = *compatible_counts.entry(JobSkillKey::new(job)).or_insert_with(|| {
+                        routes.iter().filter(|route_ctx| is_skill_compatible(job, route_ctx)).count()
                     });
                     let (start, _, length) = TimeWindowJobSelector::get_tw_metric(job);
                     (job.clone(), (compatible_routes, start, length))
@@ -520,10 +519,11 @@ impl JobSelector for RouteScarcityJobSelector {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+/// Jobs with equal skill requirements share one compatible route count.
+#[derive(Eq, Hash, PartialEq)]
 struct JobSkillKey {
     all_of: Vec<String>,
-    one_of: Vec<String>,
+    one_of: Vec<Vec<String>>,
     none_of: Vec<String>,
 }
 
@@ -535,29 +535,24 @@ impl JobSkillKey {
             skills
         };
         let job_skills = job.dimens().get_job_skills();
+        let mut one_of = job_skills
+            .and_then(|skills| skills.one_of.as_ref())
+            .into_iter()
+            .flatten()
+            .map(|group| sorted(Some(group)))
+            .collect::<Vec<_>>();
+        one_of.sort_unstable();
 
         Self {
             all_of: sorted(job_skills.and_then(|skills| skills.all_of.as_ref())),
-            one_of: sorted(job_skills.and_then(|skills| skills.one_of.as_ref())),
+            one_of,
             none_of: sorted(job_skills.and_then(|skills| skills.none_of.as_ref())),
         }
     }
+}
 
-    fn is_compatible(&self, route_ctx: &RouteContext) -> bool {
-        let vehicle_skills = route_ctx.route().actor.vehicle.dimens.get_vehicle_skills();
-        let has_all = |required: &[String]| {
-            required.is_empty()
-                || vehicle_skills.is_some_and(|available| required.iter().all(|skill| available.contains(skill)))
-        };
-        let has_any = |required: &[String]| {
-            required.is_empty()
-                || vehicle_skills.is_some_and(|available| required.iter().any(|skill| available.contains(skill)))
-        };
-        let has_none = |forbidden: &[String]| {
-            forbidden.is_empty()
-                || vehicle_skills.is_none_or(|available| forbidden.iter().all(|skill| !available.contains(skill)))
-        };
+fn is_skill_compatible(job: &Job, route_ctx: &RouteContext) -> bool {
+    let vehicle_skills = route_ctx.route().actor.vehicle.dimens.get_vehicle_skills();
 
-        has_all(&self.all_of) && has_any(&self.one_of) && has_none(&self.none_of)
-    }
+    job.dimens().get_job_skills().is_none_or(|skills| skills.is_satisfied_by(vehicle_skills))
 }

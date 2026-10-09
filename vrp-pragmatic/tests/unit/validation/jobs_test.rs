@@ -74,6 +74,34 @@ fn can_detect_negative_demand() {
     assert_result("E1107", "job1", result);
 }
 
+parameterized_test! {can_detect_empty_one_of_skill_group, (one_of, expected), {
+    can_detect_empty_one_of_skill_group_impl(one_of, expected);
+}}
+
+can_detect_empty_one_of_skill_group! {
+    case01: (vec![vec!["driver:a"], vec!["ramp", "lift"]], None),
+    case02: (vec![vec!["driver:a"], vec![]], Some("job1")),
+    case03: (vec![], None),
+}
+
+fn can_detect_empty_one_of_skill_group_impl(one_of: Vec<Vec<&str>>, expected: Option<&str>) {
+    let skills = JobSkills { all_of: None, one_of: Some(one_of.into_iter().map(to_strings).collect()), none_of: None };
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job_with_skills("job1", (1., 0.), skills)], ..create_empty_plan() },
+        ..create_empty_problem()
+    };
+
+    let result =
+        check_e9103_no_empty_one_of_skill_group(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)))
+            .err();
+
+    if let Some(action) = expected {
+        assert_result("E9103", action, result);
+    } else {
+        assert!(result.is_none());
+    }
+}
+
 #[test]
 fn can_iterate_all_task_kinds_in_validation_order() {
     let task_with_duration = |duration| JobTask {

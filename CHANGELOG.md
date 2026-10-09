@@ -8,6 +8,25 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Changed
+
+* `breaking`: job skills `oneOf` is a list of groups, and a vehicle needs at least one skill from every group, e.g.
+  `"oneOf": [["driver:a", "driver:b"], ["ramp", "lift"]]`. A flat list no longer parses: wrap a non-empty list as one
+  group, and send an empty one as `[]` or leave it out, since `[[]]` is an empty group and is rejected (E9103). In
+  Rust, `JobSkills::one_of` is `Option<Vec<Vec<String>>>` in the pragmatic format and `Option<Vec<HashSet<String>>>`
+  in core, core's `JobSkills::new` takes `one_of` as groups, and core's `JobSkills::is_satisfied_by` is the single
+  check used by the skills constraint and the skill-scarcity job selector
+
+### Added
+
+* validate that a job has no empty `oneOf` skill group (E9103)
+
+### Fixed
+
+* merging jobs for clustering accepted a candidate whose `oneOf` skills were a subset of the source's, so the merged
+  job could reach a vehicle that cannot serve the candidate. Each candidate group must now be implied by the source's
+  `allOf` or by one of its groups
+
 ## [1.38.0] 2026-10-08
 
 ### Added
