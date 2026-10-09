@@ -156,6 +156,45 @@ fn orders_jobs_by_skill_scarcity_then_time_window_start() {
 }
 
 #[test]
+fn counts_a_route_as_skill_compatible_only_when_every_one_of_group_is_met() {
+    let vehicle = |id: &str, skills: &[&str]| {
+        let mut builder = TestVehicleBuilder::default();
+        builder.id(id).dimens_mut().set_vehicle_skills(skills.iter().map(|skill| (*skill).to_string()).collect());
+        builder.build()
+    };
+    let fleet = Arc::new(
+        FleetBuilder::default()
+            .add_driver(test_driver())
+            .add_vehicles(vec![vehicle("v1", &["driver", "lift"]), vehicle("v2", &["driver"])])
+            .with_group_key_fn(Box::new(|_| {
+                Box::new(|actor| if get_vehicle_id(&actor.vehicle) == "v1" { 0 } else { 1 })
+            }))
+            .build(),
+    );
+    let registry = Registry::new(fleet.as_ref(), test_random());
+    let mut insertion_ctx = TestInsertionContextBuilder::default().with_fleet(fleet).with_registry(registry).build();
+    let job = |id: &str, start: f64, skills: JobSkills| {
+        let mut builder = TestSingleBuilder::default();
+        builder.id(id).times(vec![TimeWindow::new(start, 100.)]).dimens_mut().set_job_skills(skills);
+        builder.build_as_job_ref()
+    };
+    let groups = |groups: &[&[&str]]| {
+        groups.iter().map(|group| group.iter().map(|skill| (*skill).to_string()).collect()).collect::<Vec<_>>()
+    };
+    insertion_ctx.solution.required = vec![
+        job("any-vehicle", 0., JobSkills::new(Some(vec!["driver".to_string()]), None, None)),
+        job("driver-and-lift", 10., JobSkills::new(None, Some(groups(&[&["driver"], &["ramp", "lift"]])), None)),
+    ];
+
+    SkillScarcityJobSelector::default().prepare(&mut insertion_ctx);
+
+    assert_eq!(
+        insertion_ctx.solution.required.iter().map(get_job_id).cloned().collect::<Vec<_>>(),
+        vec!["driver-and-lift", "any-vehicle"]
+    );
+}
+
+#[test]
 fn orders_jobs_by_route_capacity_scarcity_then_time_window_start() {
     let vehicle = |id: &str, capacity: i32| TestVehicleBuilder::default().id(id).capacity(capacity).build();
     let fleet = Arc::new(

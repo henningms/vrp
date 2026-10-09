@@ -115,3 +115,21 @@ fn serializing_problem_without_ferry_crossings_emits_no_key() {
 
     assert!(!serialized.contains("ferryCrossings"), "serialized problem unexpectedly has a ferryCrossings key");
 }
+
+#[test]
+fn can_deserialize_one_of_skill_groups() {
+    let skills: JobSkills =
+        serde_json::from_str(r#"{ "oneOf": [["driver:a", "driver:b"], ["ramp", "lift"]] }"#).unwrap();
+
+    assert_eq!(
+        skills.one_of,
+        Some(vec![vec!["driver:a".to_string(), "driver:b".to_string()], vec!["ramp".to_string(), "lift".to_string()]])
+    );
+}
+
+#[test]
+fn can_reject_one_of_as_flat_skill_list() {
+    let result = serde_json::from_str::<JobSkills>(r#"{ "oneOf": ["ramp", "lift"] }"#);
+
+    assert!(result.is_err());
+}

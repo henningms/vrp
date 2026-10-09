@@ -763,6 +763,11 @@ To fix it, remove one of them.
 is not defined, and `namedDemand contains unknown dimension names` when it uses a name which is not listed in
 `fleet.capacityDimensions`.
 
+### E9103
+
+`job has an empty oneOf skill group` is returned when a group in a job's `skills.oneOf` has no skills. No vehicle can
+satisfy an empty group, so the job could never be assigned. To fix it, remove the empty group.
+
 ### E9301
 
 `capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,
