@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.39.0] 2026-10-09
+
 ### Changed
 
 * `breaking`: job skills `oneOf` is a list of groups, and a vehicle needs at least one skill from every group, e.g.
