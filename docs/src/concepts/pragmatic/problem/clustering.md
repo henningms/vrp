@@ -60,7 +60,8 @@ The vicinity clustering functionality has some limitations:
 
 - only jobs with single task can be clustered, but their type, such as pickup or delivery, doesn't matter
 - clusters are pre-built using a greedy algorithm which picks the closest by duration job first
-- extra constraints puts extra limitations: e.g. priority, order, skills defined on jobs should match in the cluster
+- extra constraints puts extra limitations: e.g. priority and order should match in the cluster, and every vehicle
+  which can serve the cluster's first job by skills must be able to serve each job added to it
 - jobs with value are not clustered with job without value
 - commute distance is not included into statistics
 

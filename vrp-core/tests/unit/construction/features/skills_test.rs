@@ -132,6 +132,8 @@ can_merge_skills! {
     case_14: (create_job_with_skills(Some(vec!["skill2"]), None, None), create_job_with_skills(None, Some(vec![vec!["skill1", "skill2"]]), None), Ok(())),
     case_15: (create_job_with_skills(None, Some(vec![vec!["skill1"], vec!["skill3"]]), None), create_job_with_skills(None, Some(vec![vec!["skill3", "skill4"]]), None), Ok(())),
     case_16: (create_job_with_skills(None, Some(vec![vec!["skill1"]]), None), create_job_with_skills(None, Some(vec![vec!["skill1"], vec!["skill3"]]), None), Err(VIOLATION_CODE)),
+    case_17: (create_job_with_skills(None, None, Some(vec!["skill1", "skill2"])), create_job_with_skills(None, None, Some(vec!["skill1"])), Ok(())),
+    case_18: (create_job_with_skills(None, None, Some(vec!["skill1"])), create_job_with_skills(None, None, Some(vec!["skill1", "skill2"])), Err(VIOLATION_CODE)),
 }
 
 fn can_merge_skills_impl(source: Job, candidate: Job, expected: Result<(), ViolationCode>) {
