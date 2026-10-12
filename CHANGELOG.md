@@ -8,6 +8,14 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Fixed
+
+* job skills `oneOf` accepts a flat list of skills again and reads it as one group, so json problems written for
+  upstream or for versions before 1.39.0 parse unchanged. `[]`, like leaving `oneOf` out, still means no `oneOf`
+  condition. A list of groups still works, a list that mixes skills and groups is rejected, and serialization always
+  writes groups. The Rust type is unchanged from 1.39.0: Rust callers coming from an earlier version still change
+  `one_of: Some(skills)` to `one_of: Some(vec![skills])`
+
 ## [1.39.0] 2026-10-09
 
 ### Changed

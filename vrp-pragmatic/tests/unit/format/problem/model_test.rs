@@ -128,8 +128,32 @@ fn can_deserialize_one_of_skill_groups() {
 }
 
 #[test]
-fn can_reject_one_of_as_flat_skill_list() {
-    let result = serde_json::from_str::<JobSkills>(r#"{ "oneOf": ["ramp", "lift"] }"#);
+fn can_deserialize_one_of_flat_skill_list_as_one_group() {
+    let skills: JobSkills = serde_json::from_str(r#"{ "oneOf": ["ramp", "lift"] }"#).unwrap();
 
-    assert!(result.is_err());
+    assert_eq!(skills.one_of, Some(vec![vec!["ramp".to_string(), "lift".to_string()]]));
+}
+
+#[test]
+fn can_deserialize_missing_null_and_empty_one_of() {
+    let parse = |json: &str| serde_json::from_str::<JobSkills>(json).unwrap().one_of;
+
+    assert_eq!(parse(r#"{ "allOf": ["fridge"] }"#), None);
+    assert_eq!(parse(r#"{ "oneOf": null }"#), None);
+    assert_eq!(parse(r#"{ "oneOf": [] }"#), Some(vec![]));
+    assert_eq!(parse(r#"{ "oneOf": [[]] }"#), Some(vec![vec![]]));
+}
+
+#[test]
+fn can_reject_one_of_mixing_skills_and_groups() {
+    let result = serde_json::from_str::<JobSkills>(r#"{ "oneOf": ["ramp", ["lift"]] }"#);
+
+    assert!(result.unwrap_err().to_string().contains("a list of skill groups or a list of skills"));
+}
+
+#[test]
+fn can_serialize_flat_one_of_as_one_group() {
+    let skills: JobSkills = serde_json::from_str(r#"{ "oneOf": ["ramp", "lift"] }"#).unwrap();
+
+    assert_eq!(serde_json::to_string(&skills).unwrap(), r#"{"oneOf":[["ramp","lift"]]}"#);
 }

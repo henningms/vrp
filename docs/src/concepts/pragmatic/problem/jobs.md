@@ -14,7 +14,9 @@ consists of the following properties:
     ```
     These conditions are tested against vehicle's skills. `oneOf` is a list of groups, and the vehicle needs at least
     one skill from every group: `"oneOf": [["driver:a", "driver:b"], ["ramp", "lift"]]` requires one of the two
-    drivers and a ramp or a lift. An empty group is rejected (E9103).
+    drivers and a ramp or a lift. A flat list of skills, the form used before groups, is read as one group:
+    `"oneOf": ["ramp", "lift"]` is the same as `"oneOf": [["ramp", "lift"]]`. `"oneOf": []`, like leaving `oneOf` out,
+    means no `oneOf` condition. An empty group (`[[]]`) is rejected (E9103).
 - **value** (optional): a value associated with the job. With `maximize-value` objective, it is used to prioritize assignment
   of specific jobs. The difference between value and order (see in `Tasks` below) is that order related logic tries to assign
   jobs with lower order in the beginning of the tour. In contrast, value related logic tries to maximize total solution value

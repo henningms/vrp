@@ -56,3 +56,17 @@ fn can_have_unassigned_when_no_vehicle_meets_every_one_of_group() {
         Some(vec!["SKILL_CONSTRAINT".to_string()])
     );
 }
+
+#[test]
+fn can_read_flat_one_of_from_json_as_one_group() {
+    let problem = create_problem_with_vehicle_skills(&[("driver_only", &["driver:a"]), ("lift_only", &["lift"])]);
+    let mut problem = serde_json::to_value(problem).unwrap();
+    problem["plan"]["jobs"][0]["skills"]["oneOf"] = serde_json::json!(["ramp", "lift"]);
+    let problem: Problem = serde_json::from_value(problem).unwrap();
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));
+
+    assert!(solution.unassigned.is_none());
+    assert_eq!(solution.tours.iter().map(|tour| tour.type_id.as_str()).collect::<Vec<_>>(), vec!["lift_only"]);
+}
