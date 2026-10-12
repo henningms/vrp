@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.39.1] 2026-10-12
+
 ### Fixed
 
 * job skills `oneOf` accepts a flat list of skills again and reads it as one group, so json problems written for
