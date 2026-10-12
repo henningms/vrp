@@ -50,12 +50,33 @@ pub struct JobSkills {
     /// Vehicle should have all of these skills defined.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub all_of: Option<Vec<String>>,
-    /// Vehicle should have at least one skill of every group.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Vehicle should have at least one skill of every group. A flat list of skills is read as one group.
+    #[serde(default, deserialize_with = "deserialize_one_of", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<JobSkillGroups>"))]
     pub one_of: Option<Vec<Vec<String>>>,
     /// Vehicle should have none of these skills defined.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub none_of: Option<Vec<String>>,
+}
+
+/// Job skills `oneOf`: a list of skill groups, or a flat list of skills read as one group.
+#[derive(Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged, expecting = "a list of skill groups or a list of skills")]
+enum JobSkillGroups {
+    // tried first, so that `[]` is no groups rather than one empty group (rejected by E9103)
+    Groups(Vec<Vec<String>>),
+    Skills(Vec<String>),
+}
+
+fn deserialize_one_of<'de, D>(deserializer: D) -> Result<Option<Vec<Vec<String>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<JobSkillGroups>::deserialize(deserializer)?.map(|one_of| match one_of {
+        JobSkillGroups::Groups(groups) => groups,
+        JobSkillGroups::Skills(skills) => vec![skills],
+    }))
 }
 
 /// Job preferences for vehicle attributes (soft constraint).
