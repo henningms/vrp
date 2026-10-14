@@ -8,6 +8,12 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Fixed
+
+* a vehicle type with plain `capacity` keeps its capacity when another vehicle type in the fleet uses
+  `capacityConfigurations`: it is read as a single configuration. Before, it got no capacity at all and could not serve
+  any job with demand
+
 ## [1.39.1] 2026-10-12
 
 ### Fixed
