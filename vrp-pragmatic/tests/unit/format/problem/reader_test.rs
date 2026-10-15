@@ -1,3 +1,4 @@
+use crate::format::CapacityLayoutNamesDimension;
 use crate::format::problem::*;
 use crate::helpers::*;
 use std::collections::HashSet;
@@ -387,4 +388,52 @@ fn can_create_approximation_matrices() {
         assert_eq!(matrix.distances, &[0, 5078, 5078, 0]);
         assert_eq!(matrix.travel_times, &[0, duration, duration, 0]);
     }
+}
+
+#[test]
+fn can_read_capacity_layout_names_only_for_vehicle_types_with_configurations() {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![create_pickup_delivery_job_with_params(
+                "job1",
+                vec![1, 0],
+                ((1., 0.), 60., vec![]),
+                ((2., 0.), 60., vec![]),
+            )],
+            ..create_empty_plan()
+        },
+        fleet: Fleet {
+            vehicles: vec![
+                VehicleType {
+                    capacity: None,
+                    capacity_configurations: Some(vec![
+                        CapacityConfiguration { name: Some("all_seated".to_string()), capacities: vec![8, 0] },
+                        CapacityConfiguration { name: None, capacities: vec![4, 1] },
+                    ]),
+                    ..create_vehicle_with_capacity("minibus", vec![])
+                },
+                create_vehicle_with_capacity("car", vec![2, 0]),
+            ],
+            capacity_dimensions: Some(vec!["seated".to_string(), "wheelchair".to_string()]),
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().unwrap();
+
+    let get_names = |vehicle_id: &str| {
+        core_problem
+            .fleet
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.dimens.get_vehicle_id().is_some_and(|id| id == vehicle_id))
+            .expect("vehicle should exist")
+            .dimens
+            .get_capacity_layout_names()
+            .cloned()
+    };
+    assert_eq!(get_names("minibus_1"), Some(vec![Some("all_seated".to_string()), None]));
+    assert_eq!(get_names("car_1"), None);
 }
