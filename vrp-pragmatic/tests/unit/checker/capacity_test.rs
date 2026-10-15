@@ -352,6 +352,7 @@ fn can_check_capacity_layouts_of_vehicle_type_without_configurations() {
 
     assert_eq!(
         result,
-        Err("tour 'minibus_1' has capacity layouts, but its vehicle type 'minibus' has no capacityConfigurations".into())
+        Err("tour 'minibus_1' has capacity layouts, but its vehicle type 'minibus' has no capacityConfigurations"
+            .into())
     );
 }

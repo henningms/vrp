@@ -14,8 +14,8 @@ mod initial_reader;
 pub use self::initial_reader::read_init_solution;
 
 mod layout_writer;
-use self::layout_writer::write_capacity_layouts;
 pub(crate) use self::layout_writer::create_capacity_layout_spans;
+use self::layout_writer::write_capacity_layouts;
 
 mod model;
 pub use self::model::*;
