@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.39.2] 2026-10-15
+
 ### Fixed
 
 * a vehicle type with plain `capacity` keeps its capacity when another vehicle type in the fleet uses
