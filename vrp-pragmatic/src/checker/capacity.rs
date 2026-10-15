@@ -12,8 +12,13 @@ use vrp_core::prelude::GenericResult;
 /// Checks that vehicle load is assigned correctly. The following rules are checked:
 /// * max vehicle's capacity is not violated
 /// * load change is correct
+/// * capacity layouts are valid when a tour has them
 pub fn check_vehicle_load(context: &CheckerContext) -> Result<(), Vec<GenericError>> {
-    combine_error_results(&[check_vehicle_load_assignment(context), check_resource_consumption(context)])
+    combine_error_results(&[
+        check_vehicle_load_assignment(context),
+        check_resource_consumption(context),
+        check_capacity_layouts(context),
+    ])
 }
 
 fn check_vehicle_load_assignment(context: &CheckerContext) -> GenericResult<()> {
@@ -158,6 +163,80 @@ fn check_resource_consumption(context: &CheckerContext) -> GenericResult<()> {
         } else {
             Ok(())
         }
+    })
+}
+
+/// Checks capacity layouts of tours which have them. The following rules are checked:
+/// * a tour has `capacityLayouts` and a `layout` on every stop, or none of them
+/// * the tour's vehicle type has `capacityConfigurations`
+/// * every stop's layout is in `capacityConfigurations` with the same name, and the stop's load fits it
+/// * `capacityLayouts` are the spans of consecutive stops with the same layout
+fn check_capacity_layouts(context: &CheckerContext) -> GenericResult<()> {
+    context.solution.tours.iter().try_for_each::<_, GenericResult<_>>(|tour| {
+        let layouts = tour.stops.iter().filter_map(|stop| stop.layout().cloned()).collect::<Vec<_>>();
+
+        let spans = match (layouts.len(), tour.capacity_layouts.as_ref()) {
+            (0, None) => return Ok(()),
+            (count, Some(spans)) if count == tour.stops.len() => spans,
+            _ => {
+                return Err(format!(
+                    "capacity layouts in tour '{}' must be set on the tour and on every stop, or not at all",
+                    tour.vehicle_id
+                )
+                .into());
+            }
+        };
+
+        let vehicle = context.get_vehicle(&tour.vehicle_id)?;
+        let configurations = vehicle.capacity_configurations.as_ref().ok_or_else(|| {
+            GenericError::from(format!(
+                "tour '{}' has capacity layouts, but its vehicle type '{}' has no capacityConfigurations",
+                tour.vehicle_id, vehicle.type_id
+            ))
+        })?;
+
+        tour.stops.iter().zip(layouts.iter()).enumerate().try_for_each::<_, GenericResult<_>>(
+            |(stop_idx, (stop, layout))| {
+                let configuration = configurations.get(layout.index).ok_or_else(|| {
+                    GenericError::from(format!(
+                        "capacity layout {} at stop {stop_idx} in tour '{}' is not in capacityConfigurations",
+                        layout.index, tour.vehicle_id
+                    ))
+                })?;
+
+                if configuration.name != layout.name {
+                    return Err(format!(
+                        "capacity layout {} at stop {stop_idx} in tour '{}' has another name than in \
+                         capacityConfigurations",
+                        layout.index, tour.vehicle_id
+                    )
+                    .into());
+                }
+
+                let fits = stop
+                    .load()
+                    .iter()
+                    .enumerate()
+                    .all(|(dim, value)| *value <= configuration.capacities.get(dim).copied().unwrap_or(0));
+                if !fits {
+                    return Err(format!(
+                        "load does not fit capacity layout {} at stop {stop_idx} in tour '{}'",
+                        layout.index, tour.vehicle_id
+                    )
+                    .into());
+                }
+
+                Ok(())
+            },
+        )?;
+
+        if create_capacity_layout_spans(&layouts) != *spans {
+            return Err(
+                format!("capacity layout spans do not match the stops' layouts in tour '{}'", tour.vehicle_id).into()
+            );
+        }
+
+        Ok(())
     })
 }
 

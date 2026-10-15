@@ -16,6 +16,9 @@ are already published. So, I stick to it for now.
   changes with passengers aboard win, then the fewest changes, and ties go to the layout listed first. The json format
   only gains optional fields. In Rust, `Tour`, `PointStop` and `TransitStop` have new public fields, so code which
   builds them with struct literals needs `capacity_layouts: None` and `layout: None`
+* the solution checker checks the capacity layouts of tours which have them: both fields or neither, a vehicle type
+  with `capacityConfigurations`, every stop's layout exists with the same name and fits the stop's load, and the spans
+  match the stops. Tours without the fields are not checked
 
 ## [1.39.2] 2026-10-15
 
