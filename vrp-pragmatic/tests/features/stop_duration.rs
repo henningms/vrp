@@ -317,6 +317,7 @@ fn create_shared_end_solution() -> Solution {
             time: Schedule { arrival: format_time(time.0), departure: format_time(time.1) },
             distance,
             load: vec![load],
+            layout: None,
             parking,
             activities,
         })

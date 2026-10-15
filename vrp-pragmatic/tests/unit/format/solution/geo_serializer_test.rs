@@ -97,6 +97,7 @@ fn can_create_geo_json_for_cluster_geometry() {
         time: Schedule { arrival: format_time(0.), departure: format_time(10.) },
         distance: 0,
         load: vec![],
+        layout: None,
         parking: None,
         activities: vec![
             Activity {
