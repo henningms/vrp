@@ -13,6 +13,8 @@ pub use self::geo_serializer::*;
 mod initial_reader;
 pub use self::initial_reader::read_init_solution;
 
+mod layout_writer;
+
 mod model;
 pub use self::model::*;
 
