@@ -1,4 +1,5 @@
 use crate::format::problem::*;
+use crate::format::solution::*;
 use crate::helpers::*;
 
 /// Test that a vehicle with configurable capacity can serve jobs that fit
@@ -452,4 +453,19 @@ fn can_use_plain_capacity_in_fleet_with_configurable_capacity() {
     assert_eq!(get_job_ids("minibus_1"), vec!["wheelchair_passenger"]);
     let unassigned = solution.unassigned.as_ref().expect("expected unassigned jobs");
     assert_eq!(unassigned.iter().map(|job| job.job_id.as_str()).collect::<Vec<_>>(), vec!["seated_group"]);
+
+    let get_tour = |vehicle_id: &str| solution.tours.iter().find(|tour| tour.vehicle_id == vehicle_id).unwrap();
+    let car = get_tour("car_1");
+    assert_eq!(car.capacity_layouts, None);
+    assert!(car.stops.iter().all(|stop| stop.layout().is_none()));
+    let minibus = get_tour("minibus_1");
+    assert_eq!(
+        minibus.capacity_layouts,
+        Some(vec![CapacityLayoutSpan {
+            index: 0,
+            name: Some("one_wheelchair".to_string()),
+            from_stop: 0,
+            to_stop: minibus.stops.len() - 1,
+        }])
+    );
 }

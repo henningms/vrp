@@ -14,6 +14,7 @@ mod initial_reader;
 pub use self::initial_reader::read_init_solution;
 
 mod layout_writer;
+use self::layout_writer::write_capacity_layouts;
 
 mod model;
 pub use self::model::*;
