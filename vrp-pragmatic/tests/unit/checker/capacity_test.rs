@@ -236,3 +236,123 @@ fn can_check_resource_consumption() {
             .into())
     );
 }
+
+fn create_layout_problem(vehicle: VehicleType) -> Problem {
+    Problem {
+        plan: create_empty_plan(),
+        fleet: Fleet { vehicles: vec![vehicle], ..create_default_fleet() },
+        ..create_empty_problem()
+    }
+}
+
+fn create_minibus_with_layouts() -> VehicleType {
+    VehicleType {
+        capacity: None,
+        capacity_configurations: Some(vec![
+            CapacityConfiguration { name: Some("all_seated".to_string()), capacities: vec![8, 0] },
+            CapacityConfiguration { name: Some("one_wheelchair".to_string()), capacities: vec![4, 1] },
+        ]),
+        ..create_vehicle_with_capacity("minibus", vec![])
+    }
+}
+
+fn layout_span(index: usize, name: &str, from_stop: usize, to_stop: usize) -> CapacityLayoutSpan {
+    CapacityLayoutSpan { index, name: Some(name.to_string()), from_stop, to_stop }
+}
+
+fn create_layout_tour() -> Tour {
+    TourBuilder::default()
+        .vehicle_id("minibus_1")
+        .type_id("minibus")
+        .stops(vec![
+            StopBuilder::default().load(vec![0, 0]).layout(1, Some("one_wheelchair")).build_departure(),
+            StopBuilder::default().load(vec![0, 1]).layout(1, Some("one_wheelchair")).build_single("job1", "pickup"),
+            StopBuilder::default().load(vec![0, 0]).layout(1, Some("one_wheelchair")).build_single("job1", "delivery"),
+            StopBuilder::default().load(vec![6, 0]).layout(0, Some("all_seated")).build_single("job2", "pickup"),
+            StopBuilder::default().load(vec![0, 0]).layout(0, Some("all_seated")).build_single("job2", "delivery"),
+            StopBuilder::default().load(vec![0, 0]).layout(0, Some("all_seated")).build_arrival(),
+        ])
+        .capacity_layouts(vec![layout_span(1, "one_wheelchair", 0, 2), layout_span(0, "all_seated", 3, 5)])
+        .build()
+}
+
+fn check_layout_tour(vehicle: VehicleType, tour: Tour) -> GenericResult<()> {
+    let solution = SolutionBuilder::default().tour(tour).build();
+    let ctx = CheckerContext::new(create_example_problem(), create_layout_problem(vehicle), None, solution).unwrap();
+
+    check_capacity_layouts(&ctx)
+}
+
+const BOTH_OR_NEITHER: &str =
+    "capacity layouts in tour 'minibus_1' must be set on the tour and on every stop, or not at all";
+const SPANS_MISMATCH: &str = "capacity layout spans do not match the stops' layouts in tour 'minibus_1'";
+
+parameterized_test! {can_check_capacity_layouts, (modify, expected), {
+    can_check_capacity_layouts_impl(modify, expected);
+}}
+
+can_check_capacity_layouts! {
+    case01_valid: (|_: &mut Tour| {}, Ok(())),
+    case02_no_layouts: (|tour: &mut Tour| {
+        tour.capacity_layouts = None;
+        tour.stops.iter_mut().for_each(|stop| *stop.layout_mut() = None);
+    }, Ok(())),
+    case03_stop_without_layout: (|tour: &mut Tour| *tour.stops[1].layout_mut() = None, Err(BOTH_OR_NEITHER.into())),
+    case04_no_spans: (|tour: &mut Tour| tour.capacity_layouts = None, Err(BOTH_OR_NEITHER.into())),
+    case05_spans_without_stop_layouts: (|tour: &mut Tour| {
+        tour.stops.iter_mut().for_each(|stop| *stop.layout_mut() = None);
+    }, Err(BOTH_OR_NEITHER.into())),
+    case06_index_out_of_range: (
+        |tour: &mut Tour| *tour.stops[3].layout_mut() = Some(CapacityLayout { index: 5, name: None }),
+        Err("capacity layout 5 at stop 3 in tour 'minibus_1' is not in capacityConfigurations".into()),
+    ),
+    case07_name_mismatch: (
+        |tour: &mut Tour| {
+            *tour.stops[3].layout_mut() = Some(CapacityLayout { index: 0, name: Some("one_wheelchair".to_string()) })
+        },
+        Err("capacity layout 0 at stop 3 in tour 'minibus_1' has another name than in capacityConfigurations".into()),
+    ),
+    case08_load_does_not_fit: (
+        |tour: &mut Tour| {
+            *tour.stops[3].layout_mut() = Some(CapacityLayout { index: 1, name: Some("one_wheelchair".to_string()) })
+        },
+        Err("load does not fit capacity layout 1 at stop 3 in tour 'minibus_1'".into()),
+    ),
+    case09_span_gap: (
+        |tour: &mut Tour| {
+            tour.capacity_layouts =
+                Some(vec![layout_span(1, "one_wheelchair", 0, 1), layout_span(0, "all_seated", 3, 5)])
+        },
+        Err(SPANS_MISMATCH.into()),
+    ),
+    case10_span_not_maximal: (
+        |tour: &mut Tour| {
+            tour.capacity_layouts = Some(vec![
+                layout_span(1, "one_wheelchair", 0, 2),
+                layout_span(0, "all_seated", 3, 4),
+                layout_span(0, "all_seated", 5, 5),
+            ])
+        },
+        Err(SPANS_MISMATCH.into()),
+    ),
+}
+
+fn can_check_capacity_layouts_impl(modify: impl FnOnce(&mut Tour), expected: GenericResult<()>) {
+    let mut tour = create_layout_tour();
+    modify(&mut tour);
+
+    let result = check_layout_tour(create_minibus_with_layouts(), tour);
+
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn can_check_capacity_layouts_of_vehicle_type_without_configurations() {
+    let result = check_layout_tour(create_vehicle_with_capacity("minibus", vec![8, 1]), create_layout_tour());
+
+    assert_eq!(
+        result,
+        Err("tour 'minibus_1' has capacity layouts, but its vehicle type 'minibus' has no capacityConfigurations"
+            .into())
+    );
+}

@@ -55,6 +55,7 @@ pub(super) fn insert_reserved_times_as_breaks(
                             departure: format_time(reserved_tw.end),
                         },
                         load,
+                        layout: None,
                         activities: vec![],
                     }),
                 )

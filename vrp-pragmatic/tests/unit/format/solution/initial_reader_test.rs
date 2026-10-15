@@ -148,6 +148,7 @@ fn can_handle_empty_tour_error_in_init_solution() {
             vehicle_id: "my_vehicle_1".to_string(),
             type_id: "my_vehicle".to_string(),
             shift_index: 0,
+            capacity_layouts: None,
             stops: Default::default(),
             statistic: Default::default(),
         })

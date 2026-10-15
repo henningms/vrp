@@ -11,6 +11,9 @@ custom_dimension!(pub ShiftIndex typeof usize);
 
 custom_dimension!(pub TourSize typeof usize);
 
+// NOTE names of the vehicle's capacity layouts in input order, set only for vehicle types with capacityConfigurations
+custom_dimension!(pub CapacityLayoutNames typeof Vec<Option<String>>);
+
 custom_dimension!(pub PlaceTags typeof Vec<(usize, String)>);
 
 custom_dimension!(pub JobOrder typeof i32);

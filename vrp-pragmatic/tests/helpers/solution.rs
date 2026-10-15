@@ -25,6 +25,7 @@ impl StopBuilder {
             stop: Stop::Transit(TransitStop {
                 time: Schedule { arrival: format_time(0.), departure: format_time(0.) },
                 load: vec![],
+                layout: None,
                 activities: vec![],
             }),
         }
@@ -64,6 +65,12 @@ impl StopBuilder {
 
     pub fn load(mut self, load: Vec<i32>) -> Self {
         *self.stop.load_mut() = load;
+
+        self
+    }
+
+    pub fn layout(mut self, index: usize, name: Option<&str>) -> Self {
+        *self.stop.layout_mut() = Some(CapacityLayout { index, name: name.map(str::to_string) });
 
         self
     }
@@ -169,6 +176,7 @@ impl Default for StopBuilder {
                 time: Schedule { arrival: format_time(0.), departure: format_time(0.) },
                 distance: 0,
                 load: vec![],
+                layout: None,
                 parking: None,
                 activities: vec![],
             }),
@@ -348,6 +356,12 @@ impl TourBuilder {
         self
     }
 
+    pub fn capacity_layouts(mut self, spans: Vec<CapacityLayoutSpan>) -> Self {
+        self.tour.capacity_layouts = Some(spans);
+
+        self
+    }
+
     pub fn statistic(mut self, statistic: Statistic) -> Self {
         self.tour.statistic = statistic;
 
@@ -370,6 +384,7 @@ impl Default for TourBuilder {
                 vehicle_id: "my_vehicle_1".to_string(),
                 type_id: "my_vehicle".to_string(),
                 shift_index: 0,
+                capacity_layouts: None,
                 stops: vec![],
                 statistic: Default::default(),
             },

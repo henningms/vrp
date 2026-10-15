@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../../../tests/unit/format/solution/model_test.rs"]
+mod model_test;
+
 use super::FeatureCollection;
 use crate::format::{CoordIndex, Location};
 use crate::{format_time, parse_time};
@@ -111,6 +115,33 @@ pub struct Activity {
     pub commute: Option<Commute>,
 }
 
+/// A capacity layout of a vehicle: one of its vehicle type's `capacityConfigurations`.
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct CapacityLayout {
+    /// Position of the layout in the vehicle type's `capacityConfigurations`, counted from 0.
+    pub index: usize,
+    /// Name of the layout. Omitted when the layout has no name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// A span of consecutive stops of a tour in which the vehicle uses the same capacity layout.
+#[derive(Clone, Deserialize, Serialize, Eq, PartialEq, Debug)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct CapacityLayoutSpan {
+    /// Position of the layout in the vehicle type's `capacityConfigurations`, counted from 0.
+    pub index: usize,
+    /// Name of the layout. Omitted when the layout has no name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Position of the first stop of the span in the tour's stops, counted from 0.
+    pub from_stop: usize,
+    /// Position of the last stop of the span in the tour's stops, inclusive.
+    pub to_stop: usize,
+}
+
 /// A stop is a place where vehicle is supposed to do some work.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -152,6 +183,22 @@ impl Stop {
         match self {
             Self::Transit(transit) => &mut transit.load,
             Self::Point(point) => &mut point.load,
+        }
+    }
+
+    /// Returns stop's capacity layout.
+    pub fn layout(&self) -> Option<&CapacityLayout> {
+        match self {
+            Self::Transit(transit) => transit.layout.as_ref(),
+            Self::Point(point) => point.layout.as_ref(),
+        }
+    }
+
+    /// Returns stop's capacity layout as mutable.
+    pub fn layout_mut(&mut self) -> &mut Option<CapacityLayout> {
+        match self {
+            Self::Transit(transit) => &mut transit.layout,
+            Self::Point(point) => &mut point.layout,
         }
     }
 
@@ -204,6 +251,10 @@ pub struct TransitStop {
     pub time: Schedule,
     /// Vehicle load after departure from this stop.
     pub load: Vec<i32>,
+    /// Capacity layout of the vehicle after departure from this stop. Set only for vehicle types with
+    /// `capacityConfigurations`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<CapacityLayout>,
     /// Activities performed at the stop.
     pub activities: Vec<Activity>,
 }
@@ -220,6 +271,10 @@ pub struct PointStop {
     pub distance: i64,
     /// Vehicle load after departure from this stop.
     pub load: Vec<i32>,
+    /// Capacity layout of the vehicle after departure from this stop. Set only for vehicle types with
+    /// `capacityConfigurations`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<CapacityLayout>,
     /// Parking time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parking: Option<Interval>,
@@ -278,6 +333,10 @@ pub struct Tour {
     /// Shift index.
     #[serde(default)]
     pub shift_index: usize,
+    /// Spans of consecutive stops in the same capacity layout, in tour order. Set only for vehicle types with
+    /// `capacityConfigurations`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capacity_layouts: Option<Vec<CapacityLayoutSpan>>,
     /// List of stops.
     pub stops: Vec<Stop>,
     /// Tour statistic.

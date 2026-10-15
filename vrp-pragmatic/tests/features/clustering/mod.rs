@@ -86,6 +86,7 @@ impl From<StopData> for Stop {
                 None
             },
             load: vec![stop.load],
+            layout: None,
             activities: stop.activities.into_iter().map(ActivityData::into).collect(),
         })
     }

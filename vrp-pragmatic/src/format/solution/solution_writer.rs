@@ -7,7 +7,7 @@ use crate::format::solution::activity_matcher::get_job_tag;
 use crate::format::solution::model::Timing;
 use crate::format::solution::*;
 use vrp_core::construction::enablers::{ReservedTimesIndex, get_route_intervals};
-use vrp_core::construction::features::JobDemandDimension;
+use vrp_core::construction::features::{JobDemandDimension, VehicleCapacityDimension};
 use vrp_core::construction::heuristics::UnassignmentInfo;
 use vrp_core::models::common::*;
 use vrp_core::models::problem::{
@@ -81,6 +81,7 @@ fn create_tour(
         vehicle_id: vehicle.dimens.get_vehicle_id().unwrap().clone(),
         type_id: vehicle.dimens.get_vehicle_type().unwrap().clone(),
         shift_index: vehicle.dimens.get_shift_index().copied().unwrap(),
+        capacity_layouts: None,
         stops: vec![],
         statistic: Statistic::default(),
     };
@@ -91,6 +92,9 @@ fn create_tour(
     // `insert_reserved_times_as_breaks`), only spliced with transit stops in between, so this
     // stays aligned with the final `tour.stops` when zipped in encountered order.
     let mut departures: Vec<Timestamp> = Vec::new();
+    // the vehicle load after each activity, one list per point stop pushed below, in the same order as `departures`.
+    // Capacity layouts are chosen per activity, so the layout writer needs the loads within a stop too.
+    let mut activity_loads: Vec<Vec<Vec<i32>>> = Vec::new();
 
     let intervals = get_route_intervals(route, |a| get_activity_type(a).is_some_and(|t| t == "reload"));
 
@@ -116,6 +120,7 @@ fn create_tour(
                 location: coord_index.get_by_idx(start.place.location).unwrap(),
                 time: format_schedule(&start.schedule),
                 load: start_delivery.as_vec(),
+                layout: None,
                 distance: 0,
                 activities: vec![ApiActivity {
                     job_id: "departure".to_string(),
@@ -135,6 +140,7 @@ fn create_tour(
                 parking: None,
             }));
             departures.push(start.schedule.departure);
+            activity_loads.push(vec![start_delivery.as_vec()]);
             (start_idx + 1, start)
         } else {
             (start_idx, route.tour.get(start_idx - 1).unwrap())
@@ -217,6 +223,7 @@ fn create_tour(
                         location: coord_index.get_by_idx(act.place.location).unwrap(),
                         time: format_schedule(&act.schedule),
                         load: prev_load.as_vec(),
+                        layout: None,
                         distance,
                         parking: if parking > 0. {
                             Some(Interval {
@@ -229,6 +236,7 @@ fn create_tour(
                         activities: vec![],
                     }));
                     departures.push(act.schedule.departure);
+                    activity_loads.push(vec![]);
                 }
 
                 let load = calculate_load(prev_load, act);
@@ -245,6 +253,7 @@ fn create_tour(
                 // same way, so the exact value must track it identically.
                 departures[last_idx] = act.schedule.departure;
                 last.load = load.as_vec();
+                activity_loads[last_idx].push(load.as_vec());
                 last.activities.push(ApiActivity {
                     job_id,
                     activity_type: activity_type.clone(),
@@ -322,6 +331,17 @@ fn create_tour(
                 activity.location = None;
             }
         });
+
+    // NOTE after breaks are inserted, so transit stops get a layout and spans use the final stop positions
+    if let Some(names) = vehicle.dimens.get_capacity_layout_names() {
+        let layouts = vehicle
+            .dimens
+            .get_vehicle_capacity::<ConfigurableLoad>()
+            .map(|capacity| capacity.configurations_as_vec())
+            .unwrap_or_default();
+
+        write_capacity_layouts(&mut tour, &activity_loads, &layouts, names);
+    }
 
     tour.vehicle_id.clone_from(vehicle.dimens.get_vehicle_id().unwrap());
     tour.type_id.clone_from(vehicle.dimens.get_vehicle_type().unwrap());
