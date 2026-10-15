@@ -1,7 +1,7 @@
 # Capacity layout in the solution: design
 
 Date: 2026-10-15
-Status: approved in chat, awaiting spec review
+Status: approved
 Scope: piece 1 of 3 (report layouts). Pieces 2 and 3 are follow-ups, see below.
 
 ## Background
