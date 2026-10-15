@@ -2,6 +2,81 @@
 #[path = "../../../tests/unit/format/solution/layout_writer_test.rs"]
 mod layout_writer_test;
 
+use super::*;
+
+/// Writes the capacity layouts of a tour: `layout` on every stop and `capacity_layouts` on the tour.
+///
+/// `activity_loads` holds, for every point stop in tour order, the vehicle load after each of its activities, and
+/// `layouts` and `names` the capacities and names of the vehicle's layouts in input order. Leaves the tour unchanged
+/// when some load fits no layout.
+pub(super) fn write_capacity_layouts(
+    tour: &mut Tour,
+    activity_loads: &[Vec<Vec<i32>>],
+    layouts: &[Vec<i32>],
+    names: &[Option<String>],
+) {
+    let Some(stop_layouts) = get_stop_layouts(&tour.stops, activity_loads, layouts) else {
+        return;
+    };
+
+    let stop_layouts = stop_layouts
+        .into_iter()
+        .map(|index| CapacityLayout { index, name: names.get(index).cloned().flatten() })
+        .collect::<Vec<_>>();
+
+    tour.capacity_layouts = Some(create_capacity_layout_spans(&stop_layouts));
+    tour.stops.iter_mut().zip(stop_layouts).for_each(|(stop, layout)| *stop.layout_mut() = Some(layout));
+}
+
+/// Groups consecutive stops with the same capacity layout into spans. `layouts` holds the layout of every stop of a
+/// tour, in tour order.
+pub(crate) fn create_capacity_layout_spans(layouts: &[CapacityLayout]) -> Vec<CapacityLayoutSpan> {
+    layouts.iter().enumerate().fold(Vec::<CapacityLayoutSpan>::new(), |mut spans, (stop_idx, layout)| {
+        match spans.last_mut() {
+            Some(span) if span.index == layout.index && span.name == layout.name => span.to_stop = stop_idx,
+            _ => spans.push(CapacityLayoutSpan {
+                index: layout.index,
+                name: layout.name.clone(),
+                from_stop: stop_idx,
+                to_stop: stop_idx,
+            }),
+        }
+
+        spans
+    })
+}
+
+/// Returns the layout index of every stop, or `None` when some load fits no layout.
+fn get_stop_layouts(stops: &[Stop], activity_loads: &[Vec<Vec<i32>>], layouts: &[Vec<i32>]) -> Option<Vec<usize>> {
+    let point_stops = stops.iter().filter(|stop| matches!(stop, Stop::Point(_))).count();
+    debug_assert_eq!(point_stops, activity_loads.len(), "expected activity loads for every point stop");
+    if point_stops != activity_loads.len() {
+        return None;
+    }
+
+    let loads = activity_loads.iter().flatten().cloned().collect::<Vec<_>>();
+    let chosen = choose_layouts(&loads, layouts)?;
+
+    // NOTE a point stop gets the layout chosen for its last activity
+    let mut last_activity_idx = 0;
+    let mut point_layouts = activity_loads.iter().map(|stop_loads| {
+        last_activity_idx += stop_loads.len();
+        last_activity_idx.checked_sub(1).map(|activity_idx| chosen[activity_idx])
+    });
+
+    // NOTE a transit stop is a break on the way to the next stop, so it keeps the layout of the stop before it
+    let mut current = None;
+    stops
+        .iter()
+        .map(|stop| {
+            if matches!(stop, Stop::Point(_)) {
+                current = point_layouts.next().flatten();
+            }
+            current
+        })
+        .collect()
+}
+
 /// Layout switches between consecutive activities: with passengers aboard first, then in total.
 type Switches = (usize, usize);
 
