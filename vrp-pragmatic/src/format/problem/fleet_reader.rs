@@ -156,8 +156,14 @@ pub(super) fn read_fleet(
                 }
 
                 if props.has_configurable_capacity {
-                    if let Some(configs) = &vehicle.capacity_configurations {
-                        let configurations: Vec<Vec<i32>> = configs.iter().map(|c| c.capacities.clone()).collect();
+                    // NOTE plain capacity is read as a single configuration as the whole fleet shares one load type
+                    let configurations: Option<Vec<Vec<i32>>> = vehicle
+                        .capacity_configurations
+                        .as_ref()
+                        .map(|configs| configs.iter().map(|c| c.capacities.clone()).collect())
+                        .or_else(|| vehicle.capacity.clone().map(|capacity| vec![capacity]));
+
+                    if let Some(configurations) = configurations {
                         dimens.set_vehicle_capacity(ConfigurableLoad::new(configurations));
                     }
                 } else if props.has_multi_dimen_capacity {

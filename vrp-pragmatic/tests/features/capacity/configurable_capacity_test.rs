@@ -359,3 +359,75 @@ fn can_handle_multiple_accessibility_features() {
     assert!(solution.unassigned.is_none(), "Expected all jobs to be assigned");
     assert_eq!(solution.tours.len(), 1);
 }
+
+/// Test that a vehicle type with plain capacity keeps it when another vehicle type in the
+/// same fleet uses capacity configurations.
+///
+/// Scenario:
+/// - Minibus with a single configuration: [0 seated, 1 wheelchair]
+/// - Car with plain capacity: [2 seated, 0 wheelchairs]
+///
+/// Jobs:
+/// - 2 seated passengers (demand: [2, 0]) - fit the car only
+/// - 1 wheelchair passenger (demand: [0, 1]) - fits the minibus only
+/// - 3 seated passengers (demand: [3, 0]) - fit no vehicle
+#[test]
+fn can_use_plain_capacity_in_fleet_with_configurable_capacity() {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                create_pickup_delivery_job_with_params(
+                    "seated_passengers",
+                    vec![2, 0],
+                    ((1., 0.), 60., vec![]),
+                    ((5., 0.), 60., vec![]),
+                ),
+                create_pickup_delivery_job_with_params(
+                    "wheelchair_passenger",
+                    vec![0, 1],
+                    ((2., 0.), 120., vec![]),
+                    ((6., 0.), 120., vec![]),
+                ),
+                create_pickup_delivery_job_with_params(
+                    "seated_group",
+                    vec![3, 0],
+                    ((3., 0.), 60., vec![]),
+                    ((7., 0.), 60., vec![]),
+                ),
+            ],
+            ..create_empty_plan()
+        },
+        fleet: Fleet {
+            vehicles: vec![
+                VehicleType {
+                    capacity: None,
+                    capacity_configurations: Some(vec![CapacityConfiguration {
+                        name: Some("one_wheelchair".to_string()),
+                        capacities: vec![0, 1],
+                    }]),
+                    ..create_vehicle_with_capacity("minibus", vec![])
+                },
+                create_vehicle_with_capacity("car", vec![2, 0]),
+            ],
+            profiles: create_default_matrix_profiles(),
+            resources: None,
+            capacity_dimensions: Some(vec!["seated".to_string(), "wheelchair".to_string()]),
+        },
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));
+
+    let get_job_ids = |vehicle_id: &str| {
+        let tour = solution.tours.iter().find(|tour| tour.vehicle_id == vehicle_id).expect("vehicle should be used");
+        let mut ids = get_ids_from_tour(tour).into_iter().flatten().collect::<Vec<_>>();
+        ids.retain(|id| id != "departure" && id != "arrival");
+        ids.dedup();
+        ids
+    };
+    assert_eq!(get_job_ids("car_1"), vec!["seated_passengers"]);
+    assert_eq!(get_job_ids("minibus_1"), vec!["wheelchair_passenger"]);
+    let unassigned = solution.unassigned.as_ref().expect("expected unassigned jobs");
+    assert_eq!(unassigned.iter().map(|job| job.job_id.as_str()).collect::<Vec<_>>(), vec!["seated_group"]);
+}
