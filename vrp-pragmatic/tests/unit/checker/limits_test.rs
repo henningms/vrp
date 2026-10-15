@@ -23,6 +23,7 @@ fn create_test_solution(statistic: Statistic, stops: Vec<Stop>) -> Solution {
             vehicle_id: "some_real_vehicle".to_string(),
             type_id: "my_vehicle".to_string(),
             shift_index: 0,
+            capacity_layouts: None,
             stops,
             statistic,
         })

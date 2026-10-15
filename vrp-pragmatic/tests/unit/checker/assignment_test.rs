@@ -31,6 +31,7 @@ fn check_vehicles_impl(known_ids: Vec<&str>, tours: Vec<(&str, usize)>, expected
                 vehicle_id: id.to_string(),
                 type_id: "my_vehicle".to_string(),
                 shift_index,
+                capacity_layouts: None,
                 stops: vec![],
                 statistic: Statistic::default(),
             })
@@ -166,6 +167,7 @@ fn check_jobs_impl(
                 vehicle_id: id.to_string(),
                 type_id: "my_vehicle".to_string(),
                 shift_index,
+                capacity_layouts: None,
                 stops: stops.into_iter().map(create_stop).collect(),
                 statistic: Statistic::default(),
             })

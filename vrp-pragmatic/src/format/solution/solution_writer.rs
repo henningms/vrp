@@ -81,6 +81,7 @@ fn create_tour(
         vehicle_id: vehicle.dimens.get_vehicle_id().unwrap().clone(),
         type_id: vehicle.dimens.get_vehicle_type().unwrap().clone(),
         shift_index: vehicle.dimens.get_shift_index().copied().unwrap(),
+        capacity_layouts: None,
         stops: vec![],
         statistic: Statistic::default(),
     };
@@ -116,6 +117,7 @@ fn create_tour(
                 location: coord_index.get_by_idx(start.place.location).unwrap(),
                 time: format_schedule(&start.schedule),
                 load: start_delivery.as_vec(),
+                layout: None,
                 distance: 0,
                 activities: vec![ApiActivity {
                     job_id: "departure".to_string(),
@@ -217,6 +219,7 @@ fn create_tour(
                         location: coord_index.get_by_idx(act.place.location).unwrap(),
                         time: format_schedule(&act.schedule),
                         load: prev_load.as_vec(),
+                        layout: None,
                         distance,
                         parking: if parking > 0. {
                             Some(Interval {
