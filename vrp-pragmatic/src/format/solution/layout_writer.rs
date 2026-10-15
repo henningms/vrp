@@ -117,22 +117,26 @@ fn choose_layouts(loads: &[Vec<i32>], layouts: &[Vec<i32>]) -> Option<Vec<usize>
     let (_, first_idx) =
         best[0].iter().enumerate().filter_map(|(layout_idx, value)| value.map(|value| (value, layout_idx))).min()?;
 
-    best.iter().zip(loads).zip(best.iter().skip(1)).try_fold(vec![first_idx], |mut chosen, ((prev, prev_load), next)| {
-        let current_idx = *chosen.last()?;
-        let target = prev[current_idx]?;
-        let allows_optimum = |layout_idx: usize| {
-            next[layout_idx].is_some_and(|rest| add(get_switches(prev_load, current_idx, layout_idx), rest) == target)
-        };
+    best.iter().zip(loads).zip(best.iter().skip(1)).try_fold(
+        vec![first_idx],
+        |mut chosen, ((prev, prev_load), next)| {
+            let current_idx = *chosen.last()?;
+            let target = prev[current_idx]?;
+            let allows_optimum = |layout_idx: usize| {
+                next[layout_idx]
+                    .is_some_and(|rest| add(get_switches(prev_load, current_idx, layout_idx), rest) == target)
+            };
 
-        let next_idx = if allows_optimum(current_idx) {
-            current_idx
-        } else {
-            (0..next.len()).find(|&layout_idx| allows_optimum(layout_idx))?
-        };
-        chosen.push(next_idx);
+            let next_idx = if allows_optimum(current_idx) {
+                current_idx
+            } else {
+                (0..next.len()).find(|&layout_idx| allows_optimum(layout_idx))?
+            };
+            chosen.push(next_idx);
 
-        Some(chosen)
-    })
+            Some(chosen)
+        },
+    )
 }
 
 /// Returns true when no dimension of the load exceeds the layout's capacity. Missing dimensions count as 0.
