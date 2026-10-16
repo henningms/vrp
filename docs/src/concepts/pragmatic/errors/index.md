@@ -792,3 +792,8 @@ different number of dimensions.
 
 `too many capacity configurations` is returned when a vehicle type specifies more than 8 capacity configurations. To
 fix it, remove configurations which another configuration covers (no smaller in any dimension), or merge them.
+
+### E9306
+
+`invalid per-run cost` is returned when a vehicle type's `costs.perRun` is negative or not a finite number. To fix it,
+use a non-negative number, or `0` or no `perRun` at all for a vehicle without a per-run cost.

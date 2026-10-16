@@ -11,10 +11,12 @@ are already published. So, I stick to it for now.
 ### Added
 
 * vehicle `costs.perRun`: a cost charged for every run of a tour, i.e. every stretch while at least one
-  pickup-delivery job is on board, the same run the site objectives use. It is part of `minimize-cost` and of the
-  reported tour and solution `statistic.cost`, so a vehicle paid per trip (e.g. a taxi) gets cheaper by carrying riders
-  together instead of one after another. Absent or `0` keeps costs unchanged. In core, the amount is the vehicle
-  dimension `VehiclePerRunCost`, and runs are built by `get_tour_runs` in `construction::enablers`
+  pickup-delivery job is on board. Runs are counted on stops, so a drop-off and a pickup at the same stop is two runs
+  whatever the order of the activities there; site mixing still counts runs on activities. It is part of
+  `minimize-cost` and of the reported tour and solution `statistic.cost`, so a vehicle paid per trip (e.g. a taxi)
+  gets cheaper by carrying riders together instead of one after another. Absent or `0` keeps costs unchanged, a
+  negative or non-finite value is rejected (E9306). In core, the amount is the vehicle dimension `VehiclePerRunCost`,
+  and `count_tour_runs` in `construction::enablers` counts runs
 
 ## [1.39.2] 2026-10-15
 
