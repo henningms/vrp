@@ -11,7 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 custom_dimension!(pub VehicleId typeof String);
-// a cost charged for every run of the vehicle's tour, see `construction::enablers::get_tour_runs`
+// a cost charged for every run of the vehicle's tour, see `construction::enablers::count_tour_runs`
 custom_dimension!(pub VehiclePerRunCost typeof Cost);
 
 /// Represents operating costs for driver and vehicle.

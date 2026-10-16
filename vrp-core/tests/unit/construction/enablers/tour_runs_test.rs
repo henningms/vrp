@@ -1,7 +1,5 @@
 use super::*;
-use crate::construction::enablers::{TotalDistanceTourState, TotalDurationTourState};
-use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
-use crate::helpers::models::problem::{FleetBuilder, TestSingleBuilder, TestVehicleBuilder, test_driver};
+use crate::helpers::models::problem::TestSingleBuilder;
 use crate::helpers::models::solution::{ActivityBuilder, RouteBuilder, RouteContextBuilder};
 use crate::models::common::Demand;
 use crate::models::problem::{JobIdDimension, Multi};
@@ -31,16 +29,8 @@ fn service(location: usize) -> Activity {
         .build()
 }
 
-fn route_with(per_run: Option<Cost>, activities: Vec<Activity>) -> RouteContext {
-    let mut vehicle = TestVehicleBuilder::default();
-    vehicle.id("v1");
-    if let Some(per_run) = per_run {
-        vehicle.dimens_mut().set_vehicle_per_run_cost(per_run);
-    }
-    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(vehicle.build()).build();
-
-    let mut builder = RouteBuilder::default();
-    builder.with_vehicle(&fleet, "v1");
+fn route_with(activities: Vec<Activity>) -> RouteContext {
+    let mut builder = RouteBuilder::with_default_vehicle();
     activities.into_iter().for_each(|activity| {
         builder.add_activity(activity);
     });
@@ -63,15 +53,15 @@ fn insertion_span(route_ctx: &RouteContext, target: &Activity, leg_index: usize)
 
 #[test]
 fn empty_tour_has_no_runs() {
-    let route_ctx = route_with(None, vec![]);
+    let route_ctx = route_with(vec![]);
 
-    assert_eq!(count_tour_runs(&route_ctx.route().tour), 0);
+    assert!(spans_of(&route_ctx).is_empty());
 }
 
 #[test]
 fn one_rider_makes_one_run() {
     let (_a, ap, ad) = pudo("a");
-    let route_ctx = route_with(None, vec![ap, ad]);
+    let route_ctx = route_with(vec![ap, ad]);
 
     assert_eq!(spans_of(&route_ctx), vec![(1, 2)]);
 }
@@ -80,7 +70,7 @@ fn one_rider_makes_one_run() {
 fn back_to_back_riders_make_two_runs() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, bd) = pudo("b");
-    let route_ctx = route_with(None, vec![ap, ad, bp, bd]);
+    let route_ctx = route_with(vec![ap, ad, bp, bd]);
 
     assert_eq!(spans_of(&route_ctx), vec![(1, 2), (3, 4)]);
 }
@@ -89,7 +79,7 @@ fn back_to_back_riders_make_two_runs() {
 fn riders_on_board_together_make_one_run() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, bd) = pudo("b");
-    let route_ctx = route_with(None, vec![ap, bp, ad, bd]);
+    let route_ctx = route_with(vec![ap, bp, ad, bd]);
 
     assert_eq!(spans_of(&route_ctx), vec![(1, 4)]);
 }
@@ -99,7 +89,7 @@ fn single_jobs_and_incomplete_multi_jobs_open_no_run() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, _) = pudo("b");
     // [start, s, ap, s, ad, bp, end]: b's delivery is missing, so b opens no run.
-    let route_ctx = route_with(None, vec![service(5), ap, service(6), ad, bp]);
+    let route_ctx = route_with(vec![service(5), ap, service(6), ad, bp]);
 
     assert_eq!(spans_of(&route_ctx), vec![(2, 4)]);
 }
@@ -109,7 +99,7 @@ fn run_folds_values_of_its_jobs() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, bd) = pudo("b");
     let (_c, cp, cd) = pudo("c");
-    let route_ctx = route_with(None, vec![ap, bp, ad, bd, cp, cd]);
+    let route_ctx = route_with(vec![ap, bp, ad, bd, cp, cd]);
 
     let runs = get_tour_runs(&route_ctx.route().tour, |ids: &mut Vec<String>, job| {
         ids.push(job.dimens().get_job_id().unwrap().clone())
@@ -123,7 +113,7 @@ fn run_folds_values_of_its_jobs() {
 fn insertion_span_is_none_until_target_completes_multi_job() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, _) = pudo("b");
-    let route_ctx = route_with(None, vec![ap, ad]);
+    let route_ctx = route_with(vec![ap, ad]);
 
     assert_eq!(insertion_span(&route_ctx, &bp, 1), None);
     assert_eq!(insertion_span(&route_ctx, &service(3), 1), None);
@@ -134,7 +124,7 @@ fn insertion_span_covers_activities_between_placed_pickup_and_target() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, bd) = pudo("b");
     // [start, bp, ap, ad, end]: delivering b after ad keeps it on board over activities 1..=3.
-    let route_ctx = route_with(None, vec![bp, ap, ad]);
+    let route_ctx = route_with(vec![bp, ap, ad]);
 
     assert_eq!(insertion_span(&route_ctx, &bd, 3), Some((1, 3)));
 }
@@ -144,45 +134,7 @@ fn insertion_span_covers_activities_between_target_and_placed_delivery() {
     let (_a, ap, ad) = pudo("a");
     let (_b, bp, bd) = pudo("b");
     // [start, ap, ad, bd, end]: picking b up after ap keeps it on board over activities 2..=3.
-    let route_ctx = route_with(None, vec![ap, ad, bd]);
+    let route_ctx = route_with(vec![ap, ad, bd]);
 
     assert_eq!(insertion_span(&route_ctx, &bp, 1), Some((2, 3)));
-}
-
-#[test]
-fn route_run_cost_is_none_without_per_run_cost() {
-    let (_a, ap, ad) = pudo("a");
-    let mut route_ctx = route_with(None, vec![ap, ad]);
-    update_route_runs(&mut route_ctx);
-
-    assert!(route_ctx.state().get_route_runs().is_none());
-    assert_eq!(get_route_run_cost(&route_ctx), None);
-}
-
-#[test]
-fn route_run_cost_charges_every_run() {
-    let (_a, ap, ad) = pudo("a");
-    let (_b, bp, bd) = pudo("b");
-    let mut route_ctx = route_with(Some(100.), vec![ap, ad, bp, bd]);
-
-    assert_eq!(get_route_run_cost(&route_ctx), Some(200.));
-    update_route_runs(&mut route_ctx);
-    assert_eq!(route_ctx.state().get_route_runs().map(Vec::len), Some(2));
-    assert_eq!(get_route_run_cost(&route_ctx), Some(200.));
-}
-
-#[test]
-fn total_cost_includes_run_fees() {
-    let (_a, ap, ad) = pudo("a");
-    let (_b, bp, bd) = pudo("b");
-    let with_fee = |per_run| {
-        let mut route_ctx = route_with(per_run, vec![ap.deep_copy(), ad.deep_copy(), bp.deep_copy(), bd.deep_copy()]);
-        route_ctx.state_mut().set_total_distance(10.);
-        route_ctx.state_mut().set_total_duration(20.);
-        TestInsertionContextBuilder::default().with_routes(vec![route_ctx]).build().get_total_cost().unwrap()
-    };
-
-    // vehicle and driver both cost 1 per distance and time unit
-    assert_eq!(with_fee(None), 60.);
-    assert_eq!(with_fee(Some(100.)), 260.);
 }

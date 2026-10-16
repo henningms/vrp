@@ -418,6 +418,70 @@ mod per_run_cost {
     }
 
     #[test]
+    fn handover_at_one_stop_costs_two_runs_in_either_order() {
+        let (_a, ap, ad) = pudo(5, 10);
+        let (_b, bp, bd) = pudo(10, 20);
+
+        assert_eq!(run_fees_of(&[&ap, &ad, &bp, &bd]), 2. * PER_RUN);
+        assert_eq!(run_fees_of(&[&ap, &bp, &ad, &bd]), 2. * PER_RUN);
+        assert_eq!(fitness_of(Some(PER_RUN), &[&ap, &ad, &bp, &bd]), fitness_of(Some(PER_RUN), &[&ap, &bp, &ad, &bd]));
+    }
+
+    #[test]
+    fn rider_on_board_across_handover_shares_one_run() {
+        let (_a, ap, ad) = pudo(5, 10);
+        let (_b, bp, bd) = pudo(10, 20);
+        let (_c, cp, cd) = pudo(6, 15);
+
+        assert_eq!(run_fees_of(&[&ap, &cp, &ad, &bp, &cd, &bd]), PER_RUN);
+    }
+
+    #[test]
+    fn estimate_matches_fitness_change_after_removal_refreshes_route_state() {
+        let (_a, ap, ad) = pudo(5, 10);
+        let (_b, bp, bd) = pudo(6, 15);
+        let (_c, cp, cd) = pudo(10, 20);
+        let (d, dp, dd) = pudo(12, 14);
+        let feature = create_feature();
+        let state = feature.state.as_ref().unwrap();
+        let objective = feature.objective.as_ref().unwrap();
+
+        // removing d turns the stops at 10 into one stop where a hands over to c
+        let mut insertion_ctx = TestInsertionContextBuilder::default()
+            .with_routes(vec![route_with(Some(PER_RUN), &[&ap, &ad, &dp, &dd, &cp, &cd])])
+            .build();
+        assert_eq!(run_fees_of(&[&ap, &ad, &dp, &dd, &cp, &cd]), 3. * PER_RUN);
+        insertion_ctx.solution.routes[0].route_mut().tour.remove(&Job::Multi(d.clone()));
+        state.accept_solution_state(&mut insertion_ctx.solution);
+        assert_eq!(objective.fitness(&insertion_ctx), fitness_of(Some(PER_RUN), &[&ap, &ad, &cp, &cd]));
+
+        // b is picked up between a's pickup and the handover, then delivered after c's pickup
+        let route_ctx = &insertion_ctx.solution.routes[0];
+        let pickup_estimate = estimate_run_fee(route_ctx, &bp, 1);
+        let mut shadow = route_ctx.deep_copy();
+        shadow.route_mut().tour.insert_at(bp.deep_copy(), 2);
+        state.accept_route_state(&mut shadow);
+        let delivery_estimate = estimate_run_fee(&shadow, &bd, 4);
+
+        let fee_change = run_fees_of(&[&ap, &bp, &ad, &cp, &bd, &cd]) - run_fees_of(&[&ap, &ad, &cp, &cd]);
+        assert_eq!(fee_change, -PER_RUN);
+        assert_eq!(pickup_estimate + delivery_estimate, fee_change);
+    }
+
+    /// Estimates the change in run fees of inserting `target` after the tour activity at `leg_index`.
+    fn estimate_run_fee(route_ctx: &RouteContext, target: &Activity, leg_index: usize) -> Cost {
+        let tour = &route_ctx.route().tour;
+        let activity_ctx = ActivityContext {
+            index: leg_index,
+            prev: tour.get(leg_index).unwrap(),
+            target,
+            next: tour.get(leg_index + 1),
+        };
+
+        estimate_route_run_cost(route_ctx, &activity_ctx).unwrap_or_default()
+    }
+
+    #[test]
     fn single_jobs_open_no_run() {
         let service = ActivityBuilder::with_location(5).job(Some(TestSingleBuilder::default().build_shared())).build();
 
@@ -479,6 +543,9 @@ mod per_run_cost {
         case02_join: (vec!["ap", "ad"], vec!["ap", "bp", "ad"], 3, vec!["ap", "bp", "ad", "bd"]),
         case03_merge: (vec!["ap", "ad", "cp", "cd"], vec!["ap", "bp", "ad", "cp", "cd"], 4, vec!["ap", "bp", "ad", "cp", "bd", "cd"]),
         case04_empty: (vec![], vec!["bp"], 1, vec!["bp", "bd"]),
+        case05_right_before_pickup_at_its_stop: (vec!["dp", "dd"], vec!["bp", "dp", "dd"], 1, vec!["bp", "bd", "dp", "dd"]),
+        case06_right_after_pickup_at_its_stop: (vec!["dp", "dd"], vec!["bp", "dp", "dd"], 2, vec!["bp", "dp", "bd", "dd"]),
+        case07_right_before_pickup_elsewhere: (vec!["cp", "cd"], vec!["bp", "cp", "cd"], 1, vec!["bp", "bd", "cp", "cd"]),
     }
 
     fn estimate_matches_run_fee_change_after_insertion_impl(
@@ -490,6 +557,7 @@ mod per_run_cost {
         let (_a, ap, ad) = pudo(5, 10);
         let (_b, bp, bd) = pudo(6, 16);
         let (_c, cp, cd) = pudo(15, 20);
+        let (_d, dp, dd) = pudo(16, 25);
         let by_name = |names: Vec<&str>| {
             names
                 .into_iter()
@@ -500,6 +568,8 @@ mod per_run_cost {
                     "bd" => &bd,
                     "cp" => &cp,
                     "cd" => &cd,
+                    "dp" => &dp,
+                    "dd" => &dd,
                     _ => unreachable!(),
                 })
                 .collect::<Vec<_>>()
