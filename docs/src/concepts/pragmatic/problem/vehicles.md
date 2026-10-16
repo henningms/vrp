@@ -19,11 +19,15 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
 {{#include ../../../../../examples/data/pragmatic/simple.basic.problem.json:104:106}}
 ```
 
-- **costs** (required): specifies how expensive is vehicle usage. It has three properties:
+- **costs** (required): specifies how expensive is vehicle usage. It has four properties:
                                      
     - **fixed**: a fixed cost per vehicle tour
     - **time**: a cost per time unit
     - **distance**: a cost per distance unit
+    - **perRun** (optional): a cost per run, i.e. per stretch of a tour while at least one pickup-delivery job is on
+      board. Each time the vehicle picks up into an empty vehicle and carries jobs until it is empty again counts
+      as one run, so jobs riding together share one run. Only pickup-delivery jobs open a run. It is a part of the
+      `minimize-cost` objective and of the reported cost, and it is charged in addition to `fixed`
 
 - **shifts** (required): specify one or more vehicle shift. See detailed description below.
 

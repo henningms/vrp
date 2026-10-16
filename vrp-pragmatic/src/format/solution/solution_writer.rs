@@ -6,13 +6,13 @@ use crate::format::CoordIndex;
 use crate::format::solution::activity_matcher::get_job_tag;
 use crate::format::solution::model::Timing;
 use crate::format::solution::*;
-use vrp_core::construction::enablers::{ReservedTimesIndex, get_route_intervals};
+use vrp_core::construction::enablers::{ReservedTimesIndex, count_tour_runs, get_route_intervals};
 use vrp_core::construction::features::JobDemandDimension;
 use vrp_core::construction::heuristics::UnassignmentInfo;
 use vrp_core::models::common::*;
 use vrp_core::models::problem::{
     FerryAwareTransportCost, FerryDirection, FerryTransportExtraProperty, JobIdDimension, Multi, TravelTime,
-    VehicleIdDimension,
+    VehicleIdDimension, VehiclePerRunCostDimension,
 };
 use vrp_core::models::solution::{Activity, Route};
 use vrp_core::prelude::Float;
@@ -297,6 +297,9 @@ fn create_tour(
     });
 
     leg.statistic.cost += vehicle.costs.fixed;
+    if let Some(per_run) = vehicle.dimens.get_vehicle_per_run_cost() {
+        leg.statistic.cost += per_run * count_tour_runs(&route.tour) as Float;
+    }
     tour.statistic = leg.statistic;
 
     insert_reserved_times_as_breaks(route, &mut tour, reserved_times_index);

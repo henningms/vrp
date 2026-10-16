@@ -8,6 +8,14 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* vehicle `costs.perRun`: a cost charged for every run of a tour, i.e. every stretch while at least one
+  pickup-delivery job is on board, the same run the site objectives use. It is part of `minimize-cost` and of the
+  reported tour and solution `statistic.cost`, so a vehicle paid per trip (e.g. a taxi) gets cheaper by carrying riders
+  together instead of one after another. Absent or `0` keeps costs unchanged. In core, the amount is the vehicle
+  dimension `VehiclePerRunCost`, and runs are built by `get_tour_runs` in `construction::enablers`
+
 ## [1.39.2] 2026-10-15
 
 ### Fixed
