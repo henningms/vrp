@@ -22,7 +22,7 @@ split into the following groups.
 These objectives specify how "total" cost of job insertion is calculated:
 
 * `minimize-cost`: minimizes total transport cost calculated for all routes. Here, total transport cost is seen as linear
-  combination of total time and distance
+  combination of total time and distance, plus vehicle `fixed` and `perRun` costs
 * `minimize-distance`: minimizes total distance of all routes
 * `minimize-duration`: minimizes total duration of all routes
 

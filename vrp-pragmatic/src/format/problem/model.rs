@@ -357,6 +357,10 @@ pub struct VehicleCosts {
 
     /// Cost per time unit.
     pub time: Float,
+
+    /// Cost per run: a stretch of a tour while at least one pickup-delivery job is on board.
+    #[serde(rename = "perRun", skip_serializing_if = "Option::is_none")]
+    pub per_run: Option<Float>,
 }
 
 /// Specifies vehicle shift start.
