@@ -1321,3 +1321,22 @@ fn rejects_candidates_with_an_invalid_or_unsupported_stop_duration() {
     let error = windowed_context_with_candidates(vehicle, &stop_candidate(Some(20.))).err().expect("a conflict");
     assert!(error.to_string().contains("required breaks"), "{error}");
 }
+
+#[test]
+fn rejects_an_invalid_stop_duration_on_a_context_not_built_with_the_candidate() {
+    let extra = job_locations(&stop_candidate(None));
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![windowed_vehicle(1000)], windowed_jobs(), &extra);
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &windowed_solution_json(), &extra)
+        .expect("cannot build context");
+
+    for stop_duration in [-1., Float::NAN, Float::INFINITY] {
+        let candidate = stop_candidate(Some(stop_duration));
+
+        let check_error = ctx.check_job(&candidate).expect_err("an invalid stop duration");
+        let accept_error = ctx.accept_job(&candidate).expect_err("an invalid stop duration");
+
+        let expected = "candidate job 'candidate' has an invalid stopDuration: use a finite, non-negative value";
+        assert_eq!(check_error.to_string(), expected, "{stop_duration}");
+        assert_eq!(accept_error.to_string(), expected, "{stop_duration}");
+    }
+}

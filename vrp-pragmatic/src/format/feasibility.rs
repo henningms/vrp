@@ -47,6 +47,20 @@ pub fn job_locations(job: &ApiJob) -> Vec<Location> {
         .collect()
 }
 
+fn get_stop_durations(job: &ApiJob) -> impl Iterator<Item = Float> + '_ {
+    job.all_tasks_iter().flat_map(|task| task.places.iter()).filter_map(|place| place.stop_duration)
+}
+
+/// Refuses a negative or non-finite stop duration, as the problem validation does for a plan job.
+fn check_valid_stop_durations(candidate: &ApiJob) -> Result<(), GenericError> {
+    if get_stop_durations(candidate).all(is_valid_stop_duration) {
+        Ok(())
+    } else {
+        Err(format!("candidate job '{}' has an invalid stopDuration: use a finite, non-negative value", candidate.id)
+            .into())
+    }
+}
+
 /// Information about a constraint violation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -137,24 +151,15 @@ impl FeasibilityContext {
         let conflict = get_stop_duration_conflict(&api_problem);
 
         for candidate in candidates {
-            for stop_duration in
-                candidate.all_tasks_iter().flat_map(|task| task.places.iter()).filter_map(|place| place.stop_duration)
-            {
-                if !is_valid_stop_duration(stop_duration) {
-                    return Err(format!(
-                        "candidate job '{}' has an invalid stopDuration: use a finite, non-negative value",
-                        candidate.id
-                    )
-                    .into());
-                }
+            check_valid_stop_durations(candidate)?;
 
-                if let Some(feature) = conflict.filter(|_| stop_duration > 0.) {
-                    return Err(format!(
-                        "candidate job '{}' has a stopDuration, which cannot be combined with {feature}",
-                        candidate.id
-                    )
-                    .into());
-                }
+            let has_positive = get_stop_durations(candidate).any(|stop_duration| stop_duration > 0.);
+            if let Some(feature) = conflict.filter(|_| has_positive) {
+                return Err(format!(
+                    "candidate job '{}' has a stopDuration, which cannot be combined with {feature}",
+                    candidate.id
+                )
+                .into());
             }
         }
 
@@ -339,6 +344,8 @@ impl FeasibilityContext {
     /// Refuses a candidate needing a larger stop duration than the context's table holds: the transport and the
     /// routes' schedules were built with that table, so an answer would silently use the smaller one.
     fn check_known_stop_durations(&self, candidate: &ApiJob, coord_index: &CoordIndex) -> Result<(), GenericError> {
+        check_valid_stop_durations(candidate)?;
+
         let stop_durations = self.problem.extras.get_stop_durations();
         let known_stop_duration =
             |location: &Location| match (stop_durations.as_ref(), coord_index.get_by_loc(location)) {
