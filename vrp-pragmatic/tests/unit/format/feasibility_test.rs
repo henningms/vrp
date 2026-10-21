@@ -1340,3 +1340,23 @@ fn rejects_an_invalid_stop_duration_on_a_context_not_built_with_the_candidate() 
         assert_eq!(accept_error.to_string(), expected, "{stop_duration}");
     }
 }
+
+#[test]
+fn refuses_a_candidate_needing_a_larger_stop_duration_at_a_known_location() {
+    let mut jobs = windowed_jobs();
+    jobs[1] = set_stop_duration(jobs[1].clone(), Some(10.));
+    let (problem, matrix) = build_problem_and_matrix(vec![windowed_vehicle(1000)], jobs);
+    let ctx =
+        FeasibilityContext::new(problem, vec![matrix], &windowed_solution_json(), &[]).expect("cannot build context");
+    // at job2's location
+    let candidate =
+        |stop_duration| set_stop_duration(create_delivery_job("candidate", (2.0, 0.0)), Some(stop_duration));
+
+    let error = ctx.check_job(&candidate(20.)).expect_err("a larger stop duration");
+    assert!(error.to_string().contains("new_with_candidates"), "{error}");
+
+    for stop_duration in [10., 5.] {
+        let result = ctx.check_job(&candidate(stop_duration)).expect("a stop duration the context knows");
+        assert!(result.is_feasible, "{stop_duration}: {:?}", result.vehicles);
+    }
+}
