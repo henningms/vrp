@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.40.0] 2026-10-21
+
 ### Added
 
 * vehicle `costs.perRun`: a cost charged for every run of a tour, i.e. every stretch while at least one
