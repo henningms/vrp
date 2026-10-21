@@ -75,6 +75,9 @@ pub use self::lifo_ordering::{
     LifoGroupDimension, LifoGroupId, LifoTagDimension, VehicleLifoTagsDimension, create_lifo_ordering_feature,
 };
 
+mod opposite_side_arrivals;
+pub use self::opposite_side_arrivals::{OppositeSideCells, create_opposite_side_arrivals_feature};
+
 mod requested_time;
 pub use self::requested_time::{
     JobRequestedTimesDimension, RequestedTimePenalty, RequestedTimes, create_requested_time_feature,
