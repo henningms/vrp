@@ -182,7 +182,7 @@ prop_compose! {
      times in time_windows,
      tag in tags
     ) -> JobPlace {
-      JobPlace { times, location, duration, tag, requested_time: None, curb_side: None }
+      JobPlace { times, location, duration, tag, requested_time: None, curb_side: None, stop_duration: None }
     }
 }
 

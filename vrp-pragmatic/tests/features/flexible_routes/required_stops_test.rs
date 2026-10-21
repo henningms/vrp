@@ -26,6 +26,7 @@ fn can_enforce_required_stops_order() {
                             tag: Some("req1".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (5., 0.).to_loc(),
@@ -34,6 +35,7 @@ fn can_enforce_required_stops_order() {
                             tag: Some("req2".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (7., 0.).to_loc(),
@@ -42,6 +44,7 @@ fn can_enforce_required_stops_order() {
                             tag: Some("req3".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                     via: None,
@@ -102,6 +105,7 @@ fn can_handle_required_stops_with_time_windows() {
                             tag: Some("req_early".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (6., 0.).to_loc(),
@@ -110,6 +114,7 @@ fn can_handle_required_stops_with_time_windows() {
                             tag: Some("req_late".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                     via: None,
@@ -166,6 +171,7 @@ fn required_stops_work_with_multiple_vehicle_ids() {
                         tag: Some("req".to_string()),
                         requested_time: None,
                         curb_side: None,
+                        stop_duration: None,
                     }]),
                     via: None,
                 }],

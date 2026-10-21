@@ -73,6 +73,7 @@ mod actual {
                 tag: None,
                 requested_time: None,
                 curb_side: None,
+                stop_duration: None,
             }],
             demand: if job.demand != 0 { Some(vec![job.demand.abs()]) } else { None },
             named_demand: None,

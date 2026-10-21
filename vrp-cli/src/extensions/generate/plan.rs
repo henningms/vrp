@@ -40,6 +40,7 @@ pub(crate) fn generate_plan(
                             tag: place.tag.clone(),
                             requested_time: place.requested_time.clone(),
                             curb_side: place.curb_side,
+                            stop_duration: place.stop_duration,
                         })
                         .collect(),
                     demand: if keep_original_demand {

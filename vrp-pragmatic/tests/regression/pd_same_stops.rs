@@ -15,6 +15,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
             tag: Some(tag.to_string()),
             requested_time: None,
             curb_side: None,
+            stop_duration: None,
         }],
         demand: Some(vec![1]),
         named_demand: None,

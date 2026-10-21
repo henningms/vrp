@@ -115,7 +115,7 @@ impl FeasibilityContext {
 
         let coord_index = crate::format::CoordIndex::new_with_extra_locations(&api_problem, extra_locations);
         let core_problem: CoreProblem =
-            map_to_problem_with_props(api_problem.clone(), matrices, coord_index, Some(properties.clone()))
+            map_to_problem_with_props(api_problem.clone(), matrices, coord_index, Some(properties.clone()), &[])
                 .map_err(|e: crate::format::MultiFormatError| e.to_string())?;
         let core_problem = Arc::new(core_problem);
 
