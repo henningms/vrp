@@ -69,6 +69,7 @@ fn keeps_an_unreachable_leg_unreachable() {
     let transport = wrap(unreachable, vec![(1, 30.)]);
 
     assert_eq!(transport.duration(&route(), 0, 1, TravelTime::Departure(0.)), -1.);
+    assert_eq!(transport.duration(&route(), 0, 1, TravelTime::Arrival(100.)), -1.);
     assert_eq!(transport.duration_approx(&Profile::default(), 0, 1), -1.);
 }
 
@@ -95,4 +96,20 @@ fn adds_the_stop_duration_to_interpolated_durations() {
     assert_eq!(transport.duration(&route, 0, 1, TravelTime::Arrival(80.)), 45.);
     assert_eq!(transport.duration_approx(&Profile::default(), 0, 1), 40.);
     assert_eq!(transport.distance(&route, 0, 1, TravelTime::Departure(50.)), 7.);
+}
+
+#[test]
+fn reads_a_time_aware_distance_at_the_pull_in_time() {
+    let transport = wrap(
+        vec![
+            MatrixData::new(0, Some(0.), vec![0., 10., 10., 0.], vec![0., 7., 7., 0.]),
+            MatrixData::new(0, Some(100.), vec![0., 10., 10., 0.], vec![0., 9., 9., 0.]),
+        ],
+        vec![(1, 30.)],
+    );
+    let route = route();
+
+    // read at the pull-in time 110 - 30 = 80, as the duration is; reading at 110 would give 9
+    assert_eq!(transport.distance(&route, 0, 1, TravelTime::Arrival(110.)), 7.);
+    assert_eq!(transport.distance(&route, 1, 0, TravelTime::Arrival(110.)), 9.);
 }

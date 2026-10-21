@@ -65,6 +65,14 @@ fn with_stop_duration(road: Duration, stop_duration: Duration) -> Duration {
     if road < 0. { road } else { road + stop_duration }
 }
 
+/// An arrival time here is when service can start, while the road leg ends earlier, when the vehicle pulls in.
+fn on_road(travel_time: TravelTime, stop_duration: Duration) -> TravelTime {
+    match travel_time {
+        TravelTime::Arrival(arrival) => TravelTime::Arrival(arrival - stop_duration),
+        departure => departure,
+    }
+}
+
 impl TransportCost for StopDurationTransportCost {
     fn duration_approx(&self, profile: &Profile, from: Location, to: Location) -> Duration {
         let road = self.inner.duration_approx(profile, from, to);
@@ -78,17 +86,15 @@ impl TransportCost for StopDurationTransportCost {
 
     fn duration(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Duration {
         let stop_duration = self.stop_durations.on_leg(from, to);
-        // an arrival time here is when service can start; the road leg ends when the vehicle pulls in
-        let travel_time = match travel_time {
-            TravelTime::Arrival(arrival) => TravelTime::Arrival(arrival - stop_duration),
-            departure => departure,
-        };
+        let road = self.inner.duration(route, from, to, on_road(travel_time, stop_duration));
 
-        with_stop_duration(self.inner.duration(route, from, to, travel_time), stop_duration)
+        with_stop_duration(road, stop_duration)
     }
 
     fn distance(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Distance {
-        self.inner.distance(route, from, to, travel_time)
+        let stop_duration = self.stop_durations.on_leg(from, to);
+
+        self.inner.distance(route, from, to, on_road(travel_time, stop_duration))
     }
 
     fn size(&self) -> usize {
