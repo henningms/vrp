@@ -276,6 +276,102 @@ fn checker_rejects_a_parking_statistic_without_the_stop_durations() {
     assert!(errors.contains(&error), "{errors:?}");
 }
 
+/// The problem of `pays_none_from_the_start_but_pays_it_into_an_end_location_shared_with_a_job` with a shift ending
+/// at `latest` and an optional break of 5 in [60, 70].
+fn create_shared_end_problem(latest: f64) -> (Problem, Matrix) {
+    let mut at_depot = create_service_job("at_depot", (0., 0.));
+    at_depot.services.as_mut().unwrap()[0].places[0].times = Some(vec![vec![format_time(0.), format_time(5.)]]);
+    let mut fleet = create_fleet();
+    let shift = &mut fleet.vehicles[0].shifts[0];
+    shift.end.as_mut().expect("a shift end").latest = format_time(latest);
+    shift.breaks = Some(vec![VehicleBreak::Optional {
+        time: VehicleOptionalBreakTime::TimeWindow(vec![format_time(60.), format_time(70.)]),
+        places: vec![VehicleOptionalBreakPlace { duration: 5., location: None, tag: None }],
+        policy: None,
+    }]);
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                set_stop_duration(at_depot, Some(30.)),
+                set_stop_duration(create_delivery_job("far", (10., 0.)), Some(30.)),
+            ],
+            ..create_empty_plan()
+        },
+        fleet,
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    (problem, matrix)
+}
+
+/// The solver's solution to `create_shared_end_problem(82.)`: the tour pulls in at its end at 52 and ends at 82, too
+/// late for the break.
+fn create_shared_end_solution() -> Solution {
+    let activity = |job_id: &str, activity_type: &str, time: (f64, f64)| {
+        ActivityBuilder::default().job_id(job_id).activity_type(activity_type).time_stamp(time.0, time.1).build()
+    };
+    let stop = |location: (f64, f64), time: (f64, f64), distance, load, parking, activities| {
+        Stop::Point(PointStop {
+            location: location.to_loc(),
+            time: Schedule { arrival: format_time(time.0), departure: format_time(time.1) },
+            distance,
+            load: vec![load],
+            parking,
+            activities,
+        })
+    };
+    let mut at_depot = activity("at_depot", "service", (0., 1.));
+    at_depot.location = Some((0., 0.).to_loc());
+    let times = Timing { driving: 20, serving: 2, parking: 60, ..Timing::default() };
+
+    SolutionBuilder::default()
+        .tour(
+            TourBuilder::default()
+                .stops(vec![
+                    stop((0., 0.), (0., 1.), 0, 1, None, vec![activity("departure", "departure", (0., 0.)), at_depot]),
+                    stop(
+                        (10., 0.),
+                        (11., 42.),
+                        10,
+                        0,
+                        interval(11., 41.),
+                        vec![activity("far", "delivery", (41., 42.))],
+                    ),
+                    stop(
+                        (0., 0.),
+                        (52., 82.),
+                        20,
+                        0,
+                        interval(52., 82.),
+                        vec![activity("arrival", "arrival", (82., 82.))],
+                    ),
+                ])
+                .statistic(Statistic { cost: 112., distance: 20, duration: 82, times })
+                .build(),
+        )
+        .violations(Some(vec![Violation::Break { vehicle_id: "my_vehicle_1".to_string(), shift_index: 0 }]))
+        .build()
+}
+
+#[test]
+fn checker_ends_a_tour_after_the_stop_duration_at_its_end_location() {
+    let (problem, matrix) = create_shared_end_problem(82.);
+
+    // the break window opens after the pull-in at 52 but within the tour, so the unassigned break is due
+    assert_eq!(check(&problem, &matrix, create_shared_end_solution()), Ok(()));
+}
+
+#[test]
+fn checker_rejects_a_tour_whose_end_location_stop_duration_ends_after_the_shift() {
+    let (problem, matrix) = create_shared_end_problem(81.);
+
+    let errors = check(&problem, &matrix, create_shared_end_solution()).expect_err("a late tour end");
+
+    let error: GenericError = "tour time is outside shift time, vehicle id 'my_vehicle_1', shift index: 0".into();
+    assert!(errors.contains(&error), "{errors:?}");
+}
+
 #[test]
 fn pays_the_stop_duration_once_after_a_ferry_crossing() {
     // the crossing of `solves_and_checks_a_job_reached_by_crossing_a_ferry`: (0, 0) to job1 at (100, 0) in 7 by ferry

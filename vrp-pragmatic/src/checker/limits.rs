@@ -63,7 +63,7 @@ fn check_shift_time(context: &CheckerContext) -> GenericResult<()> {
         let (start, end) = tour.stops.first().zip(tour.stops.last()).ok_or("empty tour")?;
 
         let departure = parse_time(&start.schedule().departure);
-        let arrival = parse_time(&end.schedule().arrival);
+        let arrival = context.get_ready_time(end);
 
         let has_match = vehicle
             .shifts

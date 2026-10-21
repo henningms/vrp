@@ -84,7 +84,7 @@ fn check_break_assignment(context: &CheckerContext) -> GenericResult<()> {
         let arrival = tour
             .stops
             .last()
-            .map(|stop| parse_time(&stop.schedule().arrival))
+            .map(|stop| context.get_ready_time(stop))
             .ok_or_else(|| GenericError::from(format!("cannot get arrival for tour '{}'", tour.vehicle_id)))?;
 
         let tour_tw = TimeWindow::new(departure, arrival);

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use vrp_core::construction::clustering::vicinity::ClusterConfig;
 use vrp_core::construction::clustering::vicinity::VisitPolicy;
 use vrp_core::models::Problem as CoreProblem;
-use vrp_core::models::common::{Duration, Profile, TimeWindow};
+use vrp_core::models::common::{Duration, Profile, TimeWindow, Timestamp};
 use vrp_core::models::problem::{Actor, VehicleIdDimension};
 use vrp_core::models::solution::{Commute as DomainCommute, CommuteInfo as DomainCommuteInfo};
 use vrp_core::prelude::{GenericError, GenericResult};
@@ -146,6 +146,15 @@ impl CheckerContext {
         TimeWindow::new(parse_time(&time.start), parse_time(&time.end))
     }
 
+    /// Gets the time the vehicle is ready at the stop: a stop's arrival is when it pulled in, so a stop duration
+    /// reported as its parking ends later. Vicinity clustering reports its own parking through the same field.
+    fn get_ready_time(&self, stop: &Stop) -> Timestamp {
+        match (stop, &self.clustering) {
+            (Stop::Point(PointStop { parking: Some(parking), .. }), None) => parse_time(&parking.end),
+            _ => parse_time(&stop.schedule().arrival),
+        }
+    }
+
     /// Gets activity location.
     fn get_activity_location(&self, stop: &Stop, activity: &Activity) -> Option<Location> {
         activity.location.clone().or_else(|| match stop {
@@ -160,9 +169,7 @@ impl CheckerContext {
             parse_time(
                 &tour.stops.first().as_ref().ok_or_else(|| "cannot get first activity".to_string())?.schedule().arrival,
             ),
-            parse_time(
-                &tour.stops.last().as_ref().ok_or_else(|| "cannot get last activity".to_string())?.schedule().arrival,
-            ),
+            self.get_ready_time(tour.stops.last().ok_or_else(|| "cannot get last activity".to_string())?),
         );
 
         self.get_vehicle(&tour.vehicle_id)?
