@@ -28,6 +28,38 @@ fn can_create_geo_json_from_solution() {
 }
 
 #[test]
+fn can_create_geo_json_from_solution_with_stop_durations() {
+    let problem = FormatProblem {
+        plan: Plan {
+            jobs: vec![
+                set_stop_duration(create_delivery_job("job1", (1., 0.)), Some(30.)),
+                set_stop_duration(create_delivery_job("job2", (1., 0.)), Some(30.)),
+                set_stop_duration(create_delivery_job("job3", (3., 0.)), Some(30.)),
+            ],
+            ..create_empty_plan()
+        },
+        fleet: create_default_fleet(),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+    let core_problem = (problem.clone(), vec![matrix.clone()]).read_pragmatic().unwrap();
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+    let mut stops = solution.tours[0]
+        .stops
+        .iter()
+        .filter_map(Stop::as_point)
+        .map(|stop| (stop.activities.len(), stop.parking.is_some()))
+        .collect::<Vec<_>>();
+    stops.sort();
+    assert_eq!(stops, vec![(1, false), (1, false), (1, true), (2, true)]);
+
+    let geo_json = create_feature_collection(&core_problem, &solution).unwrap();
+
+    // four stop markers and the tour line: a stop duration's parking draws no cluster geometry
+    assert_eq!(geo_json.features.len(), 5);
+}
+
+#[test]
 fn can_create_geo_json_from_named_locations() {
     let locations = vec![
         ("job1".to_string(), Location::Coordinate { lat: 1.0, lng: 0.0 }, 0),

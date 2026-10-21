@@ -89,6 +89,8 @@ fn starts_service_at_the_later_of_the_stop_duration_end_and_the_window_start() {
     assert_eq!(point(&late, 1).activities[0].time, interval(60., 65.));
     assert_eq!((late.statistic.times.parking, late.statistic.times.waiting), (30, 20));
     assert_eq!(late.statistic.duration, 75);
+    let times = &late.statistic.times;
+    assert_eq!(times.driving + times.parking + times.serving + times.waiting, late.statistic.duration);
 }
 
 #[test]
@@ -113,7 +115,7 @@ fn pays_none_from_the_start_but_pays_it_into_an_end_location_shared_with_a_job()
 
 #[test]
 fn pays_no_stop_duration_for_a_break_without_a_location() {
-    // the break waits for its window at job1's location, after job1's service
+    // the break, without a location, sits at job1's location after its service
     let mut fleet = create_fleet();
     fleet.vehicles[0].shifts[0].breaks = Some(vec![VehicleBreak::Optional {
         time: VehicleOptionalBreakTime::TimeWindow(vec![format_time(35.), format_time(40.)]),

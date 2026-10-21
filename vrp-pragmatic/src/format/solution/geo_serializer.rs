@@ -195,6 +195,11 @@ fn get_activity_point(
     })
 }
 
+/// A stop duration reports `parking` too, but only vicinity clustering gives activities a commute.
+fn is_cluster_stop(stop: &PointStop) -> bool {
+    stop.parking.is_some() && stop.activities.iter().any(|activity| activity.commute.is_some())
+}
+
 fn get_cluster_geometry(tour_idx: usize, stop_idx: usize, stop: &PointStop) -> Result<Vec<Feature>, Error> {
     let features = stop.activities.iter().enumerate().try_fold::<_, _, Result<_, Error>>(
         Vec::<Feature>::new(),
@@ -314,7 +319,7 @@ pub(crate) fn create_feature_collection(problem: &Problem, solution: &Solution) 
                 .iter()
                 .enumerate()
                 .filter_map(|(stop_idx, stop)| stop.as_point().map(|stop| (stop_idx, stop)))
-                .filter(|(_, stop)| stop.parking.is_some())
+                .filter(|(_, stop)| is_cluster_stop(stop))
                 .map(move |(stop_idx, stop)| get_cluster_geometry(tour_idx, stop_idx, stop))
         })
         .collect::<Result<Vec<_>, _>>()?
