@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.41.0] 2026-10-21
+
 ### Added
 
 * add the `minimize-opposite-side-arrivals` objective with an optional place `curbSide` (`prefer`) and an optional
