@@ -373,6 +373,58 @@ fn checker_rejects_a_tour_whose_end_location_stop_duration_ends_after_the_shift(
 }
 
 #[test]
+fn checker_rejects_a_parking_in_a_problem_without_stop_durations() {
+    let problem = Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (10., 0.))], ..create_empty_plan() },
+        fleet: create_fleet(),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+    let solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+
+    for (stop_idx, parking) in [(1, interval(10., 40.)), (2, interval(21., 51.))] {
+        let mut solution = solution.clone();
+        point_mut(&mut solution, stop_idx).parking = parking;
+
+        let errors = check(&problem, &matrix, solution).expect_err("a parking without a stop duration");
+
+        let error: GenericError =
+            format!("parking at stop {stop_idx} in tour 'my_vehicle_1' does not match its stop duration of 0s").into();
+        assert!(errors.contains(&error), "{errors:?}");
+    }
+}
+
+#[test]
+fn checker_accepts_a_location_revisited_paying_its_stop_duration_again() {
+    // a1 closes before b can be served, and a2 opens after b closes: the tour visits a, b and a again
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                set_stop_duration(create_delivery_job_with_times("a1", (10., 0.), vec![(0, 45)], 1.), Some(30.)),
+                set_stop_duration(create_delivery_job_with_times("b", (20., 0.), vec![(0, 200)], 1.), Some(30.)),
+                set_stop_duration(create_delivery_job_with_times("a2", (10., 0.), vec![(300, 400)], 1.), Some(30.)),
+            ],
+            ..create_empty_plan()
+        },
+        fleet: create_fleet(),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+
+    let tour = &solution.tours[0];
+    assert_eq!(get_ids_from_tour(tour), vec![vec!["departure"], vec!["a1"], vec!["b"], vec!["a2"], vec!["arrival"]]);
+    assert_eq!(point(tour, 1).parking, interval(10., 40.));
+    assert_eq!(point(tour, 2).parking, interval(51., 81.));
+    assert_eq!(point(tour, 3).time.arrival, format_time(92.));
+    assert_eq!(point(tour, 3).parking, interval(92., 122.));
+    assert_eq!(point(tour, 3).activities[0].time, interval(300., 301.));
+    assert_eq!(tour.statistic.times.parking, 90);
+    assert_eq!(check(&problem, &matrix, solution), Ok(()));
+}
+
+#[test]
 fn pays_the_stop_duration_once_after_a_ferry_crossing() {
     // the crossing of `solves_and_checks_a_job_reached_by_crossing_a_ferry`: (0, 0) to job1 at (100, 0) in 7 by ferry
     let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
