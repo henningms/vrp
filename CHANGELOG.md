@@ -8,6 +8,12 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* validate job place stop durations: a negative or non-finite `stopDuration` (E9104), a positive one together with
+  vicinity clustering or required breaks (E9105), and one on a vehicle shift's `requiredStops`, `via` or recharge
+  station place (E9307)
+
 ## [1.41.0] 2026-10-21
 
 ### Added

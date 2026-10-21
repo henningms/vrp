@@ -19,6 +19,9 @@ use self::common::*;
 
 mod jobs;
 use self::jobs::validate_jobs;
+// reused outside validation once a second caller needs the same rule
+#[allow(unused_imports)]
+pub(crate) use self::jobs::{get_stop_duration_conflict, is_valid_stop_duration};
 
 mod objectives;
 use self::objectives::validate_objectives;

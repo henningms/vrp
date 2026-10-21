@@ -468,6 +468,41 @@ fn check_e9306_vehicle_per_run_cost(ctx: &ValidationContext) -> Result<(), Forma
     }
 }
 
+/// Checks that required stops, via and recharge station places carry no stop duration.
+fn check_e9307_shift_place_stop_duration(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let has_stop_duration = |place: &JobPlace| place.stop_duration.is_some_and(|value| value != 0.);
+
+    let type_ids = ctx
+        .vehicles()
+        .filter(|vehicle| {
+            vehicle.shifts.iter().any(|shift| {
+                let stations = shift.recharges.iter().flat_map(|recharges| recharges.stations.iter());
+                shift
+                    .required_stops
+                    .iter()
+                    .flatten()
+                    .chain(shift.via.iter().flatten())
+                    .chain(stations)
+                    .any(has_stop_duration)
+            })
+        })
+        .map(|vehicle| vehicle.type_id.clone())
+        .collect::<Vec<_>>();
+
+    if type_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9307".to_string(),
+            "stop duration on a vehicle shift place".to_string(),
+            format!(
+                "remove stopDuration from requiredStops, via and recharge station places of vehicle types: '{}'",
+                type_ids.join(", ")
+            ),
+        ))
+    }
+}
+
 /// Validates vehicles from the fleet.
 pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -486,6 +521,7 @@ pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError
         check_e9304_vehicle_has_capacity(ctx),
         check_e9305_capacity_configurations_count(ctx),
         check_e9306_vehicle_per_run_cost(ctx),
+        check_e9307_shift_place_stop_duration(ctx),
         check_e1309_fleet_has_vehicle_types(ctx),
     ])
     .map_err(From::from)

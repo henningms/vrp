@@ -258,3 +258,45 @@ fn can_detect_invalid_per_run_cost_impl(per_run: Option<Float>, expected: Option
 
     assert_eq!(result.err().map(|err| err.code), expected);
 }
+
+parameterized_test! {can_detect_stop_duration_on_shift_places, (required_stop, via, station, expected), {
+    can_detect_stop_duration_on_shift_places_impl(required_stop, via, station, expected);
+}}
+
+can_detect_stop_duration_on_shift_places! {
+    case01_none: (None, None, None, None),
+    case02_required_stop: (Some(30.), None, None, Some("E9307".to_string())),
+    case03_via: (None, Some(30.), None, Some("E9307".to_string())),
+    case04_recharge_station: (None, None, Some(30.), Some("E9307".to_string())),
+    case05_zero: (Some(0.), Some(0.), Some(0.), None),
+    case06_negative: (None, Some(-1.), None, Some("E9307".to_string())),
+}
+
+fn can_detect_stop_duration_on_shift_places_impl(
+    required_stop: Option<Float>,
+    via: Option<Float>,
+    station: Option<Float>,
+    expected: Option<String>,
+) {
+    let place = |stop_duration: Option<Float>| JobPlace { stop_duration, ..create_job_place((5., 0.), None) };
+    let problem = Problem {
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                shifts: vec![VehicleShift {
+                    required_stops: Some(vec![place(required_stop)]),
+                    via: Some(vec![place(via)]),
+                    recharges: Some(VehicleRecharges { max_distance: 100., stations: vec![place(station)] }),
+                    ..create_default_vehicle_shift()
+                }],
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+
+    let result =
+        check_e9307_shift_place_stop_duration(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+
+    assert_eq!(result.err().map(|err| err.code), expected);
+}

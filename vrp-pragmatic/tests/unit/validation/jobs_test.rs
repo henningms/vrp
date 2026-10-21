@@ -1,5 +1,6 @@
 use super::*;
 use crate::helpers::*;
+use vrp_core::prelude::Float;
 
 fn assert_result(code: &str, action: &str, result: Option<FormatError>) {
     assert_eq!(result.clone().map(|err| err.code), Some(code.to_string()));
@@ -127,4 +128,91 @@ fn can_iterate_all_task_kinds_in_validation_order() {
     let durations = job_tasks(&problem.plan.jobs[0]).map(|task| task.places[0].duration).collect::<Vec<_>>();
 
     assert_eq!(durations, vec![1., 2., 3., 4.]);
+}
+
+parameterized_test! {can_detect_invalid_stop_duration, (stop_duration, expected), {
+    can_detect_invalid_stop_duration_impl(stop_duration, expected);
+}}
+
+can_detect_invalid_stop_duration! {
+    case01: (None, None),
+    case02: (Some(0.), None),
+    case03: (Some(30.), None),
+    case04: (Some(-1.), Some("E9104".to_string())),
+    case05: (Some(Float::NAN), Some("E9104".to_string())),
+    case06: (Some(Float::INFINITY), Some("E9104".to_string())),
+}
+
+fn can_detect_invalid_stop_duration_impl(stop_duration: Option<Float>, expected: Option<String>) {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![set_stop_duration(create_delivery_job("job1", (1., 0.)), stop_duration)],
+            ..create_empty_plan()
+        },
+        ..create_empty_problem()
+    };
+
+    let result = check_e9104_stop_duration_value(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+
+    assert_eq!(result.err().map(|err| err.code), expected);
+}
+
+parameterized_test! {can_detect_stop_duration_conflict, (stop_duration, has_clustering, has_required_break, expected), {
+    can_detect_stop_duration_conflict_impl(stop_duration, has_clustering, has_required_break, expected);
+}}
+
+can_detect_stop_duration_conflict! {
+    case01: (Some(30.), false, false, None),
+    case02: (Some(30.), true, false, Some("E9105".to_string())),
+    case03: (Some(30.), false, true, Some("E9105".to_string())),
+    case04: (Some(0.), true, true, None),
+    case05: (None, true, false, None),
+}
+
+fn can_detect_stop_duration_conflict_impl(
+    stop_duration: Option<Float>,
+    has_clustering: bool,
+    has_required_break: bool,
+    expected: Option<String>,
+) {
+    let clustering = Clustering::Vicinity {
+        profile: VehicleProfile { matrix: "car".to_string(), scale: None },
+        threshold: VicinityThresholdPolicy {
+            duration: 30.,
+            distance: 16.,
+            min_shared_time: None,
+            smallest_time_window: None,
+            max_jobs_per_cluster: None,
+        },
+        visiting: VicinityVisitPolicy::Continue,
+        serving: VicinityServingPolicy::Original { parking: 300. },
+        filtering: None,
+    };
+    let required_break = VehicleBreak::Required {
+        time: VehicleRequiredBreakTime::OffsetTime { earliest: 10., latest: 10. },
+        duration: 5.,
+    };
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![set_stop_duration(create_delivery_job("job1", (1., 0.)), stop_duration)],
+            clustering: has_clustering.then_some(clustering),
+            ..create_empty_plan()
+        },
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                shifts: vec![VehicleShift {
+                    breaks: has_required_break.then(|| vec![required_break]),
+                    ..create_default_vehicle_shift()
+                }],
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+
+    let result =
+        check_e9105_stop_duration_conflict(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+
+    assert_eq!(result.err().map(|err| err.code), expected);
 }

@@ -780,6 +780,18 @@ is not defined, and `namedDemand contains unknown dimension names` when it uses 
 `job has an empty oneOf skill group` is returned when a group in a job's `skills.oneOf` has no skills. No vehicle can
 satisfy an empty group, so the job could never be assigned. To fix it, remove the empty group.
 
+### E9104
+
+`invalid stop duration` is returned when a job place's `stopDuration` is negative or not a finite number. To fix it,
+use a non-negative number, or `0` or no `stopDuration` for a place without one.
+
+### E9105
+
+`stop duration with an unsupported feature` is returned when a job place has a positive `stopDuration` and the problem
+uses vicinity clustering (`plan.clustering`) or a vehicle shift has a required break. Vicinity clustering has its own
+parking time per stop, and required breaks are not supported together with stop durations yet. To fix it, remove one
+of them.
+
 ### E9301
 
 `capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,
@@ -809,3 +821,9 @@ fix it, remove configurations which another configuration covers (no smaller in 
 
 `invalid per-run cost` is returned when a vehicle type's `costs.perRun` is negative or not a finite number. To fix it,
 use a non-negative number, or `0` or no `perRun` at all for a vehicle without a per-run cost.
+
+### E9307
+
+`stop duration on a vehicle shift place` is returned when a place in a vehicle shift's `requiredStops`, `via` or
+`recharges.stations` has a `stopDuration` other than `0`. These places have no stop duration of their own. To fix it,
+remove `stopDuration` from them.
