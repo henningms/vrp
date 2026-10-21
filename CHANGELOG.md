@@ -24,6 +24,10 @@ are already published. So, I stick to it for now.
   station place (E9307)
 * the solution checker checks stop durations: every stop's `parking` matches the stop duration it pays, its
   activities start after it, and a tour's `statistic.times.parking` sums them. Skipped with vicinity clustering
+* `FeasibilityContext::new_with_candidates`: builds a feasibility context which knows the candidate jobs, so their
+  locations are registered (as with `job_locations`) and their stop durations apply. `check_job` and `accept_job`
+  return an error for a candidate with a stop duration the context was not built with, and
+  `check_insertion_feasibility` uses the new constructor
 
 ## [1.41.0] 2026-10-21
 
