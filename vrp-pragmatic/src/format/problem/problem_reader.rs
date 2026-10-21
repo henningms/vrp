@@ -244,7 +244,7 @@ fn get_problem_blocks(
             (environment.logger)(format!("fleet index created in {}ms", duration.as_millis()).as_str());
         },
     )?;
-    let opposite_side_cells = create_opposite_side_cells(api_problem, &matrices, &coord_index).map_err(|err| {
+    let opposite_side_cells = create_opposite_side_cells(api_problem, &matrices).map_err(|err| {
         vec![FormatError::new(
             "E0002".to_string(),
             "cannot create transport costs".to_string(),

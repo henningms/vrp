@@ -97,16 +97,17 @@ pub(super) fn create_transport_costs(
 }
 
 /// Reads the matrices' opposite-side arrivals per profile index, matched to profiles like
-/// [create_transport_costs] does. Only cells into a location where some place has a `curbSide`
-/// are kept, so the count does not depend on which job at a location is served first.
+/// [create_transport_costs] does.
+///
+/// Every marked cell counts, also into a location no place of this problem prefers the curb side
+/// at: a feasibility check reads the problem without the candidate job whose new location the
+/// matrix builder marked.
 pub(super) fn create_opposite_side_cells(
     api_problem: &ApiProblem,
     matrices: &[Matrix],
-    coord_index: &CoordIndex,
 ) -> GenericResult<OppositeSideCells> {
     let matrix_profiles = get_profile_index_map(api_problem);
     let size = matrices.first().map_or(0, |matrix| (matrix.travel_times.len() as Float).sqrt().round() as usize);
-    let curb_side_locations = get_curb_side_locations(api_problem, coord_index);
 
     let cells = matrices
         .iter()
@@ -114,28 +115,11 @@ pub(super) fn create_opposite_side_cells(
         .filter_map(|(idx, matrix)| {
             let cells = matrix.opposite_side_arrivals.as_ref()?;
             let profile = matrix.profile.as_ref().and_then(|p| matrix_profiles.get(p)).cloned().unwrap_or(idx);
-            let cells =
-                cells.iter().copied().filter(|&cell| curb_side_locations.contains(&(cell % size.max(1)))).collect();
-            Some((profile, cells))
+            Some((profile, cells.clone()))
         })
         .collect::<Vec<_>>();
 
     OppositeSideCells::new(size, cells)
-}
-
-fn get_curb_side_locations(api_problem: &ApiProblem, coord_index: &CoordIndex) -> HashSet<usize> {
-    let job_places =
-        api_problem.plan.jobs.iter().flat_map(|job| job.all_tasks_iter()).flat_map(|task| task.places.iter());
-    let shift_places = api_problem.fleet.vehicles.iter().flat_map(|vehicle| vehicle.shifts.iter()).flat_map(|shift| {
-        let stops = shift.required_stops.iter().chain(shift.via.iter()).flatten();
-        stops.chain(shift.recharges.iter().flat_map(|recharges| recharges.stations.iter()))
-    });
-
-    job_places
-        .chain(shift_places)
-        .filter(|place| place.curb_side == Some(CurbSide::Prefer))
-        .filter_map(|place| coord_index.get_by_loc(&place.location))
-        .collect()
 }
 
 pub(super) fn read_fleet(

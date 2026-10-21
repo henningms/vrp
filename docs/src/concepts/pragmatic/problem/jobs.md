@@ -53,8 +53,9 @@ Each `place` consists of the following properties:
 - **times** (optional): time windows
 - **tag** (optional): a job place tag which will be returned within job's activity in result solution.
 - **curbSide** (optional): `prefer` to arrive with the place on the vehicle's curb side, the side of the road it drives
-  on, so a rider does not cross the road. It applies to the place's location, so to every job served there. Used by the
-  `minimize-opposite-side-arrivals` objective; it has no effect otherwise.
+  on, so a rider does not cross the road. It tells whoever builds the routing matrix to route arrivals at the place's
+  location on the curb side and to mark the cells which cannot be; the `minimize-opposite-side-arrivals` objective counts
+  the marked cells. The solver itself does not read it.
 
 Multiple places on single task can help model variable job location, e.g. visit customer at different location
 depending on time of the day.

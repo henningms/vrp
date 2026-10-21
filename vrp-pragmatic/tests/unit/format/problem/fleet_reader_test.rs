@@ -1,5 +1,4 @@
 use super::{create_opposite_side_cells, create_transport_costs};
-use crate::format::CoordIndex;
 use crate::format::problem::*;
 use crate::format_time;
 use crate::helpers::*;
@@ -178,18 +177,13 @@ fn can_create_transport_costs_positive_cases_impl(
 }
 
 #[test]
-fn keeps_opposite_side_cells_into_curb_side_locations_per_profile() {
-    // one job with two places: only the second prefers the curb side
-    let mut job = create_delivery_job("job", (1., 0.));
-    job.deliveries.as_mut().unwrap()[0]
-        .places
-        .push(JobPlace { curb_side: Some(CurbSide::Prefer), ..create_job_place((2., 0.), None) });
+fn reads_opposite_side_cells_per_profile_by_name() {
     let vehicle = |profile: &str| VehicleType {
         profile: create_vehicle_profile_with_name(profile),
         ..create_default_vehicle(profile)
     };
     let problem = Problem {
-        plan: Plan { jobs: vec![job], ..create_empty_plan() },
+        plan: Plan { jobs: vec![create_delivery_job("job", (1., 0.))], ..create_empty_plan() },
         fleet: Fleet {
             vehicles: vec![vehicle("car"), vehicle("truck")],
             profiles: vec![
@@ -200,25 +194,18 @@ fn keeps_opposite_side_cells_into_curb_side_locations_per_profile() {
         },
         ..create_empty_problem()
     };
-    let coord_index = CoordIndex::new(&problem);
-    let index = |location: (f64, f64)| coord_index.get_by_loc(&location.to_loc()).unwrap();
-    let (near, far, depot) = (index((1., 0.)), index((2., 0.)), index((0., 0.)));
-    let size = coord_index.unique().len();
     let with_cells = |profile: &str, cells: Vec<usize>| Matrix {
         opposite_side_arrivals: Some(cells),
-        ..matrix(Some(profile), None, 1, size * size)
+        ..matrix(Some(profile), None, 1, 4)
     };
-    // listed in the reverse order of fleet profiles
-    let matrices = vec![
-        with_cells("truck", vec![depot * size + far]),
-        with_cells("car", vec![depot * size + near, near * size + far]),
-    ];
+    // listed in the reverse order of fleet profiles: job location 0, depot 1
+    let matrices = vec![with_cells("truck", vec![1]), with_cells("car", vec![2])];
 
-    let cells = create_opposite_side_cells(&problem, &matrices, &coord_index).unwrap();
+    let cells = create_opposite_side_cells(&problem, &matrices).unwrap();
 
     let (car, truck) = (CoreProfile::new(0, None), CoreProfile::new(1, None));
-    assert!(cells.is_opposite(&car, near, far));
-    assert!(!cells.is_opposite(&car, depot, near), "near has no curb side");
-    assert!(cells.is_opposite(&truck, depot, far));
-    assert!(!cells.is_opposite(&truck, near, far));
+    assert!(cells.is_opposite(&car, 1, 0));
+    assert!(!cells.is_opposite(&car, 0, 1));
+    assert!(cells.is_opposite(&truck, 0, 1));
+    assert!(!cells.is_opposite(&truck, 1, 0));
 }

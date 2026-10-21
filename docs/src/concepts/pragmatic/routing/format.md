@@ -10,8 +10,8 @@ In general, routing matrix has the following schema:
     routing error.
 - `oppositeSideArrivals` (optional): indices into the single dimensional array of cells whose route arrives with its
     destination on the vehicle's opposite side, e.g. `[2]` for AC in the example below. Used by the
-    `minimize-opposite-side-arrivals` objective, which ignores cells into locations without a `curbSide` place and
-    cells from a location to itself. Not allowed on a matrix with a `timestamp`.
+    `minimize-opposite-side-arrivals` objective, which ignores cells from a location to itself. Not allowed on a matrix
+    with a `timestamp`.
 
 Both durations and distances are mapped to the list of unique locations generated from the problem definition. In this
 list, locations are specified in the order they defined. For example, if you have two jobs with locations A and B, one

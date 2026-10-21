@@ -82,10 +82,11 @@ fn serves_the_curb_side_order_when_opposite_side_arrivals_are_minimized() {
 }
 
 #[test]
-fn ignores_opposite_side_arrivals_at_a_place_without_curb_side() {
+fn counts_a_marked_cell_into_a_place_without_curb_side() {
+    // the matrix builder decides which cells to mark, e.g. for a candidate job the problem lacks
     let (problem, matrix) = create_problem(None, lexicographic());
 
-    assert_eq!(served_order(problem, matrix), vec!["near", "far"]);
+    assert_eq!(served_order(problem, matrix), vec!["far", "near"]);
 }
 
 #[test]
