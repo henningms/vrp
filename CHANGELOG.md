@@ -22,6 +22,8 @@ are already published. So, I stick to it for now.
 * validate job place stop durations: a negative or non-finite `stopDuration` (E9104), a positive one together with
   vicinity clustering or required breaks (E9105), and one on a vehicle shift's `requiredStops`, `via` or recharge
   station place (E9307)
+* the solution checker checks stop durations: every stop's `parking` matches the stop duration it pays, its
+  activities start after it, and a tour's `statistic.times.parking` sums them. Skipped with vicinity clustering
 
 ## [1.41.0] 2026-10-21
 

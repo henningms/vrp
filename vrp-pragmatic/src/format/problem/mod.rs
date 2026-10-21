@@ -34,7 +34,7 @@ pub(crate) mod job_reader;
 mod problem_reader;
 
 mod site_reader;
-pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props};
+pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props, read_stop_durations};
 use self::problem_reader::{map_to_problem_with_approx, map_to_problem_with_matrices};
 
 /// Reads specific problem definition from various sources.
