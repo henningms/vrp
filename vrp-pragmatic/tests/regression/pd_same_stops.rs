@@ -14,6 +14,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
             times: None,
             tag: Some(tag.to_string()),
             requested_time: None,
+            curb_side: None,
         }],
         demand: Some(vec![1]),
         named_demand: None,
@@ -65,6 +66,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
         travel_times: vec![0, 220, 2045, 152, 0, 2198, 2069, 2290, 0],
         distances: vec![0, 1612, 19774, 1155, 0, 20929, 20609, 22221, 0],
         error_codes: None,
+        opposite_side_arrivals: None,
     }];
 
     let solution = solve_with_metaheuristic_and_iterations(problem, Some(matrices), 1000);

@@ -19,6 +19,7 @@ fn create_line_task(
             times: Some(vec![vec![format_time(time_window.0 as f64), format_time(time_window.1 as f64)]]),
             tag: Some(tag.to_string()),
             requested_time: None,
+            curb_side: None,
         }],
         demand,
         named_demand: None,

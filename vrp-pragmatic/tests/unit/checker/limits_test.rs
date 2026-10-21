@@ -185,6 +185,7 @@ fn can_check_recharge_distance() {
                             times: None,
                             tag: None,
                             requested_time: None,
+                            curb_side: None,
                         }],
                     }),
                     ..create_default_vehicle_shift()

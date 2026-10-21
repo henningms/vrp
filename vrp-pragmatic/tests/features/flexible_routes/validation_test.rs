@@ -105,6 +105,7 @@ fn handles_required_stops_without_tags() {
                         times: None,
                         tag: None, // No tag
                         requested_time: None,
+                        curb_side: None,
                     }]),
                     via: None,
                 }],
@@ -155,6 +156,7 @@ fn handles_via_stops_with_tight_time_windows() {
                         ]]),
                         tag: Some("via_tight".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()
@@ -202,6 +204,7 @@ fn handles_conflicting_required_and_via_stops() {
                             times: None,
                             tag: Some("req1".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (7., 0.).to_loc(),
@@ -209,6 +212,7 @@ fn handles_conflicting_required_and_via_stops() {
                             times: None,
                             tag: Some("req2".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                     ]),
                     via: Some(vec![JobPlace {
@@ -217,6 +221,7 @@ fn handles_conflicting_required_and_via_stops() {
                         times: None,
                         tag: Some("via1".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()
@@ -276,6 +281,7 @@ fn handles_many_required_stops() {
                                 times: None,
                                 tag: Some(format!("req{}", i)),
                                 requested_time: None,
+                                curb_side: None,
                             })
                             .collect(),
                     ),
@@ -340,6 +346,7 @@ fn handles_via_stops_far_from_route() {
                         times: None,
                         tag: Some("via_far".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()
@@ -396,6 +403,7 @@ fn handles_single_required_stop() {
                         times: None,
                         tag: Some("single_req".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                     via: None,
                 }],

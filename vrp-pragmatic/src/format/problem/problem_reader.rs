@@ -244,6 +244,13 @@ fn get_problem_blocks(
             (environment.logger)(format!("fleet index created in {}ms", duration.as_millis()).as_str());
         },
     )?;
+    let opposite_side_cells = create_opposite_side_cells(api_problem, &matrices, &coord_index).map_err(|err| {
+        vec![FormatError::new(
+            "E0002".to_string(),
+            "cannot create transport costs".to_string(),
+            format!("check matrix opposite-side arrivals: '{err}'"),
+        )]
+    })?;
     // `create_transport_costs` owns the converted floating-point arrays. Release the raw integer
     // matrices before building the job index, which can itself be large for dense problems.
     drop(matrices);
@@ -305,5 +312,6 @@ fn get_problem_blocks(
         locks,
         reserved_times_index,
         ferry_transport,
+        opposite_side_cells: Arc::new(opposite_side_cells),
     })
 }

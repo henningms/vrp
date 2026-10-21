@@ -81,6 +81,14 @@ These objectives provide some extra control on job assignment:
   To trade mixing or visits against cost, combine it with a cost objective in a `multi-objective` with the `weighted-sum`
     strategy: the weight is the cost of one extra site in a run.
 
+* `minimize-opposite-side-arrivals`: minimizes arrivals on the vehicle's opposite side of the road at locations where
+    some place has a `curbSide`. Every leg into such a location along a cell listed in the matrix's
+    `oppositeSideArrivals` counts as one unit: one per arrival, however many jobs are served there. The solver does not
+    route: whoever builds the matrix decides which route each cell takes, e.g. the curb-side route unless it costs much
+    more, and lists the cells which arrive on the opposite side. A leg which crosses on a ferry is still counted by its
+    road cell. Combine it with a cost objective in a `weighted-sum` multi-objective: the weight is the cost of one
+    opposite-side arrival.
+
 
 ### Work balance objectives
 

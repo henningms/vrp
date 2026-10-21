@@ -649,6 +649,18 @@ or `plan.clustering.profile` value which is not specified in `fleet.profiles` co
 value to one specified or add a corresponding profile in profiles collection.
 
 
+#### E1506
+
+`opposite-side arrival outside the matrix` is returned when a matrix's `oppositeSideArrivals` holds a cell index that
+is not less than the size of its flattened matrix. Each index is `from * locations + to`.
+
+
+#### E1507
+
+`opposite-side arrivals on a time-dependent matrix` is returned when a matrix with a `timestamp` has
+`oppositeSideArrivals`. Opposite-side arrivals are read once per profile, so set them on matrices without a timestamp.
+
+
 ### E16xx: Objectives
 
 These errors are related to `objectives` property definition.

@@ -263,6 +263,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
                 times: Some(vec![vec![times.0, times.1]]),
                 tag: None,
                 requested_time: None,
+                curb_side: None,
             }],
             demand: None,
             named_demand: None,
@@ -326,6 +327,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
             8710, 0, 8733, 60163, 215, 9103, 23, 8725, 0, 53146, 52996, 56684, 53188, 60477, 53211, 0,
         ],
         error_codes: None,
+        opposite_side_arrivals: None,
     };
 
     let solution = solve_with_metaheuristic_and_iterations_without_check(problem, Some(vec![matrix]), 200);

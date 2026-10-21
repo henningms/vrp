@@ -115,6 +115,53 @@ fn check_e1505_profiles_exist(ctx: &ValidationContext) -> Result<(), FormatError
     }
 }
 
+/// Checks that opposite-side arrivals mark cells of their matrix.
+fn check_e1506_opposite_side_arrivals_in_matrix(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let outside = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter())
+        .filter_map(|matrix| {
+            let side = (matrix.travel_times.len() as Float).sqrt().round() as usize;
+            let cells = side * side;
+            let cell = matrix.opposite_side_arrivals.as_ref()?.iter().find(|&&cell| cell >= cells)?;
+            Some(match &matrix.profile {
+                Some(profile) => format!("{cell} of {cells} cells in profile '{profile}'"),
+                None => format!("{cell} of {cells} cells"),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if outside.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E1506".to_string(),
+            "opposite-side arrival outside the matrix".to_string(),
+            format!("check opposite-side arrival cells: {}", outside.join(", ")),
+        ))
+    }
+}
+
+/// Checks that opposite-side arrivals are set on matrices without a timestamp.
+fn check_e1507_opposite_side_arrivals_without_timestamp(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let has_time_dependent_arrivals = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter())
+        .any(|matrix| matrix.timestamp.is_some() && matrix.opposite_side_arrivals.is_some());
+
+    if has_time_dependent_arrivals {
+        Err(FormatError::new(
+            "E1507".to_string(),
+            "opposite-side arrivals on a time-dependent matrix".to_string(),
+            "remove opposite-side arrivals from matrices with a timestamp".to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Validates routing rules.
 pub fn validate_routing(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     let location_types = (ctx.coord_index.has_coordinates(), ctx.coord_index.has_indices());
@@ -126,6 +173,8 @@ pub fn validate_routing(ctx: &ValidationContext) -> Result<(), MultiFormatError>
         check_e1503_no_matrix_when_indices_used(ctx, location_types),
         check_e1504_index_size_mismatch(ctx),
         check_e1505_profiles_exist(ctx),
+        check_e1506_opposite_side_arrivals_in_matrix(ctx),
+        check_e1507_opposite_side_arrivals_without_timestamp(ctx),
     ])
     .map_err(From::from)
 }

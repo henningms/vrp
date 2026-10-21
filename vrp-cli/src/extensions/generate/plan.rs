@@ -39,6 +39,7 @@ pub(crate) fn generate_plan(
                             times: get_random_item(time_windows.as_slice(), &rnd).cloned(),
                             tag: place.tag.clone(),
                             requested_time: place.requested_time.clone(),
+                            curb_side: place.curb_side,
                         })
                         .collect(),
                     demand: if keep_original_demand {

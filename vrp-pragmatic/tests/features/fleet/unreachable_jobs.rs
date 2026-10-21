@@ -15,6 +15,7 @@ fn can_use_vehicle_with_open_end() {
         travel_times: vec![0, 1, 1, 0],
         distances: vec![0, 1, 1, 0],
         error_codes: Some(vec![0, 1, 1, 1]),
+        opposite_side_arrivals: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

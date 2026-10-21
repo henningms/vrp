@@ -85,6 +85,7 @@ fn can_detect_index_mismatch() {
         travel_times: vec![1; 4],
         distances: vec![1; 4],
         error_codes: None,
+        opposite_side_arrivals: None,
     }];
     let coord_index = CoordIndex::new(&problem);
     let ctx = ValidationContext::new(&problem, Some(&matrices), &coord_index);
@@ -113,4 +114,49 @@ fn can_detect_missing_profile() {
     let result = check_e1505_profiles_exist(&ctx);
 
     assert_eq!(result.err().map(|err| err.code), Some("E1505".to_string()));
+}
+
+fn matrix_with_opposite_side_arrivals(timestamp: Option<&str>, cells: Vec<usize>) -> Vec<Matrix> {
+    vec![Matrix {
+        profile: Some("car".to_owned()),
+        timestamp: timestamp.map(|t| t.to_string()),
+        travel_times: vec![1; 4],
+        distances: vec![1; 4],
+        error_codes: None,
+        opposite_side_arrivals: Some(cells),
+    }]
+}
+
+#[test]
+fn can_detect_opposite_side_arrival_outside_the_matrix() {
+    let problem = create_empty_problem();
+    let coord_index = CoordIndex::new(&problem);
+    let check = |cells| {
+        let matrices = matrix_with_opposite_side_arrivals(None, cells);
+        check_e1506_opposite_side_arrivals_in_matrix(&ValidationContext::new(&problem, Some(&matrices), &coord_index))
+            .err()
+            .map(|err| err.code)
+    };
+
+    assert_eq!(check(vec![1, 3]), None);
+    assert_eq!(check(vec![1, 4]), Some("E1506".to_string()));
+}
+
+#[test]
+fn can_detect_opposite_side_arrivals_on_a_time_dependent_matrix() {
+    let problem = create_empty_problem();
+    let coord_index = CoordIndex::new(&problem);
+    let check = |timestamp| {
+        let matrices = matrix_with_opposite_side_arrivals(timestamp, vec![1]);
+        check_e1507_opposite_side_arrivals_without_timestamp(&ValidationContext::new(
+            &problem,
+            Some(&matrices),
+            &coord_index,
+        ))
+        .err()
+        .map(|err| err.code)
+    };
+
+    assert_eq!(check(None), None);
+    assert_eq!(check(Some("1970-01-01T00:00:00Z")), Some("E1507".to_string()));
 }
