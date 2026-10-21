@@ -10,6 +10,15 @@ are already published. So, I stick to it for now.
 
 ### Added
 
+* job place `stopDuration`: the time a vehicle needs to stop at the place's location (pull in, park, open doors),
+  charged once per arrival at that location from a different location, on top of each activity's `duration`, so many
+  jobs served at one stop pay it once. Places at one location share the largest value; waiting for a time window
+  overlaps it, and time windows, `requestedTime` and `maxRideDuration` apply to the service start. The profile
+  `scale` does not apply to it and distances do not change. In the solution, a stop's arrival is when the vehicle
+  pulled in, its `parking` interval and `statistic.times.parking` report the stop duration, and `driving` excludes it.
+  Absent or `0` leaves solutions unchanged. In core, `StopDurations` and `StopDurationTransportCost` in
+  `models::problem` add it to travel durations. `JobPlace` has a new public field: Rust code building it with a
+  struct literal adds `stop_duration: None`
 * validate job place stop durations: a negative or non-finite `stopDuration` (E9104), a positive one together with
   vicinity clustering or required breaks (E9105), and one on a vehicle shift's `requiredStops`, `via` or recharge
   station place (E9307)
