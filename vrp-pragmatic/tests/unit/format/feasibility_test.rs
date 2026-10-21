@@ -1075,7 +1075,7 @@ fn check_job_resolves_candidate_coordinate_absent_from_problem() {
 }
 
 /// Builds a single vehicle whose shift starts at depot (0,0) with NO end (open
-/// route), capacity 10. Mirrors Ferd's open shifts (driver goes off-duty
+/// route), capacity 10. Mirrors an open shift (driver goes off-duty
 /// wherever the last drop-off is; no forced return-to-depot).
 fn open_windowed_vehicle() -> VehicleType {
     VehicleType {
@@ -1130,9 +1130,9 @@ fn open_windowed_solution_json() -> String {
 /// Regression for the OPEN-route insertion-check append false negative.
 ///
 /// Same shape as `can_append_candidate_after_last_stop_with_slack`, but the shift
-/// has NO end (open route) and the solution has NO arrival stop. This mirrors the
-/// Ferd production payload (open shifts) that produced a spurious
-/// `TIME_WINDOW_CONSTRAINT` while `/solve` placed the same candidate trivially.
+/// has NO end (open route) and the solution has NO arrival stop. This mirrors a
+/// production payload (open shifts) that produced a spurious
+/// `TIME_WINDOW_CONSTRAINT` while a full solve placed the same candidate trivially.
 ///
 /// Root cause (fixed in `initial_reader::create_core_route`): for an open route
 /// `CoreTour::new` creates only a start activity, so `tour.end()` — which returns
