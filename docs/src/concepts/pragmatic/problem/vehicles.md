@@ -19,11 +19,18 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
 {{#include ../../../../../examples/data/pragmatic/simple.basic.problem.json:104:106}}
 ```
 
-- **costs** (required): specifies how expensive is vehicle usage. It has three properties:
+- **costs** (required): specifies how expensive is vehicle usage. It has four properties:
                                      
     - **fixed**: a fixed cost per vehicle tour
     - **time**: a cost per time unit
     - **distance**: a cost per distance unit
+    - **perRun** (optional): a cost per run, i.e. per stretch of a tour while at least one pickup-delivery job is on
+      board. Each time the vehicle picks up into an empty vehicle and carries jobs until it is empty again counts
+      as one run, so jobs riding together share one run. Runs are counted on stops (consecutive activities at the
+      same location): dropping one job off and picking another up at the same stop is two runs, whatever the order
+      of the activities there, unless a third job stays on board across that stop. Only pickup-delivery jobs open a
+      run, and a job picked up and delivered at the same stop opens none. It is a part of the `minimize-cost`
+      objective and of the reported cost, and it is charged in addition to `fixed`. It must not be negative
 
 - **shifts** (required): specify one or more vehicle shift. See detailed description below.
 
@@ -110,3 +117,4 @@ Each shift can have the following properties:
 * [E1306 time and duration costs are zeros](../errors/index.md#e1306)
 * [E1307 time offset interval for break  is used with departure rescheduling](../errors/index.md#e1307)
 * [E1308 invalid vehicle reload resource](../errors/index.md#e1308)
+* [E9306 invalid per-run cost](../errors/index.md#e9306)

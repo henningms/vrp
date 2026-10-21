@@ -22,8 +22,14 @@ pub use self::route_intervals::*;
 mod reserved_time;
 pub use self::reserved_time::*;
 
+mod run_cost;
+pub use self::run_cost::*;
+
 mod schedule_update;
 pub use self::schedule_update::*;
+
+mod tour_runs;
+pub use self::tour_runs::*;
 
 mod travel_info;
 pub use self::travel_info::*;

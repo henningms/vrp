@@ -250,7 +250,7 @@ pub fn create_default_vehicle_shift_with_locations(start: (f64, f64), end: (f64,
 }
 
 pub fn create_default_vehicle_costs() -> VehicleCosts {
-    VehicleCosts { fixed: Some(10.), distance: 1., time: 1. }
+    VehicleCosts { fixed: Some(10.), distance: 1., time: 1., per_run: None }
 }
 
 pub fn create_default_vehicle_profile() -> VehicleProfile {

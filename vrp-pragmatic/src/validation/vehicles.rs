@@ -449,6 +449,25 @@ fn check_e9305_capacity_configurations_count(ctx: &ValidationContext) -> Result<
     }
 }
 
+/// Checks that a vehicle's per-run cost is a finite, non-negative number.
+fn check_e9306_vehicle_per_run_cost(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let type_ids = ctx
+        .vehicles()
+        .filter(|vehicle| vehicle.costs.per_run.is_some_and(|per_run| !per_run.is_finite() || per_run < 0.))
+        .map(|vehicle| vehicle.type_id.clone())
+        .collect::<Vec<_>>();
+
+    if type_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9306".to_string(),
+            "invalid per-run cost".to_string(),
+            format!("use a finite, non-negative perRun cost for vehicle types: '{}'", type_ids.join(", ")),
+        ))
+    }
+}
+
 /// Validates vehicles from the fleet.
 pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -466,6 +485,7 @@ pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError
         check_e9303_capacity_dimensions_count(ctx),
         check_e9304_vehicle_has_capacity(ctx),
         check_e9305_capacity_configurations_count(ctx),
+        check_e9306_vehicle_per_run_cost(ctx),
         check_e1309_fleet_has_vehicle_types(ctx),
     ])
     .map_err(From::from)

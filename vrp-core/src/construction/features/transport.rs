@@ -480,7 +480,10 @@ impl FeatureObjective for CostObjective {
     fn estimate(&self, move_ctx: &MoveContext<'_>) -> Cost {
         match move_ctx {
             MoveContext::Route { route_ctx, .. } => self.estimate_route(route_ctx),
-            MoveContext::Activity { route_ctx, activity_ctx, .. } => self.estimate_activity(route_ctx, activity_ctx),
+            MoveContext::Activity { route_ctx, activity_ctx, .. } => {
+                let cost = self.estimate_activity(route_ctx, activity_ctx);
+                estimate_route_run_cost(route_ctx, activity_ctx).map_or(cost, |run_cost| cost + run_cost)
+            }
         }
     }
 }
@@ -504,11 +507,13 @@ impl FeatureState for TransportState {
 
     fn accept_route_state(&self, route_ctx: &mut RouteContext) {
         update_route_schedule(route_ctx, self.activity.as_ref(), self.transport.as_ref());
+        update_route_runs(route_ctx);
     }
 
     fn accept_solution_state(&self, solution_ctx: &mut SolutionContext) {
         solution_ctx.routes.iter_mut().filter(|route_ctx| route_ctx.is_stale()).for_each(|route_ctx| {
             update_route_schedule(route_ctx, self.activity.as_ref(), self.transport.as_ref());
+            update_route_runs(route_ctx);
         })
     }
 }
