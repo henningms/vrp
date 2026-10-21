@@ -152,6 +152,9 @@ fn get_objective_feature_layer(
         Objective::MinimizeTours => create_minimize_tours_feature("min_tours"),
         Objective::MinimizeSiteMixing => create_site_mixing_feature("min_site_mixing"),
         Objective::MinimizeSiteVisits => create_site_visits_feature("min_site_visits"),
+        Objective::MinimizeOppositeSideArrivals => {
+            create_opposite_side_arrivals_feature("min_opposite_side_arrivals", blocks.opposite_side_cells.clone())
+        }
         Objective::MaximizeTours => create_maximize_tours_feature("max_tours"),
         Objective::MaximizeValue { breaks } => create_maximize_total_job_value_feature(
             "max_value",

@@ -26,6 +26,7 @@ fn can_visit_via_stops_in_preferred_order() {
                             times: None,
                             tag: Some("via1".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (5., 0.).to_loc(),
@@ -33,6 +34,7 @@ fn can_visit_via_stops_in_preferred_order() {
                             times: None,
                             tag: Some("via2".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (7., 0.).to_loc(),
@@ -40,6 +42,7 @@ fn can_visit_via_stops_in_preferred_order() {
                             times: None,
                             tag: Some("via3".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                     ]),
                 }],
@@ -113,6 +116,7 @@ fn via_stops_can_be_skipped_when_not_optimal() {
                             times: None,
                             tag: Some("via_far1".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (10., 50.).to_loc(), // Very far from route
@@ -120,6 +124,7 @@ fn via_stops_can_be_skipped_when_not_optimal() {
                             times: None,
                             tag: Some("via_far2".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                     ]),
                 }],
@@ -182,6 +187,7 @@ fn via_stops_prefer_on_route_locations() {
                         times: None,
                         tag: Some("via_on_route".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()
@@ -234,6 +240,7 @@ fn via_stops_work_with_multiple_shifts() {
                         times: None,
                         tag: Some("via_shift1".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()

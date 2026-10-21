@@ -7,7 +7,7 @@ use vrp_core::models::common::Duration;
 use vrp_core::prelude::Float;
 
 pub fn create_job_place(location: (f64, f64), tag: Option<String>) -> JobPlace {
-    JobPlace { times: None, location: location.to_loc(), duration: 1., tag, requested_time: None }
+    JobPlace { times: None, location: location.to_loc(), duration: 1., tag, requested_time: None, curb_side: None }
 }
 
 pub fn create_task(location: (f64, f64), tag: Option<String>) -> JobTask {
@@ -182,6 +182,7 @@ pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
                 duration: 1.,
                 tag: None,
                 requested_time: None,
+                curb_side: None,
             }],
             demand: Some(vec![1]),
             named_demand: None,
@@ -339,6 +340,7 @@ pub fn create_matrix(data: Vec<i64>) -> Matrix {
         travel_times: data.clone(),
         distances: data,
         error_codes: None,
+        opposite_side_arrivals: None,
     }
 }
 

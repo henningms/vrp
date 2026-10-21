@@ -4,6 +4,7 @@ use super::*;
 use crate::parse_time;
 use std::io::{BufReader, Read};
 use std::sync::Arc;
+use vrp_core::construction::features::OppositeSideCells;
 use vrp_core::models::Lock;
 use vrp_core::models::common::TimeWindow;
 use vrp_core::models::problem::FerryTransport;
@@ -162,6 +163,7 @@ struct ProblemBlocks {
     /// transport `transport` was wrapped around, so a later pass can re-walk a tour without
     /// needing to downcast `transport` back out of its wrapper.
     ferry_transport: Option<Arc<FerryTransport>>,
+    opposite_side_cells: Arc<OppositeSideCells>,
 }
 
 /// Mapping between dimension names and their indices.

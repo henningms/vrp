@@ -96,6 +96,32 @@ pub(super) fn create_transport_costs(
     }
 }
 
+/// Reads the matrices' opposite-side arrivals per profile index, matched to profiles like
+/// [create_transport_costs] does.
+///
+/// Every marked cell counts, also into a location no place of this problem prefers the curb side
+/// at: a feasibility check reads the problem without the candidate job whose new location the
+/// matrix builder marked.
+pub(super) fn create_opposite_side_cells(
+    api_problem: &ApiProblem,
+    matrices: &[Matrix],
+) -> GenericResult<OppositeSideCells> {
+    let matrix_profiles = get_profile_index_map(api_problem);
+    let size = matrices.first().map_or(0, |matrix| (matrix.travel_times.len() as Float).sqrt().round() as usize);
+
+    let cells = matrices
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, matrix)| {
+            let cells = matrix.opposite_side_arrivals.as_ref()?;
+            let profile = matrix.profile.as_ref().and_then(|p| matrix_profiles.get(p)).cloned().unwrap_or(idx);
+            Some((profile, cells.clone()))
+        })
+        .collect::<Vec<_>>();
+
+    OppositeSideCells::new(size, cells)
+}
+
 pub(super) fn read_fleet(
     api_problem: &ApiProblem,
     props: &ProblemProperties,
@@ -271,6 +297,7 @@ pub(super) fn create_approx_matrices_with_index(problem: &ApiProblem, coord_inde
                 travel_times: approx_data[idx].0.clone(),
                 distances: approx_data[idx].1.clone(),
                 error_codes: None,
+                opposite_side_arrivals: None,
             }
         })
         .collect()

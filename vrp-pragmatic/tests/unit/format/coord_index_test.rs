@@ -18,6 +18,7 @@ fn can_use_index_with_coordinate_an_unknown_location_types() {
                             times: None,
                             tag: None,
                             requested_time: None,
+                            curb_side: None,
                         }],
                         demand: None,
                         named_demand: None,

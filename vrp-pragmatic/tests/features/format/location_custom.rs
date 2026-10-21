@@ -35,6 +35,7 @@ fn can_use_unknown_location() {
         travel_times: vec![0, 5, 5, 0],
         distances: vec![0, 5, 5, 0],
         error_codes: None,
+        opposite_side_arrivals: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

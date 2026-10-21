@@ -8,6 +8,16 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* add the `minimize-opposite-side-arrivals` objective with an optional place `curbSide` (`prefer`) and an optional
+  matrix `oppositeSideArrivals`: the indices of cells whose route arrives with its destination on the vehicle's
+  opposite side. Every leg along such a cell counts as one unit, once per arrival. `curbSide` tells whoever builds the
+  matrix which locations to route on the curb side; the solver only counts the marked cells. Combine it with a cost
+  objective in a `weighted-sum` multi-objective to price an opposite-side arrival
+* validate that opposite-side arrivals mark cells inside their matrix (E1506) and are not set on a matrix with a
+  `timestamp` (E1507)
+
 ## [1.40.0] 2026-10-21
 
 ### Added

@@ -25,6 +25,7 @@ fn can_enforce_required_stops_order() {
                             times: None,
                             tag: Some("req1".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (5., 0.).to_loc(),
@@ -32,6 +33,7 @@ fn can_enforce_required_stops_order() {
                             times: None,
                             tag: Some("req2".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (7., 0.).to_loc(),
@@ -39,6 +41,7 @@ fn can_enforce_required_stops_order() {
                             times: None,
                             tag: Some("req3".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                     ]),
                     via: None,
@@ -98,6 +101,7 @@ fn can_handle_required_stops_with_time_windows() {
                             times: Some(vec![vec![format_time(3.), format_time(10.)]]),
                             tag: Some("req_early".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                         JobPlace {
                             location: (6., 0.).to_loc(),
@@ -105,6 +109,7 @@ fn can_handle_required_stops_with_time_windows() {
                             times: Some(vec![vec![format_time(10.), format_time(20.)]]),
                             tag: Some("req_late".to_string()),
                             requested_time: None,
+                            curb_side: None,
                         },
                     ]),
                     via: None,
@@ -160,6 +165,7 @@ fn required_stops_work_with_multiple_vehicle_ids() {
                         times: None,
                         tag: Some("req".to_string()),
                         requested_time: None,
+                        curb_side: None,
                     }]),
                     via: None,
                 }],

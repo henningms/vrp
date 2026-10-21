@@ -72,6 +72,7 @@ mod actual {
                 times: parse_tw(job.tw_start.clone(), job.tw_end.clone()).map(|tw| vec![tw]),
                 tag: None,
                 requested_time: None,
+                curb_side: None,
             }],
             demand: if job.demand != 0 { Some(vec![job.demand.abs()]) } else { None },
             named_demand: None,

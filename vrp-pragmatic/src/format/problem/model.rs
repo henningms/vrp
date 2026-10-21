@@ -129,6 +129,21 @@ pub struct JobPlace {
     /// deviation from this time rather than only serving within the time window.
     #[serde(skip_serializing_if = "Option::is_none", rename = "requestedTime")]
     pub requested_time: Option<String>,
+    /// Which side of the road the vehicle should arrive with this place on. Read by whoever builds
+    /// the routing matrix, which marks the cells into this location that arrive on the opposite
+    /// side in `oppositeSideArrivals`; the solver does not read it.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "curbSide")]
+    pub curb_side: Option<CurbSide>,
+}
+
+/// Which side of the road a vehicle should arrive with a place on.
+#[derive(Clone, Copy, Deserialize, Debug, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub enum CurbSide {
+    /// Prefer arriving with the place on the vehicle's curb side, the side of the road it drives on,
+    /// so a rider does not cross the road.
+    Prefer,
 }
 
 /// Specifies a job task.
@@ -729,6 +744,10 @@ pub enum Objective {
     /// a site counts as one unit. Pushes riders of the same site into the same run.
     MinimizeSiteVisits,
 
+    /// An objective to minimize opposite-side arrivals: every leg along a matrix cell marked in
+    /// `oppositeSideArrivals` counts as one unit.
+    MinimizeOppositeSideArrivals,
+
     /// An objective to maximize total tour amount.
     MaximizeTours,
 
@@ -869,6 +888,11 @@ pub struct Matrix {
     /// Error codes to mark unreachable locations.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_codes: Option<Vec<i64>>,
+
+    /// Indices into the flattened matrix of cells whose route arrives with its destination on the
+    /// vehicle's opposite side. Counted by the `minimize-opposite-side-arrivals` objective.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opposite_side_arrivals: Option<Vec<usize>>,
 }
 
 // endregion

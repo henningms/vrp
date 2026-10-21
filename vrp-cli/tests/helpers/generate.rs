@@ -32,6 +32,7 @@ pub fn create_empty_job_place() -> JobPlace {
         times: None,
         tag: None,
         requested_time: None,
+        curb_side: None,
     }
 }
 

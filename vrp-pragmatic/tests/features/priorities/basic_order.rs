@@ -149,6 +149,7 @@ fn can_handle_order_between_special_activities() {
                 duration: 100.,
                 tag: None,
                 requested_time: None,
+                curb_side: None,
             }],
             demand: Some(vec![1]),
             named_demand: None,

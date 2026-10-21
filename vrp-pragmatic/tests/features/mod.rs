@@ -5,6 +5,7 @@ mod breaks;
 mod capacity;
 mod clustering;
 mod compatibility;
+mod curb_side;
 mod ferry;
 mod fleet;
 mod flexible_routes;

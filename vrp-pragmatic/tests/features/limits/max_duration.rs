@@ -23,6 +23,7 @@ fn can_limit_one_job_by_max_duration() {
         travel_times: vec![1, 100, 100, 1],
         distances: vec![1, 1, 1, 1],
         error_codes: None,
+        opposite_side_arrivals: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

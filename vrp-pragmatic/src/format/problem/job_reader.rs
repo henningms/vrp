@@ -483,6 +483,7 @@ fn read_reloads(
             times: reload.times.clone(),
             tag: reload.tag.clone(),
             requested_time: None,
+            curb_side: None,
         }),
     )
 }
