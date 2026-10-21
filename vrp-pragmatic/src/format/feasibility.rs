@@ -116,7 +116,7 @@ impl FeasibilityContext {
     /// All constraint features (skills, compatibility, order, etc.) are force-enabled
     /// so that a candidate job introducing a new constraint type is still checked correctly.
     /// `extra_locations` are coordinates referenced by the candidate job(s) that
-    /// will be passed to [`check_job`]/[`accept_job`] but are NOT present in the
+    /// will be passed to [`check_job`](Self::check_job)/[`accept_job`](Self::accept_job) but are NOT present in the
     /// stored problem (e.g. a brand-new booking pickup/dropoff). They are
     /// registered in the `CoordIndex` so the candidate's locations resolve to
     /// valid matrix indices instead of `None`. The caller MUST build `matrices`
@@ -137,11 +137,15 @@ impl FeasibilityContext {
 
     /// Creates a new feasibility context which knows the candidate jobs that will be passed to
     /// [`check_job`](Self::check_job)/[`accept_job`](Self::accept_job): their locations are registered as
-    /// `extra_locations` are in [`FeasibilityContext::new`] (build `matrices` with the problem's coordinates followed by
-    /// each candidate's [`job_locations`], in order), and their places' stop durations apply.
+    /// `extra_locations` are in [`FeasibilityContext::new`] (build `matrices` with the problem's coordinates followed
+    /// by each candidate's [`job_locations`], in order), and their places' stop durations apply.
     ///
-    /// Use it whenever a candidate has a `stopDuration`. Returns an error when a candidate's stop duration is negative
-    /// or non-finite, or positive in a problem with a feature which cannot be combined with stop durations.
+    /// Use it whenever a candidate has a `stopDuration`. Every candidate's stop duration applies from build time and to
+    /// the existing routes too: a route already visiting a candidate's location pays the larger stop duration there
+    /// whether or not that candidate is accepted. So build a context with only the candidates checked together.
+    ///
+    /// Returns an error when a candidate's stop duration is negative or non-finite, or positive in a problem with a
+    /// feature which cannot be combined with stop durations.
     pub fn new_with_candidates(
         api_problem: ApiProblem,
         matrices: Vec<Matrix>,
@@ -356,7 +360,7 @@ impl FeasibilityContext {
         let has_unknown = candidate
             .all_tasks_iter()
             .flat_map(|task| task.places.iter())
-            // a custom location is outside the routing matrix, so no leg leads into it
+            // a custom location has no position, and its index lies past the matrix
             .filter(|place| !matches!(place.location, Location::Custom { .. }))
             .any(|place| place.stop_duration.is_some_and(|value| value > known_stop_duration(&place.location)));
 

@@ -168,7 +168,7 @@ pub(crate) fn read_stop_durations(
             .chain(candidate_jobs.iter())
             .flat_map(|job| job.all_tasks_iter())
             .flat_map(|task| task.places.iter())
-            // a custom location is outside the routing matrix, so no leg leads into it
+            // a custom location has no position, and its index lies past the matrix
             .filter(|place| !matches!(place.location, Location::Custom { .. }))
             .filter_map(|place| {
                 let stop_duration = place.stop_duration.filter(|&stop_duration| stop_duration > 0.)?;
