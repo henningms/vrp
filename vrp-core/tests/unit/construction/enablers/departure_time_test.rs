@@ -108,6 +108,25 @@ fn can_advance_departure_time_under_offsets_without_a_bounded_latest_arrival_imp
     assert_eq!(departure_time, Some(clock(7., 10.)));
 }
 
+parameterized_test! {can_clamp_an_advanced_departure_to_the_window_of_a_later_stop, optimize_whole_tour, {
+    can_clamp_an_advanced_departure_to_the_window_of_a_later_stop_impl(optimize_whole_tour);
+}}
+
+can_clamp_an_advanced_departure_to_the_window_of_a_later_stop! {
+    case01_whole_tour: true,
+    case02_first_leg: false,
+}
+
+fn can_clamp_an_advanced_departure_to_the_window_of_a_later_stop_impl(optimize_whole_tour: bool) {
+    // leaving at 07:10 reaches the first stop at 07:28, long before it closes, but the second one at 07:38
+    let (transport, mut route_ctx) = create_route_to_two_stops();
+    update_route_schedule(&mut route_ctx, &SimpleActivityCost::default(), transport.as_ref());
+
+    let departure_time = try_advance_departure_time(&route_ctx, transport.as_ref(), optimize_whole_tour);
+
+    assert_eq!(departure_time, Some(clock(7., 7.)));
+}
+
 #[test]
 fn can_clamp_an_advanced_departure_to_a_whole_second_which_still_catches_the_sailing() {
     let (transport, mut route_ctx) = create_route_over_a_ferry();
@@ -177,6 +196,19 @@ fn create_route_to_one_stop(window_start: Timestamp, has_offsets: bool) -> (Arc<
     }
 
     (transport, create_route_from_the_depot(vec![stop(1, window_start, clock(7., 25.))]))
+}
+
+/// Leaves the depot at 06:00 for a stop ten minutes away which opens at 07:20 and closes at 09:00, then for a second
+/// stop ten minutes on which closes at 07:35. The leg to the first stop takes eight minutes longer from 07:00.
+fn create_route_to_two_stops() -> (Arc<dyn TransportCost>, RouteContext) {
+    let matrix = vec![0., 600., 600., 600., 0., 600., 600., 600., 0.];
+    let transport = create_matrix_transport_cost(vec![MatrixData::new(0, None, matrix.clone(), matrix)]).unwrap();
+    let cells = vec![0, 1, 0, 0, 0, 0, 0, 0, 0];
+    let offsets = DurationOffsets::new(3, vec![(0, cells, vec![rush_hour_offset_profile()])]).unwrap();
+    let transport: Arc<dyn TransportCost> = Arc::new(DurationOffsetTransportCost::new(transport, Arc::new(offsets)));
+    let stops = vec![stop(1, clock(7., 20.), clock(9., 0.)), stop(2, clock(7., 30.), clock(7., 35.))];
+
+    (transport, create_route_from_the_depot(stops))
 }
 
 /// Leaves the depot (0) at 06:00 for one stop (3) open from 07:40 to 08:00, over a crossing from quay A (1) to quay B
