@@ -312,6 +312,36 @@ fn append_check_agrees_with_full_solve_on_windowed_route_with_waiting() {
 }
 
 #[test]
+fn checks_a_candidate_with_the_duration_offset_on_its_leg() {
+    // the windowed route serves job1 (1, 0) by 110 and job2 (2, 0) by 210; a candidate at (3, 0) open [300, 302]
+    // fits only after job2 (leave 201, arrive 202, wait). A constant 200 s offset on job2 -> candidate arrives at 402.
+    let jobs = vec![
+        create_delivery_job_with_times("job1", (1.0, 0.0), vec![(100, 110)], 1.),
+        create_delivery_job_with_times("job2", (2.0, 0.0), vec![(200, 210)], 1.),
+    ];
+    let candidate = create_delivery_job_with_times("candidate", (3.0, 0.0), vec![(300, 302)], 1.);
+    let extra = job_locations(&candidate);
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![windowed_vehicle(1000)], jobs, &extra);
+    let coord_index = CoordIndex::new_with_extra_locations(&problem, &extra);
+    let index = |location: (f64, f64)| coord_index.get_by_loc(&location.to_loc()).unwrap();
+    let delayed = set_duration_offsets(
+        matrix.clone(),
+        vec![create_duration_offset_profile(&[(0., 200.)])],
+        &[(index((2., 0.)), index((3., 0.)), 1)],
+    );
+    let check = |matrix: Matrix| {
+        FeasibilityContext::new(problem.clone(), vec![matrix], &windowed_solution_json(), &extra)
+            .expect("cannot build context")
+            .check_job(&candidate)
+            .expect("check_job failed")
+            .is_feasible
+    };
+
+    assert!(check(matrix));
+    assert!(!check(delayed));
+}
+
+#[test]
 fn can_check_feasible_insertion_with_capacity() {
     // One vehicle with capacity 10, one job already assigned
     let (problem, matrix) = build_problem_and_matrix(
