@@ -196,8 +196,8 @@ fn get_schedules(route_ctx: &RouteContext) -> Vec<Schedule> {
     route_ctx.route().tour.all_activities().map(|activity| activity.schedule.clone()).collect()
 }
 
-/// Answers a lookup keyed by arrival two seconds short of the forward one, more than a backoff to whole seconds absorbs.
-/// Only the leg it names is short.
+/// Answers a lookup keyed by arrival two seconds short of the forward one, more than a backoff to whole seconds
+/// absorbs. Only the leg it names is short.
 struct ShortArrivalLookup(Arc<dyn TransportCost>, (Location, Location));
 
 impl TransportCost for ShortArrivalLookup {
