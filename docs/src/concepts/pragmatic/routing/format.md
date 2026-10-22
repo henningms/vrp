@@ -85,6 +85,11 @@ The rules:
 - Distances and time-independent estimates keep the base values.
 - A cell into or out of a custom location gets no offset, and unreachable cells stay unreachable.
 - With ferry crossings, each drive on the way takes the offset at its own departure.
+- A vehicle's `limits.maxDuration` is checked approximately: an insertion counts the change in the legs next to the new
+    job, not the delay later legs take on when they move into a band. Departure rescheduling, which starts a tour
+    later to cut waiting, keeps every stop on time but can make the tour longer when it moves legs into a band (setting
+    `shift.start.latest` equal to `shift.start.earliest` turns it off). A tour can therefore exceed `maxDuration`,
+    which the solution checker reports.
 - Duration offsets cannot be combined with a matrix `timestamp` (E9504) or with required breaks (E9505).
 - A matrix without `durationOffsets`, or one where every cell is `0`, is solved as before.
 - Tools which read `travelTimes` directly, such as the ride quality analysis, use the base durations.
