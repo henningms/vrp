@@ -7,7 +7,7 @@ use std::sync::Arc;
 use vrp_core::construction::features::OppositeSideCells;
 use vrp_core::models::Lock;
 use vrp_core::models::common::TimeWindow;
-use vrp_core::models::problem::{FerryTransport, StopDurations};
+use vrp_core::models::problem::{DurationOffsets, FerryTransport, StopDurations};
 use vrp_core::prelude::{ActivityCost, Fleet as CoreFleet, Jobs as CoreJobs, TransportCost};
 use vrp_core::utils::*;
 
@@ -165,6 +165,8 @@ struct ProblemBlocks {
     ferry_transport: Option<Arc<FerryTransport>>,
     /// `None` when no job place has a positive stop duration, so `transport` is not wrapped.
     stop_durations: Option<Arc<StopDurations>>,
+    /// `None` when no matrix cell has a duration offset, so `transport` is not wrapped.
+    duration_offsets: Option<Arc<DurationOffsets>>,
     opposite_side_cells: Arc<OppositeSideCells>,
 }
 

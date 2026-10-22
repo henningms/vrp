@@ -15,8 +15,8 @@ use vrp_core::construction::enablers::*;
 use vrp_core::models::Extras;
 use vrp_core::models::common::{TimeOffset, TimeSpan, TimeWindow};
 use vrp_core::models::problem::{
-    FerryAwareTransportCost, FerryTransport, FerryTransportExtraProperty, StopDurationTransportCost, StopDurations,
-    StopDurationsExtraProperty,
+    DurationOffsetTransportCost, DurationOffsetsExtraProperty, FerryAwareTransportCost, FerryTransport,
+    FerryTransportExtraProperty, StopDurationTransportCost, StopDurations, StopDurationsExtraProperty,
 };
 use vrp_core::solver::processing::{ClusterConfigExtraProperty, ReservedTimesExtraProperty};
 
@@ -84,6 +84,7 @@ pub(crate) fn map_to_problem_with_props(
         reserved_times_index,
         ferry_transport,
         stop_durations,
+        duration_offsets,
         ..
     } = blocks;
 
@@ -101,6 +102,10 @@ pub(crate) fn map_to_problem_with_props(
 
     if let Some(stop_durations) = stop_durations {
         extras.set_stop_durations(stop_durations);
+    }
+
+    if let Some(duration_offsets) = duration_offsets {
+        extras.set_duration_offsets(duration_offsets);
     }
 
     Ok(CoreProblem { fleet, jobs, locks, goal, activity, transport, extras: Arc::new(extras) })
@@ -264,7 +269,7 @@ pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matri
 
 fn get_problem_blocks(
     api_problem: &ApiProblem,
-    matrices: Vec<Matrix>,
+    mut matrices: Vec<Matrix>,
     coord_index: Arc<CoordIndex>,
     job_index: &mut JobIndex,
     problem_props: &ProblemProperties,
@@ -275,6 +280,16 @@ fn get_problem_blocks(
 
     let fleet = Arc::new(read_fleet(api_problem, problem_props, &coord_index)?);
     let reserved_times_index = read_reserved_times_index(api_problem, &fleet);
+
+    let duration_offsets = create_duration_offsets(api_problem, &mut matrices)
+        .map_err(|err| {
+            vec![FormatError::new(
+                "E0002".to_string(),
+                "cannot create transport costs".to_string(),
+                format!("check matrix duration offsets: '{err}'"),
+            )]
+        })?
+        .map(Arc::new);
 
     let transport = Timer::measure_duration_with_callback(
         || {
@@ -290,6 +305,21 @@ fn get_problem_blocks(
             (environment.logger)(format!("fleet index created in {}ms", duration.as_millis()).as_str());
         },
     )?;
+    // innermost: an offset belongs to the road, so the ferry's road parts, reserved time and stop durations all see it
+    let transport: Arc<dyn TransportCost> = match &duration_offsets {
+        Some(duration_offsets) => {
+            // a table built for another matrix side would put its offsets on the wrong cells
+            debug_assert!(
+                (0..matrices.len())
+                    .filter_map(|index| duration_offsets.cells(index))
+                    .all(|cells| cells.len() == transport.size() * transport.size()),
+                "duration offsets do not cover the {0}x{0} routing matrix",
+                transport.size()
+            );
+            Arc::new(DurationOffsetTransportCost::new(transport, duration_offsets.clone()))
+        }
+        None => transport,
+    };
     let opposite_side_cells = create_opposite_side_cells(api_problem, &matrices).map_err(|err| {
         vec![FormatError::new(
             "E0002".to_string(),
@@ -366,6 +396,7 @@ fn get_problem_blocks(
         reserved_times_index,
         ferry_transport,
         stop_durations,
+        duration_offsets,
         opposite_side_cells: Arc::new(opposite_side_cells),
     })
 }

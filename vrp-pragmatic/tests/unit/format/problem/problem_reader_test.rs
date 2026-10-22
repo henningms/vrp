@@ -2,7 +2,7 @@ use super::*;
 use crate::format_time;
 use crate::helpers::*;
 use vrp_core::models::common::Profile;
-use vrp_core::models::problem::TravelTime;
+use vrp_core::models::problem::{DurationOffsetsExtraProperty, TravelTime};
 use vrp_core::models::solution::Route;
 
 #[test]
@@ -206,4 +206,148 @@ fn adds_the_stop_duration_outside_the_ferry_aware_transport() {
     let road = core_problem.extras.get_ferry_transport().expect("ferry transport published").road.clone();
     assert_eq!(road.duration_approx(&profile, 1, 0), 100.);
     assert_eq!(core_problem.transport.duration_approx(&profile, 1, 0), 37.);
+}
+
+/// A job at (100, 0) is location 0 and the depot at (0, 0) location 1.
+fn create_one_job_problem() -> Problem {
+    Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: create_default_fleet(),
+        ..create_empty_problem()
+    }
+}
+
+fn route_of(core_problem: &CoreProblem, profile_index: usize) -> Route {
+    let actor = core_problem.fleet.actors.iter().find(|actor| actor.vehicle.profile.index == profile_index).unwrap();
+    Route { actor: actor.clone(), tour: Default::default() }
+}
+
+#[test]
+fn leaves_the_transport_unwrapped_without_duration_offsets_or_with_zero_cells() {
+    let problem = create_one_job_problem();
+    let none = create_matrix_from_problem(&problem);
+    let zero = set_duration_offsets(none.clone(), vec![create_rush_hour_offset_profile()], &[]);
+
+    for matrix in [none, zero] {
+        let core_problem = (problem.clone(), vec![matrix]).read_pragmatic().expect("valid problem");
+
+        assert!(core_problem.extras.get_duration_offsets().is_none());
+        // a zero-cell wrapper would return the base too, so only this sees one
+        assert!(!core_problem.transport.has_duration_offsets());
+    }
+}
+
+#[test]
+fn adds_duration_offsets_at_the_departure_inside_the_transport() {
+    let problem = create_one_job_problem();
+    let matrix = set_duration_offsets(
+        create_matrix_from_problem(&problem),
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    let (transport, route) = (&core_problem.transport, route_of(&core_problem, 0));
+    assert_eq!(transport.duration(&route, 1, 0, TravelTime::Departure(clock(6., 56.))), 340.);
+    assert_eq!(transport.duration(&route, 1, 0, TravelTime::Departure(clock(7., 30.))), 580.);
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Departure(clock(7., 30.))), 100.);
+    assert_eq!(transport.duration_approx(&Profile::default(), 1, 0), 100.);
+    assert_eq!(transport.distance(&route, 1, 0, TravelTime::Departure(clock(7., 30.))), 100.);
+    assert!(core_problem.extras.get_duration_offsets().is_some());
+}
+
+#[test]
+fn reads_duration_offsets_into_the_road_of_the_ferry_aware_transport() {
+    let problem = Problem {
+        ferry_crossings: Some(vec![create_ferry_crossing("crossing1", (1., 0.), (99., 0.))]),
+        ..create_one_job_problem()
+    };
+    let coord_index = CoordIndex::new(&problem);
+    let depot = coord_index.get_by_loc(&Location::new_coordinate(0., 0.)).unwrap();
+    let job = coord_index.get_by_loc(&Location::new_coordinate(100., 0.)).unwrap();
+    let matrix = set_duration_offsets(
+        create_matrix_from_problem(&problem),
+        vec![create_rush_hour_offset_profile()],
+        &[(depot, job, 1)],
+    );
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    let road = core_problem.extras.get_ferry_transport().expect("ferry transport published").road.clone();
+    let route = route_of(&core_problem, 0);
+    assert_eq!(road.duration(&route, depot, job, TravelTime::Departure(clock(7., 30.))), 580.);
+}
+
+#[test]
+fn applies_duration_offsets_only_to_vehicles_of_their_matrix_profile() {
+    let problem = Problem {
+        fleet: Fleet {
+            vehicles: vec![
+                create_default_vehicle_type(),
+                VehicleType { profile: create_vehicle_profile_with_name("truck"), ..create_default_vehicle("truck") },
+            ],
+            profiles: vec![
+                MatrixProfile { name: "car".to_string(), speed: None },
+                MatrixProfile { name: "truck".to_string(), speed: None },
+            ],
+            ..create_default_fleet()
+        },
+        ..create_one_job_problem()
+    };
+    let car = create_matrix_from_problem(&problem);
+    let truck = set_duration_offsets(
+        Matrix { profile: Some("truck".to_string()), ..car.clone() },
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+
+    // the truck matrix comes first, so its position is not its profile index
+    let core_problem = (problem, vec![truck, car]).read_pragmatic().expect("valid problem");
+
+    let departure = TravelTime::Departure(clock(7., 30.));
+    assert_eq!(core_problem.transport.duration(&route_of(&core_problem, 1), 1, 0, departure), 580.);
+    assert_eq!(core_problem.transport.duration(&route_of(&core_problem, 0), 1, 0, departure), 100.);
+}
+
+#[test]
+fn moves_the_offset_cells_into_the_problem_without_copying() {
+    let problem = create_one_job_problem();
+    let matrix = set_duration_offsets(
+        create_matrix_from_problem(&problem),
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+    let pointer = matrix.duration_offsets.as_ref().unwrap().cells.as_ptr();
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    assert_eq!(core_problem.extras.get_duration_offsets().unwrap().cells(0).unwrap().as_ptr(), pointer);
+}
+
+#[test]
+fn refuses_duration_offsets_which_bypass_validation_as_e0002() {
+    let problem = create_one_job_problem();
+    let matrix = create_matrix_from_problem(&problem);
+    let unparsable =
+        DurationOffsetProfile { points: vec![DurationOffsetPoint { time: "07:00".to_string(), offset: 0. }] };
+    let falling = create_duration_offset_profile(&[(clock(7., 0.), 600.), (clock(7., 5.), 0.)]);
+    let short = MatrixDurationOffsets { profiles: vec![create_rush_hour_offset_profile()], cells: vec![1] };
+
+    for (matrix, cause) in [
+        (set_duration_offsets(matrix.clone(), vec![unparsable], &[(1, 0, 1)]), "cannot parse date"),
+        (set_duration_offsets(matrix.clone(), vec![falling], &[(1, 0, 1)]), "falls faster than time"),
+        (Matrix { duration_offsets: Some(short), ..matrix }, "have 1 cells, expected 4"),
+    ] {
+        let props = get_problem_properties(&problem, std::slice::from_ref(&matrix));
+        let coord_index = Arc::new(CoordIndex::new(&problem));
+
+        let result = get_problem_blocks(&problem, vec![matrix], coord_index, &mut JobIndex::default(), &props, &[]);
+
+        let errors = result.err().expect("refused").errors;
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, "E0002");
+        assert!(errors[0].action.starts_with("check matrix duration offsets: "), "{}", errors[0].action);
+        assert!(errors[0].action.contains(cause), "{}", errors[0].action);
+    }
 }
