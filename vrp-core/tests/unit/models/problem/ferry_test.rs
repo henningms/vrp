@@ -37,6 +37,11 @@ fn zero_road(_from: Location, _to: Location) -> Duration {
     0.
 }
 
+/// A road read at a travel time, from one that does not depend on time.
+fn at_any_time(road: impl Fn(Location, Location) -> Duration) -> impl Fn(Location, Location, TravelTime) -> Duration {
+    move |from, to, _| road(from, to)
+}
+
 #[test]
 fn sailings_returns_the_list_for_the_requested_direction() {
     // distinct dep/arr per direction so swapping the match arms in `sailings` fails this test
@@ -117,12 +122,16 @@ fn best_departure_boundary_examples_from_the_brief() {
 
     // reaching the quay at 12:50 with a 10 minute buffer needs dep >= 13:00, so it catches the
     // 13:00 sailing exactly (boundary is inclusive), not the preceding 12:30 one.
-    let reaching_1250 = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("reachable");
+    let reaching_1250 =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), Duration::INFINITY)
+            .expect("reachable");
     assert_eq!(reaching_1250.sailing_dep, min(780.));
 
     // one minute later, the same buffer pushes the earliest-boardable time past 13:00, so the
     // vehicle misses it and catches the next sailing, 13:30, instead.
-    let reaching_1251 = best_departure(&index, &zero_road, 0, 3, min(771.), Duration::INFINITY).expect("reachable");
+    let reaching_1251 =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(771.), Duration::INFINITY)
+            .expect("reachable");
     assert_eq!(reaching_1251.sailing_dep, min(810.));
 }
 
@@ -131,7 +140,8 @@ fn best_departure_returns_none_when_all_sailings_have_departed() {
     let index = FerryIndex::new(vec![half_hourly_crossing()]);
 
     // departing at 15:00 pushes the earliest-boardable time past the last sailing (15:00).
-    let result = best_departure(&index, &zero_road, 0, 3, min(900.), Duration::INFINITY);
+    let result =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(900.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -143,7 +153,7 @@ fn best_departure_returns_none_when_approach_road_is_unreachable() {
     let road =
         |from: Location, _to: Location| -> Duration { if from == 0 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_departure(&index, &road, 0, 3, min(770.), Duration::INFINITY);
+    let result = best_departure(&index, Some(&at_any_time(&road)), &road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -170,7 +180,9 @@ fn best_departure_prefers_the_crossing_with_the_smaller_total() {
     );
     let index = FerryIndex::new(vec![slow, fast]);
 
-    let result = best_departure(&index, &zero_road, 0, 5, min(770.), Duration::INFINITY).expect("reachable");
+    let result =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 5, min(770.), Duration::INFINITY)
+            .expect("reachable");
 
     assert_eq!(result.crossing_idx, 1);
     assert_eq!(result.total_duration, min(30.)); // 10 min wait + 20 min crossing
@@ -191,7 +203,16 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     // deadline (e.g. exactly 13:50) would make the round trip hold by accident, since there'd be
     // only one departure consistent with catching that sailing at all.
     let arrival = min(840.);
-    let path = best_arrival(&index, &seven_minute_approach_road, 0, 3, arrival, Duration::INFINITY).expect("reachable");
+    let path = best_arrival(
+        &index,
+        Some(&at_any_time(&seven_minute_approach_road)),
+        &seven_minute_approach_road,
+        0,
+        3,
+        arrival,
+        Duration::INFINITY,
+    )
+    .expect("reachable");
 
     assert_eq!(path.sailing_dep, min(810.));
     assert_eq!(path.arrive_quay_at, min(800.)); // 13:20 - mirrors the 12:50 departure boundary example
@@ -202,8 +223,16 @@ fn best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round
     assert_ne!(path.depart_at, path.arrive_quay_at);
     assert_eq!(path.total_duration, min(47.)); // arrival - depart_at, includes the ten minutes of slack
 
-    let departure_path = best_departure(&index, &seven_minute_approach_road, 0, 3, path.depart_at, Duration::INFINITY)
-        .expect("reachable");
+    let departure_path = best_departure(
+        &index,
+        Some(&at_any_time(&seven_minute_approach_road)),
+        &seven_minute_approach_road,
+        0,
+        3,
+        path.depart_at,
+        Duration::INFINITY,
+    )
+    .expect("reachable");
 
     // the round trip criterion is the same sailing, not equal totals: best_departure's total is
     // the journey's own length, which legitimately differs from best_arrival's arrival-anchored
@@ -241,7 +270,8 @@ fn best_arrival_prefers_the_crossing_that_allows_leaving_latest_not_the_shortest
 
     // deadline 13:35: short_infrequent forces leaving by 11:00 (depart_at); long_frequent's
     // 12:35 sailing (13:35 arrival) allows leaving 95 minutes later.
-    let result = best_arrival(&index, &zero_road, 0, 5, min(815.), Duration::INFINITY).expect("reachable");
+    let result = best_arrival(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 5, min(815.), Duration::INFINITY)
+        .expect("reachable");
 
     assert_eq!(result.crossing_idx, 1);
     assert_eq!(result.depart_at, min(755.)); // 12:35, not short_infrequent's 11:00
@@ -266,7 +296,8 @@ fn best_arrival_finds_the_latest_departure_even_when_arrivals_are_not_in_departu
 
     // two sailings meet the 500 deadline (dep 200 -> arr 300, and dep 400 -> arr 450); the
     // later-departing one must win.
-    let result = best_arrival(&index, &zero_road, 0, 3, 500., Duration::INFINITY).expect("reachable");
+    let result = best_arrival(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, 500., Duration::INFINITY)
+        .expect("reachable");
 
     assert_eq!(result.sailing_dep, 400.);
 }
@@ -284,7 +315,8 @@ fn best_arrival_requires_egress_to_meet_the_deadline_not_just_the_sailing() {
     // `sailing.arr + egress <= arrival`) would consider 13:50 <= 14:10 and wrongly pick the
     // later-departing 13:30 sailing instead - still monotone in the deadline, so both property
     // tests would miss it too.
-    let result = best_arrival(&index, &road, 0, 3, min(850.), Duration::INFINITY).expect("reachable");
+    let result =
+        best_arrival(&index, Some(&at_any_time(&road)), &road, 0, 3, min(850.), Duration::INFINITY).expect("reachable");
 
     assert_eq!(result.sailing_dep, min(780.)); // 13:00, not the 13:30 a missing egress term would pick
 }
@@ -300,7 +332,7 @@ fn best_arrival_returns_none_when_approach_road_is_unreachable() {
     let road =
         |from: Location, _to: Location| -> Duration { if from == 0 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_arrival(&index, &road, 0, 3, min(800.), Duration::INFINITY);
+    let result = best_arrival(&index, Some(&at_any_time(&road)), &road, 0, 3, min(800.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -318,7 +350,7 @@ fn best_departure_returns_none_when_egress_road_is_unreachable() {
     let road =
         |_from: Location, to: Location| -> Duration { if to == 3 { UNREACHABLE_DURATION_THRESHOLD } else { 0. } };
 
-    let result = best_departure(&index, &road, 0, 3, min(770.), Duration::INFINITY);
+    let result = best_departure(&index, Some(&at_any_time(&road)), &road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -336,7 +368,8 @@ fn best_departure_prune_recheck_keeps_the_true_best_not_whichever_cleared_the_bo
         FerryCrossing::new("far-but-fast".to_string(), 3, 4, min(20.), 0., vec![sailing(min(60.), min(80.))], vec![]);
     let index = FerryIndex::new(vec![near_but_slow, far_but_fast]);
 
-    let result = best_departure(&index, &zero_road, 0, 5, min(0.), Duration::INFINITY).expect("reachable");
+    let result = best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 5, min(0.), Duration::INFINITY)
+        .expect("reachable");
 
     assert_eq!(result.crossing_idx, 0);
     assert_eq!(result.total_duration, min(40.));
@@ -355,7 +388,8 @@ fn best_departure_skips_a_degenerate_crossing_whose_quays_are_the_same_location(
     );
     let index = FerryIndex::new(vec![degenerate]);
 
-    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY);
+    let result =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -373,8 +407,9 @@ fn best_departure_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY)
-        .expect("normal crossing still reachable");
+    let result =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), Duration::INFINITY)
+            .expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
 }
@@ -392,7 +427,7 @@ fn best_arrival_skips_a_degenerate_crossing_whose_quays_are_the_same_location() 
     );
     let index = FerryIndex::new(vec![degenerate]);
 
-    let result = best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY);
+    let result = best_arrival(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(800.), Duration::INFINITY);
 
     assert!(result.is_none());
 }
@@ -410,8 +445,8 @@ fn best_arrival_skips_degenerate_crossing_but_still_finds_a_normal_one() {
     );
     let index = FerryIndex::new(vec![degenerate, half_hourly_crossing()]);
 
-    let result =
-        best_arrival(&index, &zero_road, 0, 3, min(800.), Duration::INFINITY).expect("normal crossing still reachable");
+    let result = best_arrival(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(800.), Duration::INFINITY)
+        .expect("normal crossing still reachable");
 
     assert_eq!(result.crossing_idx, 1);
 }
@@ -424,12 +459,15 @@ fn best_departure_respects_a_seeded_road_bound() {
     // best_departure_boundary_examples_from_the_brief); a bound at or below that must prune to
     // `None` without ever finding it - a caller could not otherwise tell "pruned before looking"
     // apart from "found but rejected", and only the former is cheap.
-    assert!(best_departure(&index, &zero_road, 0, 3, min(770.), 1799.).is_none());
+    assert!(best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), 1799.).is_none());
 
     // a bound strictly above the true best still finds the exact path an unseeded search would -
     // seeding must never reject a path that legitimately beats the bound.
-    let unseeded = best_departure(&index, &zero_road, 0, 3, min(770.), Duration::INFINITY).expect("reachable");
-    let seeded = best_departure(&index, &zero_road, 0, 3, min(770.), 1801.).expect("reachable");
+    let unseeded =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), Duration::INFINITY)
+            .expect("reachable");
+    let seeded =
+        best_departure(&index, Some(&at_any_time(&zero_road)), &zero_road, 0, 3, min(770.), 1801.).expect("reachable");
     assert_eq!(seeded, unseeded);
     assert_eq!(seeded.total_duration, 1800.);
 }
@@ -440,11 +478,39 @@ fn best_arrival_respects_a_seeded_road_bound() {
 
     // the true best here is min(47.) = 2820s (see
     // best_arrival_picks_the_latest_sailing_that_still_makes_the_deadline_and_round_trips).
-    assert!(best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), 2819.).is_none());
+    assert!(
+        best_arrival(
+            &index,
+            Some(&at_any_time(&seven_minute_approach_road)),
+            &seven_minute_approach_road,
+            0,
+            3,
+            min(840.),
+            2819.
+        )
+        .is_none()
+    );
 
-    let unseeded =
-        best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), Duration::INFINITY).expect("reachable");
-    let seeded = best_arrival(&index, &seven_minute_approach_road, 0, 3, min(840.), 2821.).expect("reachable");
+    let unseeded = best_arrival(
+        &index,
+        Some(&at_any_time(&seven_minute_approach_road)),
+        &seven_minute_approach_road,
+        0,
+        3,
+        min(840.),
+        Duration::INFINITY,
+    )
+    .expect("reachable");
+    let seeded = best_arrival(
+        &index,
+        Some(&at_any_time(&seven_minute_approach_road)),
+        &seven_minute_approach_road,
+        0,
+        3,
+        min(840.),
+        2821.,
+    )
+    .expect("reachable");
     assert_eq!(seeded, unseeded);
     assert_eq!(seeded.total_duration, min(47.));
 }
@@ -538,12 +604,18 @@ fn best_departure_is_fifo_leaving_later_never_arrives_earlier() {
         let t1 = rng.random_range((span_start - 600.0)..=(span_end + 600.0));
         let t2 = t1 + rng.random_range(0.0..900.0);
 
-        let arrival_time =
-            |t: Timestamp| match best_departure(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, t, Duration::INFINITY)
-            {
-                Some(path) => t + path.total_duration,
-                None => Duration::INFINITY,
-            };
+        let arrival_time = |t: Timestamp| match best_departure(
+            &index,
+            Some(&at_any_time(&road)),
+            &road,
+            RANDOM_CASE_FROM,
+            RANDOM_CASE_TO,
+            t,
+            Duration::INFINITY,
+        ) {
+            Some(path) => t + path.total_duration,
+            None => Duration::INFINITY,
+        };
 
         assert!(arrival_time(t1) <= arrival_time(t2) + 1e-6, "leaving later must not arrive earlier: t1={t1} t2={t2}");
     }
@@ -566,11 +638,18 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
         let a1 = rng.random_range((span_start - 600.0)..=(span_end + 9600.0));
         let a2 = a1 + rng.random_range(0.0..900.0);
 
-        let latest_departure =
-            |a: Timestamp| match best_arrival(&index, &road, RANDOM_CASE_FROM, RANDOM_CASE_TO, a, Duration::INFINITY) {
-                Some(path) => path.depart_at,
-                None => Duration::NEG_INFINITY,
-            };
+        let latest_departure = |a: Timestamp| match best_arrival(
+            &index,
+            Some(&at_any_time(&road)),
+            &road,
+            RANDOM_CASE_FROM,
+            RANDOM_CASE_TO,
+            a,
+            Duration::INFINITY,
+        ) {
+            Some(path) => path.depart_at,
+            None => Duration::NEG_INFINITY,
+        };
 
         assert!(
             latest_departure(a1) <= latest_departure(a2) + 1e-6,
@@ -581,7 +660,10 @@ fn best_arrival_is_monotone_in_the_deadline_a_later_deadline_never_forces_an_ear
 
 mod ferry_aware_transport_cost {
     use super::*;
-    use crate::models::problem::SimpleTransportCost;
+    use crate::helpers::models::problem::rush_hour_offset_profile;
+    use crate::models::problem::{
+        DurationOffsetTransportCost, DurationOffsets, MatrixData, SimpleTransportCost, create_matrix_transport_cost,
+    };
 
     /// Builds a 4-location `SimpleTransportCost` (0=from, 1=quayA, 2=quayB, 3=to) with a fixed
     /// approach (from->quayA, 300s/53) and egress (quayB->to, 600s/89) leg and the given direct
@@ -640,6 +722,65 @@ mod ferry_aware_transport_cost {
 
     fn test_route() -> Route {
         Route { actor: test_actor_with_profile(0), tour: Default::default() }
+    }
+
+    /// Gives one cell of the 4-location test matrix the rush hour offset.
+    fn rush_hour_on(cell: usize, inner: Arc<dyn TransportCost>) -> Arc<dyn TransportCost> {
+        let mut cells = vec![0; 16];
+        cells[cell] = 1;
+        let offsets = DurationOffsets::new(4, vec![(0, cells, vec![rush_hour_offset_profile()])]).unwrap();
+
+        Arc::new(DurationOffsetTransportCost::new(inner, Arc::new(offsets)))
+    }
+
+    #[test]
+    fn takes_the_offset_on_the_drive_after_the_sailing_at_disembarkation() {
+        // leave 06:20, quay A at 06:25, sail at 07:00, disembark at 07:20, then 600 s plus 480 s from quay B
+        let inner = rush_hour_on(2 * 4 + 3, ferry_test_transport(10_000., 10_000.));
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(420.), min(440.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+
+        let duration = ferry_aware.duration(&test_route(), 0, 3, TravelTime::Departure(min(380.)));
+
+        assert_eq!(duration, 300. + 2100. + 1200. + 1080.);
+    }
+
+    #[test]
+    fn times_the_drive_to_the_quay_by_the_boarding_deadline_for_an_arrival() {
+        // the 09:10 sailing boards by 09:00 (09:10 - 600 s); reaching quay A by 09:00 in the band means leaving at
+        // 08:47 (300 s + 480 s). The quay deadline binds, not the 10:00 arrival: leaving at 08:47 arrives at 09:40
+        let inner = rush_hour_on(1, ferry_test_transport(10_000., 10_000.));
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(550.), min(570.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let path = ferry_aware.resolve(&route, 0, 3, TravelTime::Arrival(min(600.))).expect("a crossing");
+        let forward = ferry_aware.resolve(&route, 0, 3, TravelTime::Departure(min(527.))).expect("a crossing");
+
+        assert_eq!((path.arrive_quay_at, path.depart_at), (min(550.) - min(10.), min(527.)));
+        assert_eq!(ferry_aware.duration(&route, 0, 3, TravelTime::Arrival(min(600.))), min(600.) - min(527.));
+        assert_eq!(forward.arrive_quay_at, min(540.));
+        assert_eq!(min(527.) + ferry_aware.duration(&route, 0, 3, TravelTime::Departure(min(527.))), min(580.));
+    }
+
+    #[test]
+    fn keeps_every_road_part_at_the_outer_time_without_duration_offsets() {
+        // timestamped road: quay B -> to takes 2880 s at 06:20 and 3240 s at 07:20; without offsets both parts stay
+        // anchored at the departure, as before
+        let matrix = |timestamp: Timestamp, egress: Duration| {
+            let mut durations = vec![0.; 16];
+            durations[1] = 300.;
+            durations[2 * 4 + 3] = egress;
+            durations[3] = 100_000.;
+            MatrixData::new(0, Some(timestamp), durations.clone(), durations)
+        };
+        let inner = create_matrix_transport_cost(vec![matrix(min(380.), 2880.), matrix(min(440.), 3240.)]).unwrap();
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(420.), min(440.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+
+        let duration = ferry_aware.duration(&test_route(), 0, 3, TravelTime::Departure(min(380.)));
+
+        assert_eq!(duration, 300. + 2100. + 1200. + 2880.);
     }
 
     #[test]
