@@ -294,6 +294,23 @@ fn names_the_profile_and_both_points_when_an_offset_falls_faster_than_time() {
     assert!(err.action.contains(NINE) && err.action.contains(NINE_EIGHT), "{}", err.action);
 }
 
+#[test]
+fn refuses_a_fall_a_rounding_error_faster_than_time_and_asks_for_whole_seconds() {
+    // 65.18 - 5.18 is 60.00000000000001 in floating point, a hair more than the 60 s between the points
+    let matrices =
+        matrix_with_duration_offsets(None, vec![(NINE, 65.18), ("1970-01-01T09:01:00Z", 5.18)], vec![0, 1, 0, 0]);
+
+    let err = check_duration_offsets(
+        &matrices,
+        &create_empty_problem(),
+        check_e9503_duration_offsets_fall_at_most_one_second_per_second,
+    )
+    .unwrap();
+
+    assert_eq!(err.code, "E9503");
+    assert!(err.action.contains("checked exactly (whole seconds are exact)"), "{}", err.action);
+}
+
 parameterized_test! {can_detect_duration_offsets_on_a_time_dependent_matrix, (timestamp, cells, expected), {
     can_detect_duration_offsets_on_a_time_dependent_matrix_impl(timestamp, cells, expected);
 }}

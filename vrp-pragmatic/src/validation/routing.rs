@@ -292,7 +292,10 @@ fn check_e9503_duration_offsets_fall_at_most_one_second_per_second(ctx: &Validat
         Err(FormatError::new(
             "E9503".to_string(),
             "duration offset profile falls faster than time".to_string(),
-            format!("let each offset fall at most one second per second: {}", details.join(", ")),
+            format!(
+                "let each offset fall at most one second per second, checked exactly (whole seconds are exact): {}",
+                details.join(", ")
+            ),
         ))
     }
 }

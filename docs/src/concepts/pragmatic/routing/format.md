@@ -77,7 +77,8 @@ The rules:
     place, i.e. after the service there. The offset itself is not scaled.
 - Lookups keyed by arrival are exact: the leg uses the latest departure which still arrives in time.
 - Offsets are non-negative and may fall at most one second per second (E9503), so leaving later never means arriving
-    earlier.
+    earlier. The fall is checked exactly, without a tolerance: profiles built from whole seconds are exact, while
+    fractional offsets can miss by a rounding error.
 - Distances and time-independent estimates keep the base values.
 - A cell into or out of a custom location gets no offset, and unreachable cells stay unreachable.
 - With ferry crossings, each drive on the way takes the offset at its own departure.

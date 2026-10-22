@@ -845,6 +845,10 @@ which is not RFC3339, times which do not strictly increase, or an `offset` which
 neighbouring points, so that leaving later would arrive earlier. The message names the profile, counting from 1 as
 `cells` does, and the two points. To fix it, ease the offset out over at least as many seconds as it drops.
 
+The check is exact, without a tolerance, so a fractional offset which falls exactly one second per second on paper can
+still be refused: `65.18` falling to `5.18` over 60 s drops `60.00000000000001` s in floating point. Offsets and times
+in whole seconds are always exact.
+
 ### E9504
 
 `duration offsets on a time-dependent matrix` is returned when a matrix with a `timestamp` has `durationOffsets` with
