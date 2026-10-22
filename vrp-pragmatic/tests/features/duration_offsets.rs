@@ -3,6 +3,8 @@ use crate::format::solution::*;
 use crate::format::{CoordIndex, Location};
 use crate::helpers::*;
 use crate::{format_time, parse_time};
+use vrp_core::models::problem::TravelTime;
+use vrp_core::models::solution::Route;
 
 /// A delivery without service time at matrix index `index`, served within `window`.
 fn create_job_at_index(id: &str, index: usize, window: (f64, f64)) -> Job {
@@ -154,4 +156,31 @@ fn starts_a_tour_no_later_than_a_rising_delay_allows() {
 
     let arrival = parse_time(&solution.tours[0].stops[1].schedule().arrival);
     assert!((clock(7., 20.)..=clock(7., 25.)).contains(&arrival), "arrival at {arrival}");
+}
+
+#[test]
+fn reads_the_documented_duration_offsets_example() {
+    let json = std::fs::read_to_string("../examples/data/pragmatic/basics/duration-offsets.basic.matrix.json").unwrap();
+    let matrix: Matrix = serde_json::from_str(&json).unwrap();
+    // jobs at index 0 and 1, an open shift starting at index 2
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                create_job_at_index("job1", 0, (clock(0., 0.), clock(23., 0.))),
+                create_job_at_index("job2", 1, (clock(0., 0.), clock(23., 0.))),
+            ],
+            ..create_empty_plan()
+        },
+        fleet: create_fleet(create_shift_start(Location::Reference { index: 2 }, 0., None), None),
+        ..create_empty_problem()
+    };
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+    let actor = core_problem.fleet.actors.first().expect("one vehicle").clone();
+    let route = Route { actor, tour: Default::default() };
+    let at = |time: &str| core_problem.transport.duration(&route, 0, 1, TravelTime::Departure(parse_time(time)));
+
+    assert_eq!(at("2026-10-22T06:56:00Z"), 840.);
+    assert_eq!(at("2026-10-22T07:30:00Z"), 1080.);
+    assert_eq!(at("2026-10-22T09:04:00Z"), 840.);
+    assert_eq!(at("2026-10-22T09:10:00Z"), 600.);
 }
