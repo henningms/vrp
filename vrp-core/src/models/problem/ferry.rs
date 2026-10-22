@@ -467,12 +467,16 @@ pub fn best_arrival(
 pub struct FerryAwareTransportCost {
     inner: Arc<dyn TransportCost>,
     index: Arc<FerryIndex>,
+    /// Read from `inner` once rather than on every lookup.
+    has_duration_offsets: bool,
 }
 
 impl FerryAwareTransportCost {
     /// Creates a new ferry-aware wrapper around `inner`, considering every crossing in `index`.
     pub fn new(inner: Arc<dyn TransportCost>, index: Arc<FerryIndex>) -> Self {
-        Self { inner, index }
+        let has_duration_offsets = inner.has_duration_offsets();
+
+        Self { inner, index, has_duration_offsets }
     }
 
     /// Resolves the ferry crossing (if any) that beats the road for this query - the exact rule
@@ -511,7 +515,7 @@ impl FerryAwareTransportCost {
         // which does not depend on time (offsets on a timestamped matrix are refused). Without
         // offsets every part is read once, at the outer leg's time: a timestamped matrix has no
         // floor to prune with, and a time-independent one gains nothing from a second read.
-        let path = if self.inner.has_duration_offsets() {
+        let path = if self.has_duration_offsets {
             let road = |a: Location, b: Location, at: TravelTime| self.inner.duration(route, a, b, at);
             let road_floor = |a: Location, b: Location| self.inner.duration_approx(&route.actor.vehicle.profile, a, b);
             match travel_time {
@@ -598,7 +602,7 @@ impl TransportCost for FerryAwareTransportCost {
     }
 
     fn has_duration_offsets(&self) -> bool {
-        self.inner.has_duration_offsets()
+        self.has_duration_offsets
     }
 }
 

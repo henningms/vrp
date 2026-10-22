@@ -664,6 +664,7 @@ mod ferry_aware_transport_cost {
     use crate::models::problem::{
         DurationOffsetTransportCost, DurationOffsets, MatrixData, SimpleTransportCost, create_matrix_transport_cost,
     };
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// Builds a 4-location `SimpleTransportCost` (0=from, 1=quayA, 2=quayB, 3=to) with a fixed
     /// approach (from->quayA, 300s/53) and egress (quayB->to, 600s/89) leg and the given direct
@@ -810,6 +811,57 @@ mod ferry_aware_transport_cost {
         let duration = ferry_aware.duration(&test_route(), 0, 3, TravelTime::Departure(min(380.)));
 
         assert_eq!(duration, 300. + 2100. + 1200. + 2880.);
+    }
+
+    /// A road which counts how often it is asked whether it has duration offsets.
+    struct OffsetQueryCountingRoad {
+        inner: Arc<dyn TransportCost>,
+        queries: AtomicUsize,
+    }
+
+    impl TransportCost for OffsetQueryCountingRoad {
+        fn duration_approx(&self, profile: &Profile, from: Location, to: Location) -> Duration {
+            self.inner.duration_approx(profile, from, to)
+        }
+
+        fn distance_approx(&self, profile: &Profile, from: Location, to: Location) -> Distance {
+            self.inner.distance_approx(profile, from, to)
+        }
+
+        fn duration(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Duration {
+            self.inner.duration(route, from, to, travel_time)
+        }
+
+        fn distance(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Distance {
+            self.inner.distance(route, from, to, travel_time)
+        }
+
+        fn size(&self) -> usize {
+            self.inner.size()
+        }
+
+        fn has_duration_offsets(&self) -> bool {
+            self.queries.fetch_add(1, Ordering::Relaxed);
+            self.inner.has_duration_offsets()
+        }
+    }
+
+    #[test]
+    fn asks_the_road_whether_it_has_duration_offsets_once() {
+        let road = Arc::new(OffsetQueryCountingRoad {
+            inner: ferry_test_transport(10_000., 10_000.),
+            queries: AtomicUsize::new(0),
+        });
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(405.), min(425.)));
+        let ferry_aware = FerryAwareTransportCost::new(road.clone(), index);
+        let route = test_route();
+
+        for travel_time in [TravelTime::Departure(min(380.)), TravelTime::Arrival(min(600.)), TravelTime::Departure(0.)]
+        {
+            ferry_aware.duration(&route, 0, 3, travel_time);
+        }
+
+        assert_eq!(road.queries.load(Ordering::Relaxed), 1);
     }
 
     #[test]
