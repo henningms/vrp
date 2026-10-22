@@ -64,9 +64,10 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
                 // the solution format only stores whole-second timestamps, so a fractional real
                 // departure (e.g. 3.5s, from a non-integer service duration or profile scale)
                 // round-trips through `departure` as its truncation - harmless for a road
-                // duration, which does not depend on when you leave, but not for a ferry, whose
-                // sailing choice is a step function of departure: resolving at the truncated
-                // instant can catch a sailing the solver's real, later departure actually missed.
+                // duration without offsets, which then does not depend on when you leave, but not
+                // for a ferry, whose sailing choice is a step function of departure: resolving at
+                // the truncated instant can catch a sailing the solver's real, later departure
+                // actually missed.
                 // Truncation only ever rounds down by less than a second, so the true departure
                 // lies in `[departure, departure + 1)`; trying both endpoints and keeping whichever
                 // reproduces the reported arrival disambiguates the sailing without having to
