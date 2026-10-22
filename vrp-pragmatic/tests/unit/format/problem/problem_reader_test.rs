@@ -351,3 +351,22 @@ fn refuses_duration_offsets_which_bypass_validation_as_e0002() {
         assert!(errors[0].action.contains(cause), "{}", errors[0].action);
     }
 }
+
+#[test]
+fn refuses_duration_offsets_for_more_locations_than_error_codes_leave_as_e0002() {
+    // validation compares neither with the other: one errorCodes entry leaves a routing matrix of one location, while
+    // the four cells cover the two of travelTimes
+    let problem = create_one_job_problem();
+    let matrix = set_duration_offsets(
+        Matrix { error_codes: Some(vec![0]), ..create_matrix_from_problem(&problem) },
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+
+    let errors = (problem, vec![matrix]).read_pragmatic().expect_err("refused").errors;
+
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "E0002");
+    assert!(errors[0].action.starts_with("check matrix duration offsets: "), "{}", errors[0].action);
+    assert!(errors[0].action.contains("have 4 cells, but the routing matrix has 1"), "{}", errors[0].action);
+}

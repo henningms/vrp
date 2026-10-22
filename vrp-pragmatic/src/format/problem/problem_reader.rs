@@ -281,14 +281,15 @@ fn get_problem_blocks(
     let fleet = Arc::new(read_fleet(api_problem, problem_props, &coord_index)?);
     let reserved_times_index = read_reserved_times_index(api_problem, &fleet);
 
+    let duration_offsets_error = |cause: String| {
+        vec![FormatError::new(
+            "E0002".to_string(),
+            "cannot create transport costs".to_string(),
+            format!("check matrix duration offsets: '{cause}'"),
+        )]
+    };
     let duration_offsets = create_duration_offsets(api_problem, &mut matrices)
-        .map_err(|err| {
-            vec![FormatError::new(
-                "E0002".to_string(),
-                "cannot create transport costs".to_string(),
-                format!("check matrix duration offsets: '{err}'"),
-            )]
-        })?
+        .map_err(|err| duration_offsets_error(err.to_string()))?
         .map(Arc::new);
 
     let transport = Timer::measure_duration_with_callback(
@@ -308,14 +309,18 @@ fn get_problem_blocks(
     // innermost: an offset belongs to the road, so the ferry's road parts, reserved time and stop durations all see it
     let transport: Arc<dyn TransportCost> = match &duration_offsets {
         Some(duration_offsets) => {
-            // a table built for another matrix side would put its offsets on the wrong cells
-            debug_assert!(
-                (0..matrices.len())
-                    .filter_map(|index| duration_offsets.cells(index))
-                    .all(|cells| cells.len() == transport.size() * transport.size()),
-                "duration offsets do not cover the {0}x{0} routing matrix",
-                transport.size()
-            );
+            // the cells cover `travelTimes`, while a shorter `errorCodes` leaves the transport fewer locations, and
+            // a table built for another side would put its offsets on the wrong legs
+            let cells = transport.size() * transport.size();
+            let mismatch = (0..matrices.len())
+                .filter_map(|index| duration_offsets.cells(index))
+                .map(<[u16]>::len)
+                .find(|&len| len != cells);
+            if let Some(len) = mismatch {
+                let cause = format!("duration offsets have {len} cells, but the routing matrix has {cells}");
+                return Err(duration_offsets_error(cause).into());
+            }
+
             Arc::new(DurationOffsetTransportCost::new(transport, duration_offsets.clone()))
         }
         None => transport,
