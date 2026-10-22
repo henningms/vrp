@@ -1,5 +1,5 @@
 use crate::models::common::{Distance, Duration, Location, Profile, Timestamp};
-use crate::models::problem::{ActivityCost, SimpleActivityCost, TransportCost, TravelTime};
+use crate::models::problem::{ActivityCost, OffsetProfile, SimpleActivityCost, TransportCost, TravelTime};
 use crate::models::solution::{Activity, Route};
 use rosomaxa::prelude::Float;
 use std::ops::ControlFlow;
@@ -38,6 +38,17 @@ impl TestTransportCost {
 
 pub fn fake_routing(from: Location, to: Location) -> Float {
     to.abs_diff(from) as Float
+}
+
+/// Returns the time of day in seconds since midnight.
+pub fn clock(hours: Float, minutes: Float) -> Timestamp {
+    hours * 3600. + minutes * 60.
+}
+
+/// An eight minute delay from 07:00 to 09:00, building up from 06:52 and clearing by 09:08.
+pub fn rush_hour_offset_profile() -> OffsetProfile {
+    OffsetProfile::new(vec![(clock(6., 52.), 0.), (clock(7., 0.), 480.), (clock(9., 0.), 480.), (clock(9., 8.), 0.)])
+        .unwrap()
 }
 
 #[derive(Default)]

@@ -1,7 +1,8 @@
 use crate::construction::heuristics::{RouteContext, RouteState};
 use crate::models::OP_START_MSG;
-use crate::models::common::{Distance, Duration, Schedule, Timestamp};
+use crate::models::common::{Distance, Duration, Location, Schedule, Timestamp};
 use crate::models::problem::{ActivityCost, TransportCost, TravelTime};
+use crate::models::solution::{Activity, Route};
 use rosomaxa::prelude::Float;
 use rosomaxa::utils::UnwrapValue;
 
@@ -60,20 +61,54 @@ fn update_schedules(route_ctx: &mut RouteContext, activity: &dyn ActivityCost, t
         (start.place.location, start.schedule.departure)
     };
 
-    (1..route_ctx.route().tour.total()).fold(init, |(loc, dep), activity_idx| {
-        let (location, arrival, departure) = {
+    (1..route_ctx.route().tour.total()).fold(init, |previous, activity_idx| {
+        let (location, schedule) = {
             let a = route_ctx.route().tour.get(activity_idx).unwrap();
-            let location = a.place.location;
-            let arrival = dep + transport.duration(route_ctx.route(), loc, location, TravelTime::Departure(dep));
-            let departure = activity.estimate_departure(route_ctx.route(), a, arrival).unwrap_value();
 
-            (location, arrival, departure)
+            (a.place.location, schedule_after(route_ctx.route(), activity, transport, previous, a))
         };
+        let departure = schedule.departure;
 
-        route_ctx.route_mut().tour.get_mut(activity_idx).unwrap().schedule = Schedule::new(arrival, departure);
+        route_ctx.route_mut().tour.get_mut(activity_idx).unwrap().schedule = schedule;
 
         (location, departure)
     });
+}
+
+/// Tells whether a tour which leaves its start at `departure` reaches every later activity by the end of its time
+/// window. The tour end's window closes with the shift.
+pub(crate) fn is_on_time_when_leaving_at(
+    route: &Route,
+    activity: &dyn ActivityCost,
+    transport: &dyn TransportCost,
+    departure: Timestamp,
+) -> bool {
+    let start = route.tour.start().unwrap();
+
+    route
+        .tour
+        .all_activities()
+        .skip(1)
+        .try_fold((start.place.location, departure), |previous, a| {
+            let schedule = schedule_after(route, activity, transport, previous, a);
+
+            (schedule.arrival <= a.place.time.end).then_some((a.place.location, schedule.departure))
+        })
+        .is_some()
+}
+
+/// Schedules `a` when the vehicle leaves `from` for it at `departure`.
+fn schedule_after(
+    route: &Route,
+    activity: &dyn ActivityCost,
+    transport: &dyn TransportCost,
+    (from, departure): (Location, Timestamp),
+    a: &Activity,
+) -> Schedule {
+    let arrival = departure + transport.duration(route, from, a.place.location, TravelTime::Departure(departure));
+    let departure = activity.estimate_departure(route, a, arrival).unwrap_value();
+
+    Schedule::new(arrival, departure)
 }
 
 fn update_states(route_ctx: &mut RouteContext, activity: &dyn ActivityCost, transport: &dyn TransportCost) {

@@ -175,9 +175,9 @@ fn can_count_the_delivery_stop_duration_in_the_ride_impl(limit: f64, is_assigned
     assert_eq!(solution.unassigned.is_none(), is_assigned);
 }
 
-#[test]
-fn solves_identically_with_a_zero_or_no_stop_duration() {
-    let create_problem = |stop_duration| Problem {
+/// The problem both parity tests solve.
+fn create_parity_problem(stop_duration: Option<f64>) -> Problem {
+    Problem {
         plan: Plan {
             jobs: vec![
                 set_stop_duration(create_delivery_job_with_times("job1", (1., 0.), vec![(0, 10)], 1.), stop_duration),
@@ -188,17 +188,55 @@ fn solves_identically_with_a_zero_or_no_stop_duration() {
         },
         fleet: create_default_fleet(),
         ..create_empty_problem()
-    };
+    }
+}
+
+#[test]
+fn solves_identically_with_a_zero_or_no_stop_duration() {
     let solve_problem = |problem: Problem| {
         let matrix = create_matrix_from_problem(&problem);
         solve_with_cheapest_insertion(problem, Some(vec![matrix]))
     };
 
-    let zero = solve_problem(create_problem(Some(0.)));
-    let none = solve_problem(create_problem(None));
+    let zero = solve_problem(create_parity_problem(Some(0.)));
+    let none = solve_problem(create_parity_problem(None));
 
     assert_eq!(zero.tours, none.tours);
     assert_eq!(zero.statistic, none.statistic);
+}
+
+type Invariants = (String, Vec<String>, Vec<(String, std::collections::BTreeSet<String>)>);
+
+/// What a solution means, without the order among equally good optima: the cost, the unassigned jobs and, per
+/// vehicle, the jobs it serves.
+fn solution_invariants(solution: &Solution) -> Invariants {
+    let unassigned = solution.unassigned.iter().flatten().map(|job| job.job_id.clone()).collect();
+    let tours = solution
+        .tours
+        .iter()
+        .map(|tour| {
+            let jobs = tour.stops.iter().flat_map(|stop| stop.activities()).map(|activity| activity.job_id.clone());
+            (tour.vehicle_id.clone(), jobs.collect())
+        })
+        .collect();
+
+    (format!("{:.3}", solution.statistic.cost), unassigned, tours)
+}
+
+#[test]
+fn solves_equivalently_without_duration_offsets_or_with_zero_cells() {
+    // A full solve with the default heuristic, whose post-processing moves departures; cheapest insertion runs none.
+    // The problem has several optima of equal cost and the repeatable generator is per thread and not reset between
+    // solves, so equally good solutions may differ in job order: the comparison is on what a solution means.
+    let problem = create_parity_problem(None);
+    let matrix = create_matrix_from_problem(&problem);
+    // a profile on at every time, so that a zero cell read as an offset would change the solution
+    let zero_cells = set_duration_offsets(matrix.clone(), vec![create_duration_offset_profile(&[(0., 100.)])], &[]);
+
+    let none = solve_with_metaheuristic(problem.clone(), Some(vec![matrix]));
+    let zero = solve_with_metaheuristic(problem, Some(vec![zero_cells]));
+
+    assert_eq!(solution_invariants(&zero), solution_invariants(&none));
 }
 
 /// Sixteen jobs of 5 at (10, 0) with a stop duration of 30, as in `serves_many_jobs_at_one_stop_paying_the_stop_duration_once`.

@@ -12,6 +12,8 @@ In general, routing matrix has the following schema:
     destination on the vehicle's opposite side, e.g. `[2]` for AC in the example below. Used by the
     `minimize-opposite-side-arrivals` objective, which ignores cells from a location to itself. Not allowed on a matrix
     with a `timestamp`.
+- `durationOffsets` (optional): delays keyed by departure time on chosen cells, e.g. a rush-hour queue on a bridge; see
+    [Duration offsets](#duration-offsets) below.
 
 Both durations and distances are mapped to the list of unique locations generated from the problem definition. In this
 list, locations are specified in the order they defined. For example, if you have two jobs with locations A and B, one
@@ -59,6 +61,45 @@ Routing matrix example:
 
 If you have already your routing matrix, you can use location indices instead of geocoordinates as described
 [here](../routing/index.md#location-format).
+
+## Duration offsets
+
+Some roads are slow only at certain times, e.g. a queue on a bridge or at a junction during rush hour. Modelling this
+with one timestamped matrix per period repeats the whole matrix for a few slow cells. Instead, a single matrix can carry
+`durationOffsets`: delays which depend on the departure time and apply only to the chosen cells.
+
+- `profiles`: a list of delay profiles. A profile has `points`, each with an RFC3339 `time` and an `offset` in seconds.
+    The offset is linear between points and held at the first point's value before it and the last point's value after
+    it. A band on several dates is simply more points.
+- `cells`: one unsigned 16-bit entry per matrix cell, in the same order as `travelTimes`. `0` means no offset, `k` means
+    `profiles[k - 1]`. A cell costs two bytes whatever the number of points.
+
+The rules:
+
+- A leg takes its base travel time times the vehicle profile `scale`, plus the offset at the departure from the previous
+    place, i.e. after the service there. The offset itself is not scaled.
+- Lookups keyed by arrival are exact: the leg uses the latest departure which still arrives in time.
+- Offsets are non-negative and may fall at most one second per second (E9503), so leaving later never means arriving
+    earlier. The fall is checked exactly, without a tolerance: profiles built from whole seconds are exact, while
+    fractional offsets can miss by a rounding error.
+- Distances and time-independent estimates keep the base values.
+- A cell into or out of a custom location gets no offset, and unreachable cells stay unreachable.
+- With ferry crossings, each drive on the way takes the offset at its own departure.
+- A vehicle's `limits.maxDuration` is checked approximately: an insertion counts the change in the legs next to the new
+    job, not the delay later legs take on when they move into a band. Departure rescheduling, which starts a tour
+    later to cut waiting, keeps every stop on time but can make the tour longer when it moves legs into a band (setting
+    `shift.start.latest` equal to `shift.start.earliest` turns it off). A tour can therefore exceed `maxDuration`,
+    which the solution checker reports.
+- Duration offsets cannot be combined with a matrix `timestamp` (E9504) or with required breaks (E9505).
+- A matrix without `durationOffsets`, or one where every cell is `0`, is solved as before.
+- Tools which read `travelTimes` directly, such as the ride quality analysis, use the base durations.
+
+In the example below, cell `0 -> 1` has a queue which builds up from 06:52 to 07:00 and eases out from 09:00 to 09:08.
+Its 600 s base duration costs +240 s when leaving at 06:56, +480 s at 07:30, +240 s at 09:04 and nothing at 09:10:
+
+```json
+{{#include ../../../../../examples/data/pragmatic/basics/duration-offsets.basic.matrix.json}}
+```
 
 
 ## Experimental

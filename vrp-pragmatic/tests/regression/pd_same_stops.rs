@@ -68,6 +68,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
         distances: vec![0, 1612, 19774, 1155, 0, 20929, 20609, 22221, 0],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     }];
 
     let solution = solve_with_metaheuristic_and_iterations(problem, Some(matrices), 1000);

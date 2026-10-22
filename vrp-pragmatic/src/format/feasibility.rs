@@ -124,6 +124,9 @@ impl FeasibilityContext {
     /// [`job_locations`]); pass `&[]` when every candidate coordinate is already
     /// part of the problem.
     ///
+    /// `matrices` may carry `durationOffsets`: give the cells to and from the extra locations their profiles like any
+    /// other cell.
+    ///
     /// Use [`FeasibilityContext::new_with_candidates`] instead whenever a candidate has a `stopDuration`: this
     /// context knows only the stop durations of the problem's own jobs.
     pub fn new(

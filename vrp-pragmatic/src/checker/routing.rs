@@ -31,6 +31,7 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
     // absent for a problem with no ferry crossings, so a plain matrix-only problem checks exactly
     // as it did before this feature existed - the raw-matrix path below is untouched for it.
     let ferry_transport = context.core_problem.extras.get_ferry_transport();
+    let has_offsets = context.core_problem.extras.get_duration_offsets().is_some();
 
     context.solution.tours.iter().try_for_each::<_, GenericResult<_>>(|tour| {
         let profile = context.get_vehicle_profile(&tour.vehicle_id)?;
@@ -63,13 +64,38 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
                 // the solution format only stores whole-second timestamps, so a fractional real
                 // departure (e.g. 3.5s, from a non-integer service duration or profile scale)
                 // round-trips through `departure` as its truncation - harmless for a road
-                // duration, which does not depend on when you leave, but not for a ferry, whose
-                // sailing choice is a step function of departure: resolving at the truncated
-                // instant can catch a sailing the solver's real, later departure actually missed.
+                // duration without offsets, which then does not depend on when you leave, but not
+                // for a ferry, whose sailing choice is a step function of departure: resolving at
+                // the truncated instant can catch a sailing the solver's real, later departure
+                // actually missed.
                 // Truncation only ever rounds down by less than a second, so the true departure
                 // lies in `[departure, departure + 1)`; trying both endpoints and keeping whichever
                 // reproduces the reported arrival disambiguates the sailing without having to
                 // recover the real fractional departure, which this format cannot represent.
+                //
+                // A duration offset rising faster than one second per second can move the arrival by more than
+                // the tolerance within that second, so neither endpoint need reproduce the written arrival. Leaving
+                // later never arrives earlier, so the real arrival lies between the two endpoints' arrivals.
+                if has_offsets {
+                    let arrive = |departure: Float| {
+                        let travel_time = TravelTime::Departure(departure);
+                        let duration = transport.duration(route, from_idx, to_idx, travel_time);
+                        (departure + duration, transport.distance(route, from_idx, to_idx, travel_time))
+                    };
+
+                    let candidates = [arrive(departure as Float), arrive(departure as Float + 1.)];
+                    let (a, b) = (candidates[0].0, candidates[1].0);
+                    // rounding can invert the two by an ulp, and `f64::clamp` panics on unordered bounds
+                    let accepted = parse_time(&to.time.arrival).clamp(a.min(b), a.max(b));
+                    // the candidate, road or crossing, whose arrival was accepted; `min_by` keeps the first on a tie
+                    let (_, distance) = candidates
+                        .into_iter()
+                        .min_by(|x, y| (x.0 - accepted).abs().total_cmp(&(y.0 - accepted).abs()))
+                        .expect("two candidates");
+
+                    return Ok((distance as i64, (accepted - departure as Float) as i64));
+                }
+
                 let expected_arrival = parse_time(&to.time.arrival) as i64;
                 let resolve = |departure: Float| {
                     let travel_time = TravelTime::Departure(departure);
@@ -84,6 +110,14 @@ fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
                     .min_by_key(|&(_, duration)| (departure + duration - expected_arrival).abs())
                     .expect("two candidates");
                 return Ok((distance, duration));
+            }
+
+            // the written departure stands for a real one in `[departure, departure + 1)`, whose arrival lies between
+            // the arrivals from both ends
+            if let Some((lo, hi)) = context.get_offset_leg_arrivals(&profile, from_idx, to_idx, departure as Float)? {
+                let (distance, _) = context.get_matrix_data(&profile, from_idx, to_idx)?;
+                let accepted = parse_time(&to.time.arrival).clamp(lo, hi);
+                return Ok((distance, (accepted - departure as Float) as i64));
             }
 
             context.get_matrix_data(&profile, from_idx, to_idx)
@@ -184,6 +218,7 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
     };
 
     let road = ferry_transport.road.as_ref();
+    let has_offsets = context.core_problem.extras.get_duration_offsets().is_some();
     let ferry_legs = context.solution.ferry_legs.as_deref().unwrap_or(&[]);
 
     // every entry a tour's own point-stop walk below matches gets removed; anything left over
@@ -244,7 +279,14 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
                 None => {
                     let road_duration = road.duration(&route, from_idx, to_idx, TravelTime::Departure(from_departure));
                     let actual_elapsed = to_arrival - from_departure - break_dwell;
-                    if (actual_elapsed - road_duration).abs() > 1. {
+                    let is_unexplained = if has_offsets {
+                        let next = from_departure + 1.;
+                        let next_arrival = next + road.duration(&route, from_idx, to_idx, TravelTime::Departure(next));
+                        is_outside(to_arrival - break_dwell, from_departure + road_duration, next_arrival)
+                    } else {
+                        (actual_elapsed - road_duration).abs() > 1.
+                    };
+                    if is_unexplained {
                         return Err(format!(
                             "tour '{}' leg {from_stop_index}->{to_stop_index} elapsed {actual_elapsed}s, which the \
                              road alone ({road_duration}s) cannot explain, but no ferryLeg was reported for it",
@@ -265,6 +307,7 @@ fn check_ferry_legs_rules(context: &CheckerContext) -> GenericResult<()> {
                         from_departure,
                         to_arrival,
                         break_dwell,
+                        has_offsets,
                         leg,
                     )
                 }
@@ -298,6 +341,7 @@ fn check_one_ferry_leg(
     from_departure: Timestamp,
     to_arrival: Timestamp,
     break_dwell: Duration,
+    has_offsets: bool,
     leg: &FerryLeg,
 ) -> GenericResult<()> {
     let crossing = ferry_transport
@@ -312,9 +356,15 @@ fn check_one_ferry_leg(
         FerryLegDirection::BToA => (FerryDirection::BToA, crossing.quay_b, crossing.quay_a),
     };
 
-    let expected_quay_arrival =
-        from_departure + road.duration(route, from_idx, board_quay, TravelTime::Departure(from_departure));
-    if (expected_quay_arrival - leg.arrive_quay_at).abs() > 1. {
+    let quay_arrival =
+        |departure: Timestamp| departure + road.duration(route, from_idx, board_quay, TravelTime::Departure(departure));
+    let expected_quay_arrival = quay_arrival(from_departure);
+    let is_quay_arrival_wrong = if has_offsets {
+        is_outside(leg.arrive_quay_at, expected_quay_arrival, quay_arrival(from_departure + 1.))
+    } else {
+        (expected_quay_arrival - leg.arrive_quay_at).abs() > 1.
+    };
+    if is_quay_arrival_wrong {
         return Err(format!(
             "ferryLeg '{}' quay arrival mismatch: expected ~{expected_quay_arrival}, got {}",
             leg.crossing_id, leg.arrive_quay_at
@@ -363,6 +413,12 @@ fn check_one_ferry_leg(
     }
 
     Ok(())
+}
+
+/// Returns true when `value` lies more than the one-second tolerance outside the arrivals `a` and `b` from both ends of
+/// a written departure second, in either order.
+fn is_outside(value: Timestamp, a: Timestamp, b: Timestamp) -> bool {
+    value < a.min(b) - 1. || value > a.max(b) + 1.
 }
 
 /// Checks every stop's `parking` and activity starts against the stop duration it pays, and each tour's parking

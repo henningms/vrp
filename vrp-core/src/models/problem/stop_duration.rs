@@ -100,6 +100,10 @@ impl TransportCost for StopDurationTransportCost {
     fn size(&self) -> usize {
         self.inner.size()
     }
+
+    fn has_duration_offsets(&self) -> bool {
+        self.inner.has_duration_offsets()
+    }
 }
 
 custom_extra_property!(pub StopDurations typeof StopDurations);

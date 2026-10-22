@@ -42,3 +42,6 @@ See [multiple profiles example](../../../examples/pragmatic/basics/profiles.md).
 
 In order to use this feature, specify more than one routing matrix for each profile with timestamp property set.
 
+Delays on some roads are often cheaper to model as `durationOffsets` on one matrix than as several timestamped
+matrices, each of which is a full copy. See [routing matrix format](format.md#duration-offsets). The two cannot be
+combined on the same matrix.

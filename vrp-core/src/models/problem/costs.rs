@@ -104,6 +104,12 @@ pub trait TransportCost: Send + Sync {
 
     /// Returns size of known locations
     fn size(&self) -> usize;
+
+    /// Returns true when durations carry duration offsets keyed by the departure time; departure optimisation and
+    /// the ferry-aware transport then re-time what they would otherwise read once.
+    fn has_duration_offsets(&self) -> bool {
+        false
+    }
 }
 
 /// A simple implementation of transport costs around a single matrix.

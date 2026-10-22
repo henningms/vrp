@@ -6,6 +6,7 @@ mod capacity;
 mod clustering;
 mod compatibility;
 mod curb_side;
+mod duration_offsets;
 mod ferry;
 mod fleet;
 mod flexible_routes;

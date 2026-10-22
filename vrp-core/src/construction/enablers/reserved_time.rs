@@ -151,6 +151,10 @@ impl TransportCost for DynamicTransportCost {
     fn size(&self) -> usize {
         self.inner.size()
     }
+
+    fn has_duration_offsets(&self) -> bool {
+        self.inner.has_duration_offsets()
+    }
 }
 
 /// Optimizes reserved time schedules by rescheduling it to earlier time (e.g. to avoid transit stops,

@@ -15,7 +15,9 @@ use vrp_core::construction::clustering::vicinity::ClusterConfig;
 use vrp_core::construction::clustering::vicinity::VisitPolicy;
 use vrp_core::models::Problem as CoreProblem;
 use vrp_core::models::common::{Duration, Profile, TimeWindow, Timestamp};
-use vrp_core::models::problem::{Actor, VehicleIdDimension};
+use vrp_core::models::problem::{
+    Actor, DurationOffsetsExtraProperty, UNREACHABLE_DURATION_THRESHOLD, VehicleIdDimension,
+};
 use vrp_core::models::solution::{Commute as DomainCommute, CommuteInfo as DomainCommuteInfo};
 use vrp_core::prelude::{GenericError, GenericResult};
 use vrp_core::solver::processing::ClusterConfigExtraProperty;
@@ -418,6 +420,36 @@ impl CheckerContext {
         let duration = (duration as Float * profile.scale) as i64;
 
         Ok((distance, duration))
+    }
+
+    /// Returns the arrivals of a leg with a duration offset from `departure` and from `departure + 1`, ordered, or
+    /// `None` when the problem has no offsets or the leg has none.
+    fn get_offset_leg_arrivals(
+        &self,
+        profile: &Profile,
+        from_idx: usize,
+        to_idx: usize,
+        departure: Float,
+    ) -> GenericResult<Option<(Float, Float)>> {
+        let Some(offsets) = self.core_problem.extras.get_duration_offsets() else { return Ok(None) };
+        let Some(offset) = offsets.get(profile.index, from_idx, to_idx) else { return Ok(None) };
+
+        let matrices = get_matrices(&self.matrices)?;
+        let matrix =
+            matrices.get(profile.index).ok_or_else(|| format!("cannot find matrix with index {}", profile.index))?;
+        let matrix_idx = from_idx * get_matrix_size(matrices.as_slice()) + to_idx;
+        let base = get_matrix_value(matrix_idx, &matrix.travel_times)? as Float * profile.scale;
+
+        // the transport passes the unreachable markers through without an offset
+        if !(0. ..UNREACHABLE_DURATION_THRESHOLD).contains(&base) {
+            return Ok(None);
+        }
+
+        let arrival = |t: Float| t + base + offset.at(t);
+        let (a, b) = (arrival(departure), arrival(departure + 1.));
+
+        // FIFO orders the two, but rounding can invert them by an ulp, and `f64::clamp` panics on unordered bounds
+        Ok(Some((a.min(b), a.max(b))))
     }
 }
 

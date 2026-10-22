@@ -487,3 +487,217 @@ fn ferry_leg_rejects_an_orphan_entry_naming_a_vehicle_present_nowhere_in_the_sol
         "an entry naming a vehicle present nowhere in the solution must be rejected"
     );
 }
+
+fn create_fixed_start_vehicle(start: Float, end: Option<ShiftEnd>, scale: Option<Float>) -> VehicleType {
+    let shift = VehicleShift {
+        start: ShiftStart {
+            earliest: format_time(start),
+            latest: Some(format_time(start)),
+            location: (0., 0.).to_loc(),
+        },
+        end,
+        ..create_default_vehicle_shift()
+    };
+
+    VehicleType {
+        profile: VehicleProfile { scale, ..create_default_vehicle_profile() },
+        shifts: vec![shift],
+        ..create_default_vehicle_type()
+    }
+}
+
+/// One job at (100, 0), location 0; a vehicle at (0, 0), location 1, leaving exactly at `start`.
+fn create_fixed_start_problem(start: Float, scale: Option<Float>) -> Problem {
+    let end = ShiftEnd { earliest: None, latest: format_time(clock(23., 0.)), location: (0., 0.).to_loc() };
+
+    Problem {
+        plan: Plan { jobs: vec![create_delivery_job("job1", (100., 0.))], ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![create_fixed_start_vehicle(start, Some(end), scale)], ..create_default_fleet() },
+        ..create_empty_problem()
+    }
+}
+
+fn create_timed_delivery_job(id: &str, location: (f64, f64), window: (Float, Float), duration: Float) -> Job {
+    let place = JobPlace {
+        times: Some(vec![vec![format_time(window.0), format_time(window.1)]]),
+        duration,
+        ..create_job_place(location, None)
+    };
+
+    Job { deliveries: Some(vec![JobTask { places: vec![place], ..create_task(location, None) }]), ..create_job(id) }
+}
+
+/// job1 at (10, 0), window [06:59:00, 06:59:30], duration 50, and job2 at (110, 0), window [07:01, 08:00], served in
+/// this order by a vehicle at (0, 0) which leaves exactly at 06:59:00 and ends at job2.
+fn create_fractional_departure_problem(ferry_crossings: Option<Vec<FerryCrossing>>) -> Problem {
+    let jobs = vec![
+        create_timed_delivery_job("job1", (10., 0.), (clock(6., 59.), clock(6., 59.) + 30.), 50.),
+        create_timed_delivery_job("job2", (110., 0.), (clock(7., 1.), clock(8., 0.)), 1.),
+    ];
+
+    Problem {
+        plan: Plan { jobs, ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![create_fixed_start_vehicle(clock(6., 59.), None, None)],
+            ..create_default_fleet()
+        },
+        ferry_crossings,
+        ..create_empty_problem()
+    }
+}
+
+/// Puts a constant half second on the depot -> job1 leg, so job1 is reached at 06:59:10.5 and left at 07:00:00.5,
+/// and on `steep` an offset rising from 0 at 07:00:00 to 100 at 07:00:10, ten seconds per second. The fraction comes
+/// from a leg because the activity checks compare a service duration exactly against the written whole seconds.
+fn create_fractional_departure_matrix(problem: &Problem, steep: (Location, Location)) -> Matrix {
+    let coord_index = CoordIndex::new(problem);
+    let index = |location: &Location| coord_index.get_by_loc(location).expect("a known location");
+    let (depot, job1) = (index(&(0., 0.).to_loc()), index(&(10., 0.).to_loc()));
+
+    set_duration_offsets(
+        create_matrix_from_problem(problem),
+        vec![
+            create_duration_offset_profile(&[(clock(7., 0.), 0.), (clock(7., 0.) + 10., 100.)]),
+            create_duration_offset_profile(&[(0., 0.5)]),
+        ],
+        &[(index(&steep.0), index(&steep.1), 1), (depot, job1, 2)],
+    )
+}
+
+fn set_arrival(solution: &mut Solution, stop: usize, arrival: String) {
+    solution.tours[0].stops[stop].schedule_mut().arrival = arrival;
+}
+
+fn point(solution: &Solution, stop: usize) -> &PointStop {
+    solution.tours[0].stops[stop].as_point().expect("a point stop")
+}
+
+fn check_routing_of(problem: Problem, matrix: Matrix, solution: Solution) -> Result<(), Vec<GenericError>> {
+    let core_problem = Arc::new((problem.clone(), vec![matrix.clone()]).read_pragmatic().unwrap());
+    let ctx = CheckerContext::new(core_problem, problem, Some(vec![matrix]), solution).unwrap();
+
+    check_routing(&ctx)
+}
+
+/// A crossing from (11, 0) to (109, 0) with one sailing, at 07:01, five seconds on the water and no boarding buffer.
+fn create_one_sailing_crossing() -> FerryCrossing {
+    let mut crossing = create_ferry_crossing("crossing1", (11., 0.), (109., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings =
+        FerrySailings { a_to_b: vec![FerrySailing { dep: clock(7., 1.), arr: clock(7., 1.) + 5. }], b_to_a: vec![] };
+
+    crossing
+}
+
+#[test]
+fn rejects_an_arrival_which_ignores_the_duration_offset() {
+    let problem = create_fixed_start_problem(clock(6., 56.), None);
+    let matrix = set_duration_offsets(
+        create_matrix_from_problem(&problem),
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+    assert_eq!(solution.tours[0].stops[1].schedule().arrival, format_time(clock(7., 1.) + 40.));
+
+    // the written arrival as if the leg had no offset: 06:56 + 100 s
+    set_arrival(&mut solution, 1, format_time(clock(6., 57.) + 40.));
+
+    let errors = check_routing_of(problem, matrix, solution).unwrap_err();
+    assert!(
+        errors.iter().any(|err| err.to_string().contains("arrival time mismatch for 1 stop")
+            && err.to_string().contains("expected: '1970-01-01T07:01:40Z'")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn does_not_scale_the_offset_with_the_vehicle_profile() {
+    // scale 1.5: 150 s + 240 s at 06:56
+    let problem = create_fixed_start_problem(clock(6., 56.), Some(1.5));
+    let matrix = set_duration_offsets(
+        create_matrix_from_problem(&problem),
+        vec![create_rush_hour_offset_profile()],
+        &[(1, 0, 1)],
+    );
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    assert_eq!(solution.tours[0].stops[1].schedule().arrival, format_time(clock(7., 2.) + 30.));
+}
+
+#[test]
+fn accepts_a_fractional_departure_on_a_steep_rising_offset() {
+    // job1 -> job2 is 100 s plus the steep offset, 5 s at the real departure 07:00:00.5, so job2 is reached at
+    // 07:01:45.5, written 07:01:45. From the written departure 07:00:00 the leg would end at 07:01:40, and from
+    // 07:00:01 at 07:01:51.
+    let problem = create_fractional_departure_problem(None);
+    let matrix = create_fractional_departure_matrix(&problem, ((10., 0.).to_loc(), (110., 0.).to_loc()));
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    assert_eq!(point(&solution, 2).time.arrival, format_time(clock(7., 1.) + 45.));
+}
+
+#[test]
+fn accepts_a_ferry_leg_whose_approach_rises_within_the_departure_second() {
+    // job1 -> the boarding quay is 1 s plus the steep offset, 5 s at the real departure 07:00:00.5, so the quay is
+    // reached at 07:00:06.5 and the written leg says so. From the written departure 07:00:00 the checker would expect
+    // 07:00:01. The sailing reaches job2 at 07:01:06, well before the road's 07:01:40.5.
+    let problem = create_fractional_departure_problem(Some(vec![create_one_sailing_crossing()]));
+    let matrix = create_fractional_departure_matrix(&problem, ((10., 0.).to_loc(), (11., 0.).to_loc()));
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    let leg = &solution.ferry_legs.as_ref().expect("a ferry leg")[0];
+    assert_eq!((leg.arrive_quay_at, leg.sailing_departure), (clock(7., 0.) + 6.5, clock(7., 1.)));
+}
+
+#[test]
+fn rejects_a_ferry_leg_which_reaches_the_quay_later_than_the_departure_second_allows() {
+    // leaving job1 within 07:00:00 reaches the quay from 07:00:01 to 07:00:12, so 07:00:14 is two seconds too late
+    let problem = create_fractional_departure_problem(Some(vec![create_one_sailing_crossing()]));
+    let matrix = create_fractional_departure_matrix(&problem, ((10., 0.).to_loc(), (11., 0.).to_loc()));
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+
+    solution.ferry_legs.as_mut().expect("a ferry leg")[0].arrive_quay_at = clock(7., 0.) + 14.;
+
+    let errors = check_routing_of(problem, matrix, solution).unwrap_err();
+    assert!(errors.iter().any(|err| err.to_string().contains("quay arrival mismatch")), "{errors:?}");
+}
+
+#[test]
+fn accepts_a_road_leg_on_a_steep_rising_offset_beside_a_ferry_crossing() {
+    // the crossing has no sailing left, so job1 -> job2 is the steep road leg of
+    // `accepts_a_fractional_departure_on_a_steep_rising_offset`, checked through the ferry-aware transport and as a
+    // leg which needs no ferry leg
+    let crossing = create_ferry_crossing("crossing1", (11., 0.), (109., 0.));
+    let problem = create_fractional_departure_problem(Some(vec![crossing]));
+    let matrix = create_fractional_departure_matrix(&problem, ((10., 0.).to_loc(), (110., 0.).to_loc()));
+
+    let solution = solve_with_cheapest_insertion(problem, Some(vec![matrix]));
+
+    assert_eq!(point(&solution, 2).time.arrival, format_time(clock(7., 1.) + 45.));
+    assert!(solution.ferry_legs.is_none());
+}
+
+#[test]
+fn rejects_a_road_leg_beside_a_ferry_crossing_which_arrives_later_than_the_departure_second_allows() {
+    // leaving job1 within 07:00:00 reaches job2 from 07:01:40 to 07:01:51, so 07:01:53 is two seconds too late for the
+    // leg and for the road alone
+    let crossing = create_ferry_crossing("crossing1", (11., 0.), (109., 0.));
+    let problem = create_fractional_departure_problem(Some(vec![crossing]));
+    let matrix = create_fractional_departure_matrix(&problem, ((10., 0.).to_loc(), (110., 0.).to_loc()));
+    let mut solution = solve_with_cheapest_insertion(problem.clone(), Some(vec![matrix.clone()]));
+
+    set_arrival(&mut solution, 2, format_time(clock(7., 1.) + 53.));
+
+    let errors = check_routing_of(problem, matrix, solution).unwrap_err();
+    assert!(
+        errors.iter().any(|err| err.to_string().contains("arrival time mismatch for 2 stop")
+            && err.to_string().contains("expected: '1970-01-01T07:01:51Z'")),
+        "{errors:?}"
+    );
+    assert!(errors.iter().any(|err| err.to_string().contains("cannot explain")), "{errors:?}");
+}

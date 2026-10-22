@@ -15,7 +15,7 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
 - **profile** (required): a vehicle profile which is defined by two properties:
     - **matrix** (required) : a name of matrix profile
     - **scale** (optional): duration scale applied to all travelling times (default is 1.0). It does not apply to a
-      job place's `stopDuration`.
+      job place's `stopDuration` or to a matrix's `durationOffsets`.
 ```json
 {{#include ../../../../../examples/data/pragmatic/simple.basic.problem.json:104:106}}
 ```

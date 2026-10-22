@@ -329,6 +329,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
         ],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     let solution = solve_with_metaheuristic_and_iterations_without_check(problem, Some(vec![matrix]), 200);

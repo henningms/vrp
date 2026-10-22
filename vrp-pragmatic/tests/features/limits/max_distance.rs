@@ -23,6 +23,7 @@ fn can_limit_by_max_distance() {
         distances: vec![1, 100, 100, 1],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

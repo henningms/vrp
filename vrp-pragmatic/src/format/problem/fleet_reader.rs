@@ -5,6 +5,7 @@ mod fleet_reader_test;
 use super::*;
 use crate::Location as ApiLocation;
 use crate::format::UnknownLocationFallback;
+use crate::parse_time_safe;
 use crate::utils::get_approx_transportation;
 use std::collections::HashSet;
 use vrp_core::construction::enablers::create_typed_actor_groups;
@@ -94,6 +95,45 @@ pub(super) fn create_transport_costs(
     } else {
         create_matrix_transport_cost(matrix_data)
     }
+}
+
+/// Moves the matrices' duration offsets out into one table per profile index, matched to profiles like
+/// [create_transport_costs] does. Returns `None` when no cell has an offset.
+pub(super) fn create_duration_offsets(
+    api_problem: &ApiProblem,
+    matrices: &mut [Matrix],
+) -> GenericResult<Option<DurationOffsets>> {
+    let matrix_profiles = get_profile_index_map(api_problem);
+    let side = matrices.first().map_or(0, |matrix| (matrix.travel_times.len() as Float).sqrt().round() as usize);
+
+    let tables = matrices
+        .iter_mut()
+        .enumerate()
+        .filter_map(|(idx, matrix)| {
+            let MatrixDurationOffsets { profiles, cells } = matrix.duration_offsets.take()?;
+            let index = matrix.profile.as_ref().and_then(|p| matrix_profiles.get(p)).cloned().unwrap_or(idx);
+            Some((index, cells, profiles))
+        })
+        .map(|(index, cells, profiles)| {
+            let profiles = profiles
+                .iter()
+                .map(|profile| {
+                    let points = profile
+                        .points
+                        .iter()
+                        .map(|point| parse_time_safe(&point.time).map(|time| (time, point.offset)))
+                        .collect::<GenericResult<Vec<_>>>()?;
+                    OffsetProfile::new(points)
+                })
+                .collect::<GenericResult<Vec<_>>>()?;
+
+            Ok((index, cells, profiles))
+        })
+        .collect::<GenericResult<Vec<_>>>()?;
+
+    let duration_offsets = DurationOffsets::new(side, tables)?;
+
+    Ok(if duration_offsets.is_empty() { None } else { Some(duration_offsets) })
 }
 
 /// Reads the matrices' opposite-side arrivals per profile index, matched to profiles like
@@ -303,6 +343,7 @@ pub(super) fn create_approx_matrices_with_index(problem: &ApiProblem, coord_inde
                 distances: approx_data[idx].1.clone(),
                 error_codes: None,
                 opposite_side_arrivals: None,
+                duration_offsets: None,
             }
         })
         .collect()

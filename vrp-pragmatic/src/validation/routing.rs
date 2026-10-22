@@ -3,6 +3,7 @@
 mod routing_test;
 
 use super::*;
+use crate::parse_time_safe;
 use crate::utils::combine_error_results;
 use std::collections::HashSet;
 use vrp_core::prelude::Float;
@@ -162,6 +163,187 @@ fn check_e1507_opposite_side_arrivals_without_timestamp(ctx: &ValidationContext)
     }
 }
 
+/// Names a matrix by its profile, or by its position when it has none.
+fn matrix_name(index: usize, matrix: &Matrix) -> String {
+    matrix.profile.clone().unwrap_or_else(|| format!("#{index}"))
+}
+
+fn has_non_zero_duration_offset(matrix: &Matrix) -> bool {
+    matrix.duration_offsets.as_ref().is_some_and(|offsets| offsets.cells.iter().any(|&cell| cell != 0))
+}
+
+/// Parses the times of an offset profile when it is a valid one: points, RFC3339 times in strictly increasing
+/// order, and finite non-negative offsets.
+fn parse_offset_profile(profile: &DurationOffsetProfile) -> Option<Vec<(Float, Float)>> {
+    let points = profile
+        .points
+        .iter()
+        .map(|point| parse_time_safe(&point.time).ok().map(|time| (time, point.offset)))
+        .collect::<Option<Vec<_>>>()?;
+
+    let is_valid = !points.is_empty()
+        && points.iter().all(|&(_, offset)| offset.is_finite() && offset >= 0.)
+        && points.windows(2).all(|pair| pair[0].0 < pair[1].0);
+
+    is_valid.then_some(points)
+}
+
+/// Checks that the cells of duration offsets match their matrix and name existing profiles.
+fn check_e9501_duration_offset_cells(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let details = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter().enumerate())
+        .filter_map(|(index, matrix)| matrix.duration_offsets.as_ref().map(|offsets| (index, matrix, offsets)))
+        .filter_map(|(index, matrix, offsets)| {
+            let name = matrix_name(index, matrix);
+            if offsets.cells.len() != matrix.travel_times.len() {
+                return Some(format!(
+                    "'{name}' has {} cells for {} travel times",
+                    offsets.cells.len(),
+                    matrix.travel_times.len()
+                ));
+            }
+
+            let count = offsets.profiles.len();
+            offsets
+                .cells
+                .iter()
+                .enumerate()
+                .find(|&(_, &cell)| cell as usize > count)
+                .map(|(cell, &profile)| format!("'{name}' cell {cell} names profile {profile} of {count}"))
+        })
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9501".to_string(),
+            "duration offset cells do not match the matrix".to_string(),
+            format!("check durationOffsets.cells of matrices: {}", details.join(", ")),
+        ))
+    }
+}
+
+/// Checks that every duration offset profile has valid points.
+fn check_e9502_duration_offset_profiles(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let details = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter().enumerate())
+        .filter_map(|(index, matrix)| matrix.duration_offsets.as_ref().map(|offsets| (index, matrix, offsets)))
+        .flat_map(|(index, matrix, offsets)| {
+            let name = matrix_name(index, matrix);
+            offsets.profiles.iter().enumerate().filter_map(move |(profile, value)| {
+                let k = profile + 1;
+                if value.points.is_empty() {
+                    Some(format!("'{name}' profile {k} has no points"))
+                } else if parse_offset_profile(value).is_none() {
+                    Some(format!("'{name}' profile {k} has an invalid time or offset"))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9502".to_string(),
+            "invalid duration offset profile".to_string(),
+            format!("use RFC3339 times in increasing order and finite, non-negative offsets: {}", details.join(", ")),
+        ))
+    }
+}
+
+/// Checks that no valid duration offset profile falls faster than time passes.
+fn check_e9503_duration_offsets_fall_at_most_one_second_per_second(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let details = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter().enumerate())
+        .filter_map(|(index, matrix)| matrix.duration_offsets.as_ref().map(|offsets| (index, matrix, offsets)))
+        .flat_map(|(index, matrix, offsets)| {
+            let name = matrix_name(index, matrix);
+            offsets.profiles.iter().enumerate().filter_map(move |(profile, value)| {
+                let points = parse_offset_profile(value)?;
+                let (at, drop) = points
+                    .windows(2)
+                    .enumerate()
+                    .map(|(at, pair)| (at, pair[0].1 - pair[1].1))
+                    .find(|&(at, drop)| drop > points[at + 1].0 - points[at].0)?;
+
+                Some(format!(
+                    "'{name}' profile {} falls {drop}s between '{}' and '{}'",
+                    profile + 1,
+                    value.points[at].time,
+                    value.points[at + 1].time
+                ))
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if details.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9503".to_string(),
+            "duration offset profile falls faster than time".to_string(),
+            format!(
+                "let each offset fall at most one second per second, checked exactly (whole seconds are exact): {}",
+                details.join(", ")
+            ),
+        ))
+    }
+}
+
+/// Checks that duration offsets are set on matrices without a timestamp.
+fn check_e9504_duration_offsets_without_timestamp(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let has_time_dependent_offsets = ctx
+        .matrices
+        .iter()
+        .flat_map(|matrices| matrices.iter())
+        .any(|matrix| matrix.timestamp.is_some() && has_non_zero_duration_offset(matrix));
+
+    if has_time_dependent_offsets {
+        Err(FormatError::new(
+            "E9504".to_string(),
+            "duration offsets on a time-dependent matrix".to_string(),
+            "remove durationOffsets from matrices with a timestamp".to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Checks that duration offsets are not combined with required breaks.
+fn check_e9505_duration_offsets_without_required_breaks(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let has_offsets = ctx.matrices.iter().flat_map(|matrices| matrices.iter()).any(has_non_zero_duration_offset);
+    let has_required_break = ctx
+        .problem
+        .fleet
+        .vehicles
+        .iter()
+        .flat_map(|vehicle| vehicle.shifts.iter())
+        .filter_map(|shift| shift.breaks.as_ref())
+        .flat_map(|breaks| breaks.iter())
+        .any(|vehicle_break| matches!(vehicle_break, VehicleBreak::Required { .. }));
+
+    if has_offsets && has_required_break {
+        Err(FormatError::new(
+            "E9505".to_string(),
+            "duration offsets with required breaks".to_string(),
+            "remove durationOffsets from the matrices or required breaks from the vehicle shifts: they cannot be combined"
+                .to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Validates routing rules.
 pub fn validate_routing(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     let location_types = (ctx.coord_index.has_coordinates(), ctx.coord_index.has_indices());
@@ -175,6 +357,11 @@ pub fn validate_routing(ctx: &ValidationContext) -> Result<(), MultiFormatError>
         check_e1505_profiles_exist(ctx),
         check_e1506_opposite_side_arrivals_in_matrix(ctx),
         check_e1507_opposite_side_arrivals_without_timestamp(ctx),
+        check_e9501_duration_offset_cells(ctx),
+        check_e9502_duration_offset_profiles(ctx),
+        check_e9503_duration_offsets_fall_at_most_one_second_per_second(ctx),
+        check_e9504_duration_offsets_without_timestamp(ctx),
+        check_e9505_duration_offsets_without_required_breaks(ctx),
     ])
     .map_err(From::from)
 }
