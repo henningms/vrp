@@ -756,7 +756,7 @@ include the `maximize-value` objective.
 
 Errors from the E9xxx range are reserved for features which exist only in this fork. Upstream uses the E0xxx and E1xxx
 ranges, so keeping fork errors here avoids code collisions when upstream adds new errors. The second digit follows the
-upstream categories: E90xx general, E91xx jobs, E93xx vehicles.
+upstream categories: E90xx general, E91xx jobs, E93xx vehicles, E95xx routing.
 
 ### E9001
 
@@ -827,3 +827,31 @@ use a non-negative number, or `0` or no `perRun` at all for a vehicle without a 
 `stop duration on a vehicle shift place` is returned when a place in a vehicle shift's `requiredStops`, `via` or
 `recharges.stations` has a `stopDuration` other than `0`. These places have no stop duration of their own. To fix it,
 remove `stopDuration` from them.
+
+### E9501
+
+`duration offset cells do not match the matrix` is returned when a matrix's `durationOffsets.cells` has a different
+length from its `travelTimes`, or an entry names a profile past the end of `durationOffsets.profiles`. Entry `k` names
+`profiles[k - 1]` and `0` names none.
+
+### E9502
+
+`invalid duration offset profile` is returned when a profile in `durationOffsets.profiles` has no points, a `time`
+which is not RFC3339, times which do not strictly increase, or an `offset` which is negative or not a finite number.
+
+### E9503
+
+`duration offset profile falls faster than time` is returned when an offset drops by more than the time between two
+neighbouring points, so that leaving later would arrive earlier. The message names the profile, counting from 1 as
+`cells` does, and the two points. To fix it, ease the offset out over at least as many seconds as it drops.
+
+### E9504
+
+`duration offsets on a time-dependent matrix` is returned when a matrix with a `timestamp` has `durationOffsets` with
+a non-zero cell. Use duration offsets on a matrix without a timestamp instead of several timestamped matrices.
+
+### E9505
+
+`duration offsets with required breaks` is returned when a matrix has `durationOffsets` with a non-zero cell and a
+vehicle shift has a required break. Required breaks are not supported together with duration offsets yet. To fix it,
+remove one of them.
