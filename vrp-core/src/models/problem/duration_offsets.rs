@@ -17,8 +17,8 @@ use rosomaxa::prelude::{Float, GenericResult};
 pub struct OffsetProfile {
     times: Vec<Timestamp>,
     offsets: Vec<Duration>,
-    /// `time + offset` per point: the arrival after a leg without a base duration, which never decreases.
-    #[expect(dead_code, reason = "kept for the arrival-keyed lookup")]
+    /// `time + offset` per point: the arrival after a leg without a base duration. A running maximum, so that rounding
+    /// never puts a key below its predecessor and the keys stay sorted.
     keys: Vec<Timestamp>,
 }
 
@@ -53,7 +53,13 @@ impl OffsetProfile {
             }
         }
 
-        let keys = points.iter().map(|&(time, offset)| time + offset).collect();
+        let keys = points
+            .iter()
+            .scan(Float::NEG_INFINITY, |key, &(time, offset)| {
+                *key = key.max(time + offset);
+                Some(*key)
+            })
+            .collect();
         let (times, offsets) = points.into_iter().unzip();
 
         Ok(Self { times, offsets, keys })
@@ -74,6 +80,28 @@ impl OffsetProfile {
         let i = self.times.partition_point(|&time| time <= departure) - 1;
 
         interpolate((self.times[i], self.offsets[i]), (self.times[i + 1], self.offsets[i + 1]), departure)
+    }
+
+    /// Returns the latest departure which arrives by `target` after a leg without a base duration: the largest `t`
+    /// with `t + at(t) <= target`. For a leg with a base duration, pass `target = arrival - base`.
+    ///
+    /// The inverse is exact because `t + at(t)` is continuous, piecewise linear and non-decreasing.
+    pub fn latest_departure(&self, target: Timestamp) -> Timestamp {
+        let last = self.keys.len() - 1;
+
+        if target < self.keys[0] {
+            return target - self.offsets[0];
+        }
+
+        if target >= self.keys[last] {
+            return target - self.offsets[last];
+        }
+
+        // the last key at or below the target resolves a stretch of equal arrivals to its latest departure, and
+        // leaves `keys[i + 1] > keys[i]`, so the segment is never empty
+        let i = self.keys.partition_point(|&key| key <= target) - 1;
+
+        interpolate((self.keys[i], self.times[i]), (self.keys[i + 1], self.times[i + 1]), target)
     }
 }
 
