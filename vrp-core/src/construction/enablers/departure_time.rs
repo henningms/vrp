@@ -63,6 +63,19 @@ fn try_advance_departure_time(
         last_departure_time.max(first.place.time.start - start_to_first).min(latest_allowed_departure)
     };
 
+    // a later start can make a leg longer under offsets; the backward pass is exact through the wrapper, so the
+    // latest arrival at the first activity bounds every later window
+    let new_departure_time = if transport.has_duration_offsets()
+        && let Some(latest) = route_ctx.state().get_schedule_at(1).map(|state| state.latest_arrival)
+        && latest < Float::MAX
+    {
+        let to_first =
+            transport.duration(route, start.place.location, first.place.location, TravelTime::Arrival(latest));
+        new_departure_time.min(latest - to_first)
+    } else {
+        new_departure_time
+    };
+
     if new_departure_time > last_departure_time { Some(new_departure_time) } else { None }
 }
 
