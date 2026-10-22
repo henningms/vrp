@@ -8,6 +8,35 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* matrix `durationOffsets`: delays which depend on the departure time, on chosen cells of a routing matrix, for example
+  a queue on a bridge in the morning rush. `profiles` holds piecewise-linear offsets over absolute time (`points` of an
+  RFC3339 `time` and an `offset` in seconds, held before the first and after the last point), and `cells` gives each
+  cell of `travelTimes` at most one profile (`0` for none, `k` for `profiles[k - 1]`) as an unsigned 16-bit integer,
+  so offsets cost two bytes per cell for any number of points or dates. A leg takes the base duration times the
+  vehicle profile `scale` plus the offset at its departure; the offset is not scaled, and distances and the
+  time-independent estimates keep the base. An arrival-keyed lookup returns the duration of the latest departure which
+  arrives in time, exactly, so the solver does not accept insertions which arrive late after a delay eases. Offsets
+  must be non-negative and fall at most one second per second, so leaving later never arrives earlier. With ferry
+  crossings, the drive to the quay takes the offset at its own departure and the drive after the sailing at
+  disembarkation, and departure optimisation never moves a tour's start past the latest one which keeps every stop on
+  time. A matrix without `durationOffsets`, or with every cell `0`, solves as before. In core, `OffsetProfile`,
+  `DurationOffsets` and `DurationOffsetTransportCost` in `models::problem` add the offsets to travel durations,
+  `DurationOffsetsExtraProperty` (`get_duration_offsets` / `set_duration_offsets`) keeps the table in the problem's
+  extras, and `TransportCost::has_duration_offsets` (default `false`) tells the ferry-aware transport and departure
+  optimisation that durations depend on the departure
+* validate matrix duration offsets: cells which do not match the matrix (E9501), an invalid profile (E9502), a profile
+  which falls faster than one second per second (E9503), offsets on a matrix with a `timestamp` (E9504) and offsets
+  together with required breaks (E9505)
+* the solution checker adds the duration offset at each leg's departure. The solution carries whole seconds, so with
+  offsets a leg is accepted when its arrival lies between the arrivals from the written departure and from one second
+  later
+* `breaking`: `Matrix` has a new public field, so Rust code building it with a struct literal adds
+  `duration_offsets: None`; `best_departure` and `best_arrival` in `models::problem` take `road`, an optional road
+  duration at a travel time read for each road part at its own time, and `road_floor`, a road duration without one:
+  a lower bound for the prunes when `road` is given, and the duration of every road part when it is `None`
+
 ## [1.42.0] 2026-10-22
 
 ### Added
