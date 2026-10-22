@@ -517,6 +517,7 @@ mod tests {
             distances: vec![0; 16],
             error_codes: None,
             opposite_side_arrivals: None,
+            duration_offsets: None,
         };
         // job3 pickup is matrix location 1 and its delivery is location 2.
         matrix.travel_times[6] = 300;

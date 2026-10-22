@@ -363,6 +363,7 @@ pub fn create_matrix(data: Vec<i64>) -> Matrix {
         distances: data,
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     }
 }
 
@@ -398,4 +399,35 @@ fn convert_times(times: &[(i32, i32)]) -> Option<Vec<Vec<String>>> {
     } else {
         Some(times.iter().map(|tw| vec![format_time(tw.0 as Float), format_time(tw.1 as Float)]).collect())
     }
+}
+
+pub fn clock(hours: Float, minutes: Float) -> Float {
+    hours * 3600. + minutes * 60.
+}
+
+pub fn create_duration_offset_profile(points: &[(Float, Float)]) -> DurationOffsetProfile {
+    DurationOffsetProfile {
+        points: points.iter().map(|&(time, offset)| DurationOffsetPoint { time: format_time(time), offset }).collect(),
+    }
+}
+
+pub fn create_rush_hour_offset_profile() -> DurationOffsetProfile {
+    create_duration_offset_profile(&[
+        (clock(6., 52.), 0.),
+        (clock(7., 0.), 480.),
+        (clock(9., 0.), 480.),
+        (clock(9., 8.), 0.),
+    ])
+}
+
+pub fn set_duration_offsets(
+    mut matrix: Matrix,
+    profiles: Vec<DurationOffsetProfile>,
+    cells: &[(usize, usize, u16)],
+) -> Matrix {
+    let size = (matrix.travel_times.len() as Float).sqrt() as usize;
+    let mut table = vec![0_u16; size * size];
+    cells.iter().for_each(|&(from, to, k)| table[from * size + to] = k);
+    matrix.duration_offsets = Some(MatrixDurationOffsets { profiles, cells: table });
+    matrix
 }

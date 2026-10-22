@@ -24,6 +24,7 @@ fn can_limit_one_job_by_max_duration() {
         distances: vec![1, 1, 1, 1],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

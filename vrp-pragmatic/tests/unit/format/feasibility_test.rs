@@ -550,6 +550,7 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
         distances: vec![10; matrix_size],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     // Build solution: each vehicle serves its 10 jobs
@@ -785,6 +786,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
         distances: vec![10; matrix_size],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     // --- Solve the base problem to get a good initial solution ---

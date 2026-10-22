@@ -303,6 +303,7 @@ pub(super) fn create_approx_matrices_with_index(problem: &ApiProblem, coord_inde
                 distances: approx_data[idx].1.clone(),
                 error_codes: None,
                 opposite_side_arrivals: None,
+                duration_offsets: None,
             }
         })
         .collect()

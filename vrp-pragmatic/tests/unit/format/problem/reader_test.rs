@@ -204,6 +204,7 @@ fn can_read_complex_problem() {
         distances: vec![2; 25],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     let problem = (problem, vec![matrix]).read_pragmatic().ok().unwrap();

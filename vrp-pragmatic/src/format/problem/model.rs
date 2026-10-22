@@ -897,6 +897,43 @@ pub struct Matrix {
     /// vehicle's opposite side. Counted by the `minimize-opposite-side-arrivals` objective.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opposite_side_arrivals: Option<Vec<usize>>,
+
+    /// Delays which depend on the departure time, on chosen cells: a profile table and each cell's profile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_offsets: Option<MatrixDurationOffsets>,
+}
+
+/// Departure-time dependent delays added on top of the matrix durations of chosen cells.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct MatrixDurationOffsets {
+    /// Offset profiles; a cell refers to them by one-based index.
+    pub profiles: Vec<DurationOffsetProfile>,
+
+    /// One entry per cell in the order of `travelTimes`: `0` for no offset, `k` for `profiles[k - 1]`.
+    pub cells: Vec<u16>,
+}
+
+/// A piecewise linear offset over the departure time.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct DurationOffsetProfile {
+    /// Points in ascending time order; the offset is linear between them and held outside them.
+    pub points: Vec<DurationOffsetPoint>,
+}
+
+/// A point of an offset profile.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct DurationOffsetPoint {
+    /// A departure time in RFC3339 format.
+    pub time: String,
+
+    /// An extra duration in seconds, not scaled by the vehicle profile.
+    pub offset: Float,
 }
 
 // endregion

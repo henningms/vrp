@@ -16,6 +16,7 @@ fn matrix(profile: Option<&str>, timestamp: Option<Float>, fill_value: i64, size
         distances: vec![fill_value; size],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     }
 }
 
@@ -27,6 +28,7 @@ fn wrong_matrix(profile: Option<&str>, timestamp: Option<String>) -> Matrix {
         distances: vec![2; 3],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     }
 }
 

@@ -33,6 +33,7 @@ fn can_use_location_index() {
         distances: vec![0, 3, 3, 1, 0, 3, 3, 2, 0],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     };
 
     let solution = solve_with_metaheuristic(problem, Some(vec![matrix]));

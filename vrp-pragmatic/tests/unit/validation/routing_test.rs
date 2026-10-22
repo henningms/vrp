@@ -86,6 +86,7 @@ fn can_detect_index_mismatch() {
         distances: vec![1; 4],
         error_codes: None,
         opposite_side_arrivals: None,
+        duration_offsets: None,
     }];
     let coord_index = CoordIndex::new(&problem);
     let ctx = ValidationContext::new(&problem, Some(&matrices), &coord_index);
@@ -124,6 +125,7 @@ fn matrix_with_opposite_side_arrivals(timestamp: Option<&str>, cells: Vec<usize>
         distances: vec![1; 4],
         error_codes: None,
         opposite_side_arrivals: Some(cells),
+        duration_offsets: None,
     }]
 }
 

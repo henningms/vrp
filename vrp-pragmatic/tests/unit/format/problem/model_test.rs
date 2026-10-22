@@ -1,6 +1,9 @@
 use super::*;
 use crate::format::problem::Location2D;
-use crate::helpers::{SIMPLE_MATRIX, SIMPLE_PROBLEM};
+use crate::helpers::{
+    SIMPLE_MATRIX, SIMPLE_PROBLEM, create_matrix, create_rush_hour_offset_profile, set_duration_offsets,
+};
+use std::fs::File;
 use std::io::BufReader;
 
 fn assert_time_windows(actual: &Option<Vec<Vec<String>>>, expected: (&str, &str)) {
@@ -156,4 +159,49 @@ fn can_serialize_flat_one_of_as_one_group() {
     let skills: JobSkills = serde_json::from_str(r#"{ "oneOf": ["ramp", "lift"] }"#).unwrap();
 
     assert_eq!(serde_json::to_string(&skills).unwrap(), r#"{"oneOf":[["ramp","lift"]]}"#);
+}
+
+/// The documented example; cargo runs the tests from the crate directory.
+const DOCUMENTED_EXAMPLE: &str = "../examples/data/pragmatic/basics/duration-offsets.basic.matrix.json";
+
+#[test]
+fn can_deserialize_matrix_with_duration_offsets() {
+    let matrix = deserialize_matrix(BufReader::new(File::open(DOCUMENTED_EXAMPLE).unwrap())).ok().unwrap();
+
+    let offsets = matrix.duration_offsets.expect("duration offsets");
+    assert_eq!(offsets.cells, vec![0, 1, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(offsets.profiles[0].points.len(), 4);
+    assert_eq!(offsets.profiles[0].points[1].time, "2026-10-22T07:00:00Z");
+    assert_eq!(offsets.profiles[0].points[1].offset, 480.);
+}
+
+#[test]
+fn serializing_matrix_without_duration_offsets_emits_no_key() {
+    let matrix = deserialize_matrix(BufReader::new(SIMPLE_MATRIX.as_bytes())).ok().unwrap();
+
+    assert!(!serde_json::to_string(&matrix).unwrap().contains("durationOffsets"));
+}
+
+#[test]
+fn refuses_a_duration_offset_cell_beyond_sixteen_bits() {
+    let json =
+        r#"{"travelTimes":[0,1,1,0],"distances":[0,1,1,0],"durationOffsets":{"profiles":[],"cells":[0,65536,0,0]}}"#;
+
+    let result = deserialize_matrix(BufReader::new(json.as_bytes()));
+
+    assert_eq!(result.err().map(|err| err.errors[0].code.clone()), Some("E0001".to_string()));
+}
+
+#[test]
+fn serializes_duration_offsets_built_by_the_test_helpers() {
+    let matrix =
+        set_duration_offsets(create_matrix(vec![0, 1, 1, 0]), vec![create_rush_hour_offset_profile()], &[(0, 1, 1)]);
+
+    let json = serde_json::to_string(&matrix).unwrap();
+
+    assert!(
+        json.contains(r#""durationOffsets":{"profiles":[{"points":[{"time":"1970-01-01T06:52:00Z","offset":0.0}"#),
+        "{json}"
+    );
+    assert!(json.contains(r#""cells":[0,1,0,0]"#), "{json}");
 }
