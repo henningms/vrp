@@ -63,15 +63,24 @@ fn try_advance_departure_time(
         last_departure_time.max(first.place.time.start - start_to_first).min(latest_allowed_departure)
     };
 
-    // a later start can make a leg longer under offsets; the backward pass is exact through the wrapper, so the
-    // latest arrival at the first activity bounds every later window
+    // a later start can make a leg longer under offsets; the backward pass inverts every leg, so the latest arrival at
+    // the first activity bounds every later window. The inverse holds only up to rounding, and a ferry turns arriving
+    // at the quay one ulp late into a missed sailing, so the start is backed off to a whole second and kept only when
+    // leaving then still arrives in time
     let new_departure_time = if transport.has_duration_offsets()
         && let Some(latest) = route_ctx.state().get_schedule_at(1).map(|state| state.latest_arrival)
         && latest < Float::MAX
     {
-        let to_first =
-            transport.duration(route, start.place.location, first.place.location, TravelTime::Arrival(latest));
-        new_departure_time.min(latest - to_first)
+        let (from, to) = (start.place.location, first.place.location);
+        let to_first = transport.duration(route, from, to, TravelTime::Arrival(latest));
+        let departure = new_departure_time.min((latest - to_first).floor());
+        let arrival = departure + transport.duration(route, from, to, TravelTime::Departure(departure));
+
+        if arrival > latest {
+            return None;
+        }
+
+        departure
     } else {
         new_departure_time
     };

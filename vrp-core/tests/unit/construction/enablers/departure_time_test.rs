@@ -3,6 +3,7 @@ use crate::helpers::models::problem::*;
 use crate::helpers::models::solution::*;
 use crate::models::common::*;
 use crate::models::problem::*;
+use crate::models::solution::{Activity, Route};
 use rosomaxa::prelude::Float;
 use std::sync::Arc;
 
@@ -107,6 +108,64 @@ fn can_advance_departure_time_under_offsets_without_a_bounded_latest_arrival_imp
     assert_eq!(departure_time, Some(clock(7., 10.)));
 }
 
+#[test]
+fn can_clamp_an_advanced_departure_to_a_whole_second_which_still_catches_the_sailing() {
+    let (transport, mut route_ctx) = create_route_over_a_ferry();
+    update_route_schedule(&mut route_ctx, &SimpleActivityCost::default(), transport.as_ref());
+
+    let departure_time = try_advance_departure_time(&route_ctx, transport.as_ref(), true).expect("an advance");
+
+    let arrival = departure_time + transport.duration(route_ctx.route(), 0, 3, TravelTime::Departure(departure_time));
+    assert!(arrival <= clock(8., 0.), "leaving at {departure_time} misses the sailing and arrives at {arrival}");
+    assert_eq!(departure_time, clock(6., 30.) + 52.);
+}
+
+#[test]
+fn keeps_the_departure_when_leaving_at_the_clamped_start_would_arrive_late() {
+    // the backward lookup puts the latest start at 07:07:02, from which the stop is reached at 07:25:02
+    let (transport, mut route_ctx) = create_route_to_one_stop(clock(7., 20.), true);
+    let transport = ShortArrivalLookup(transport);
+    update_route_schedule(&mut route_ctx, &SimpleActivityCost::default(), &transport);
+
+    let departure_time = try_advance_departure_time(&route_ctx, &transport, true);
+
+    assert_eq!(departure_time, None);
+}
+
+/// Answers a lookup keyed by arrival two seconds short of the forward one, more than a backoff to whole seconds absorbs.
+struct ShortArrivalLookup(Arc<dyn TransportCost>);
+
+impl TransportCost for ShortArrivalLookup {
+    fn duration_approx(&self, profile: &Profile, from: Location, to: Location) -> Duration {
+        self.0.duration_approx(profile, from, to)
+    }
+
+    fn distance_approx(&self, profile: &Profile, from: Location, to: Location) -> Distance {
+        self.0.distance_approx(profile, from, to)
+    }
+
+    fn duration(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Duration {
+        let duration = self.0.duration(route, from, to, travel_time);
+
+        match travel_time {
+            TravelTime::Arrival(_) => duration - 2.,
+            TravelTime::Departure(_) => duration,
+        }
+    }
+
+    fn distance(&self, route: &Route, from: Location, to: Location, travel_time: TravelTime) -> Distance {
+        self.0.distance(route, from, to, travel_time)
+    }
+
+    fn size(&self) -> usize {
+        self.0.size()
+    }
+
+    fn has_duration_offsets(&self) -> bool {
+        true
+    }
+}
+
 /// Leaves the depot at 06:00 for one stop ten minutes away which closes at 07:25. With offsets, the leg to the stop
 /// takes eight minutes longer from 07:00.
 fn create_route_to_one_stop(window_start: Timestamp, has_offsets: bool) -> (Arc<dyn TransportCost>, RouteContext) {
@@ -116,6 +175,46 @@ fn create_route_to_one_stop(window_start: Timestamp, has_offsets: bool) -> (Arc<
         let offsets = DurationOffsets::new(2, vec![(0, vec![0, 1, 0, 0], vec![rush_hour_offset_profile()])]).unwrap();
         transport = Arc::new(DurationOffsetTransportCost::new(transport, Arc::new(offsets)));
     }
+
+    (transport, create_route_from_the_depot(vec![stop(1, window_start, clock(7., 25.))]))
+}
+
+/// Leaves the depot (0) at 06:00 for one stop (3) open from 07:40 to 08:00, over a crossing from quay A (1) to quay B
+/// (2) with one sailing, at 06:36:07: 300 s to the quay, 1200 s on the water and 600 s on, while the direct road takes
+/// 100,000 s. From 06:30 the drive to the quay takes up to 480 s longer, so the latest start which still catches the
+/// sailing is 06:30:52.89.
+fn create_route_over_a_ferry() -> (Arc<dyn TransportCost>, RouteContext) {
+    let mut durations = vec![0.; 16];
+    durations[1] = 300.;
+    durations[2 * 4 + 3] = 600.;
+    durations[3] = 100_000.;
+    let road = create_matrix_transport_cost(vec![MatrixData::new(0, None, durations.clone(), durations)]).unwrap();
+    let profile = OffsetProfile::new(vec![
+        (clock(6., 30.), 0.),
+        (clock(7., 0.), 480.),
+        (clock(9., 0.), 480.),
+        (clock(9., 12.), 0.),
+    ])
+    .unwrap();
+    let mut cells = vec![0; 16];
+    cells[1] = 1;
+    let offsets = DurationOffsets::new(4, vec![(0, cells, vec![profile])]).unwrap();
+    let sailing = FerrySailing { dep: clock(6., 36.) + 7., arr: clock(6., 56.) + 7. };
+    let crossing = FerryCrossing::new("crossing".to_string(), 1, 2, 1200., 0., vec![sailing], vec![]);
+    let transport: Arc<dyn TransportCost> = Arc::new(FerryAwareTransportCost::new(
+        Arc::new(DurationOffsetTransportCost::new(road, Arc::new(offsets))),
+        Arc::new(FerryIndex::new(vec![crossing])),
+    ));
+
+    (transport, create_route_from_the_depot(vec![stop(3, clock(7., 40.), clock(8., 0.))]))
+}
+
+fn stop(location: Location, start: Timestamp, end: Timestamp) -> Activity {
+    ActivityBuilder::with_location_tw_and_duration(location, TimeWindow::new(start, end), 0.).build()
+}
+
+/// Leaves the depot, location 0, at 06:00 for the stops and returns there by 23:00.
+fn create_route_from_the_depot(stops: Vec<Activity>) -> RouteContext {
     let fleet = FleetBuilder::default()
         .add_driver(test_driver())
         .add_vehicle(Vehicle {
@@ -132,14 +231,12 @@ fn create_route_to_one_stop(window_start: Timestamp, has_offsets: bool) -> (Arc<
             ..test_vehicle_with_id("v1")
         })
         .build();
-    let stop =
-        ActivityBuilder::with_location_tw_and_duration(1, TimeWindow::new(window_start, clock(7., 25.)), 0.).build();
     let mut route_ctx = RouteContextBuilder::default()
-        .with_route(RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(stop).build())
+        .with_route(RouteBuilder::default().with_vehicle(&fleet, "v1").add_activities(stops).build())
         .build();
     route_ctx.route_mut().tour.get_mut(0).unwrap().schedule.departure = clock(6., 0.);
 
-    (transport, route_ctx)
+    route_ctx
 }
 
 parameterized_test! {can_recede_departure_time, (earliest, start_departure, latest_first_arrival, tw, duration_limit, expected), {
