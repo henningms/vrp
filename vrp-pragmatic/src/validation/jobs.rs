@@ -5,6 +5,7 @@ mod jobs_test;
 use super::*;
 use crate::utils::combine_error_results;
 use vrp_core::models::common::MultiDimLoad;
+use vrp_core::prelude::Float;
 
 /// Checks that plan has no jobs with duplicate ids.
 fn check_e1100_no_jobs_with_duplicate_ids(ctx: &ValidationContext) -> Result<(), FormatError> {
@@ -289,6 +290,86 @@ fn check_e9103_no_empty_one_of_skill_group(ctx: &ValidationContext) -> Result<()
     }
 }
 
+/// Checks that job place stop durations are finite and non-negative.
+fn check_e9104_stop_duration_value(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let ids = ctx
+        .jobs()
+        .filter(|job| {
+            job_places(job).any(|place| place.stop_duration.is_some_and(|value| !is_valid_stop_duration(value)))
+        })
+        .map(|job| job.id.clone())
+        .collect::<Vec<_>>();
+
+    if ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9104".to_string(),
+            "invalid stop duration".to_string(),
+            format!("use a finite, non-negative stopDuration in jobs with ids: '{}'", ids.join(", ")),
+        ))
+    }
+}
+
+/// Checks that positive stop durations are not combined with features which do not support them.
+fn check_e9105_stop_duration_conflict(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let Some(feature) = get_stop_duration_conflict(ctx.problem) else {
+        return Ok(());
+    };
+
+    let ids = ctx
+        .jobs()
+        .filter(|job| job_places(job).any(|place| place.stop_duration.is_some_and(|value| value > 0.)))
+        .map(|job| job.id.clone())
+        .collect::<Vec<_>>();
+
+    if ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9105".to_string(),
+            "stop duration with an unsupported feature".to_string(),
+            format!(
+                "remove stopDuration from jobs with ids '{}' or remove {feature}: they cannot be combined",
+                ids.join(", ")
+            ),
+        ))
+    }
+}
+
+fn job_places(job: &Job) -> impl Iterator<Item = &JobPlace> {
+    job.pickups
+        .iter()
+        .chain(job.deliveries.iter())
+        .chain(job.replacements.iter())
+        .chain(job.services.iter())
+        .flatten()
+        .flat_map(|task| task.places.iter())
+}
+
+/// Checks whether a stop duration is a finite, non-negative number.
+pub(crate) fn is_valid_stop_duration(value: Float) -> bool {
+    value.is_finite() && value >= 0.
+}
+
+/// Returns the feature which cannot be combined with positive stop durations, if the problem uses one.
+pub(crate) fn get_stop_duration_conflict(problem: &Problem) -> Option<&'static str> {
+    if problem.plan.clustering.is_some() {
+        Some("vicinity clustering")
+    } else if problem
+        .fleet
+        .vehicles
+        .iter()
+        .flat_map(|vehicle| vehicle.shifts.iter())
+        .flat_map(|shift| shift.breaks.iter().flatten())
+        .any(|vehicle_break| matches!(vehicle_break, VehicleBreak::Required { .. }))
+    {
+        Some("required breaks")
+    } else {
+        None
+    }
+}
+
 /// Validates jobs from the plan.
 pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
     combine_error_results(&[
@@ -303,6 +384,8 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e9101_demand_named_demand_mutual_exclusion(ctx),
         check_e9102_named_demand_dimensions_exist(ctx),
         check_e9103_no_empty_one_of_skill_group(ctx),
+        check_e9104_stop_duration_value(ctx),
+        check_e9105_stop_duration_conflict(ctx),
     ])
     .map_err(From::from)
 }

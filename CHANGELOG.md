@@ -8,6 +8,29 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* job place `stopDuration`: the time a vehicle needs to stop at the place's location (pull in, park, open doors),
+  charged once per arrival at that location from a different location, on top of each activity's `duration`, so many
+  jobs served at one stop pay it once. Places at one location share the largest value; waiting for a time window
+  overlaps it, and time windows, `requestedTime` and `maxRideDuration` apply to the service start. The profile
+  `scale` does not apply to it and distances do not change. In the solution, a stop's arrival is when the vehicle
+  pulled in, its `parking` interval and `statistic.times.parking` report the stop duration, and `driving` excludes it.
+  Absent or `0` leaves solutions unchanged. In core, `StopDurations` and `StopDurationTransportCost` in
+  `models::problem` add it to travel durations, and `StopDurationsExtraProperty` (`get_stop_durations` /
+  `set_stop_durations`) keeps the table in the problem's extras. `JobPlace` has a new public field: Rust code building
+  it with a struct literal adds `stop_duration: None`
+* validate job place stop durations: a negative or non-finite `stopDuration` (E9104), a positive one together with
+  vicinity clustering or required breaks (E9105), and one on a vehicle shift's `requiredStops`, `via` or recharge
+  station place (E9307)
+* the solution checker checks stop durations: every stop's `parking` matches the stop duration it pays, its
+  activities start after it, and a tour's `statistic.times.parking` sums them. Skipped with vicinity clustering. Its
+  break and shift time rules end a tour when the stop duration at its end location ends
+* `FeasibilityContext::new_with_candidates`: builds a feasibility context which knows the candidate jobs, so their
+  locations are registered (as with `job_locations`) and their stop durations apply. `check_job` and `accept_job`
+  return an error for a candidate with an invalid stop duration or one the context was not built with, and
+  `check_insertion_feasibility` uses the new constructor
+
 ## [1.41.0] 2026-10-21
 
 ### Added

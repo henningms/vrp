@@ -14,7 +14,10 @@ use crate::{CoordIndex, parse_time};
 use vrp_core::construction::enablers::*;
 use vrp_core::models::Extras;
 use vrp_core::models::common::{TimeOffset, TimeSpan, TimeWindow};
-use vrp_core::models::problem::{FerryAwareTransportCost, FerryTransport, FerryTransportExtraProperty};
+use vrp_core::models::problem::{
+    FerryAwareTransportCost, FerryTransport, FerryTransportExtraProperty, StopDurationTransportCost, StopDurations,
+    StopDurationsExtraProperty,
+};
 use vrp_core::solver::processing::{ClusterConfigExtraProperty, ReservedTimesExtraProperty};
 
 pub(super) fn map_to_problem_with_approx(problem: ApiProblem) -> Result<CoreProblem, MultiFormatError> {
@@ -38,17 +41,20 @@ pub(super) fn map_to_problem(
     coord_index: CoordIndex,
 ) -> Result<CoreProblem, MultiFormatError> {
     let props = None;
-    map_to_problem_with_props(api_problem, matrices, coord_index, props)
+    map_to_problem_with_props(api_problem, matrices, coord_index, props, &[])
 }
 
 /// Like `map_to_problem`, but accepts optional pre-computed properties.
 /// When `props_override` is `Some`, those properties are used instead of
 /// auto-detecting them from the problem definition.
+/// `candidate_jobs` are jobs outside the plan which may be inserted later: the transport is built once, so it must
+/// already charge their places' stop durations.
 pub(crate) fn map_to_problem_with_props(
     api_problem: ApiProblem,
     matrices: Vec<Matrix>,
     coord_index: CoordIndex,
     props_override: Option<ProblemProperties>,
+    candidate_jobs: &[Job],
 ) -> Result<CoreProblem, MultiFormatError> {
     ValidationContext::new(&api_problem, Some(&matrices), &coord_index).validate()?;
     let api_problem = with_inferred_sites(api_problem);
@@ -61,7 +67,7 @@ pub(crate) fn map_to_problem_with_props(
     let mut job_index = JobIndex::default();
 
     let props = props_override.unwrap_or_else(|| get_problem_properties(&api_problem, &matrices));
-    let mut blocks = get_problem_blocks(&api_problem, matrices, coord_index, &mut job_index, &props)?;
+    let mut blocks = get_problem_blocks(&api_problem, matrices, coord_index, &mut job_index, &props, candidate_jobs)?;
 
     let job_index = Arc::new(job_index);
     extras.set_job_index(job_index.clone());
@@ -69,7 +75,17 @@ pub(crate) fn map_to_problem_with_props(
 
     let goal = Arc::new(create_goal_context(&api_problem, &blocks, &props).map_err(to_multi_format_error)?);
 
-    let ProblemBlocks { jobs, fleet, transport, activity, locks, reserved_times_index, ferry_transport, .. } = blocks;
+    let ProblemBlocks {
+        jobs,
+        fleet,
+        transport,
+        activity,
+        locks,
+        reserved_times_index,
+        ferry_transport,
+        stop_durations,
+        ..
+    } = blocks;
 
     if let Some(config) = create_cluster_config(&api_problem).map_err(to_multi_format_error)? {
         extras.set_cluster_config(Arc::new(config));
@@ -81,6 +97,10 @@ pub(crate) fn map_to_problem_with_props(
 
     if let Some(ferry_transport) = ferry_transport {
         extras.set_ferry_transport(ferry_transport);
+    }
+
+    if let Some(stop_durations) = stop_durations {
+        extras.set_stop_durations(stop_durations);
     }
 
     Ok(CoreProblem { fleet, jobs, locks, goal, activity, transport, extras: Arc::new(extras) })
@@ -132,6 +152,31 @@ fn read_reserved_times_index(api_problem: &ApiProblem, fleet: &CoreFleet) -> Res
             if times.is_empty() { None } else { Some((actor.clone(), times)) }
         })
         .collect()
+}
+
+/// Reads the stop durations of the plan jobs' and the candidate jobs' places, `None` when no place has a positive one.
+pub(crate) fn read_stop_durations(
+    api_problem: &ApiProblem,
+    candidate_jobs: &[Job],
+    coord_index: &CoordIndex,
+) -> Option<StopDurations> {
+    let stop_durations = StopDurations::new(
+        api_problem
+            .plan
+            .jobs
+            .iter()
+            .chain(candidate_jobs.iter())
+            .flat_map(|job| job.all_tasks_iter())
+            .flat_map(|task| task.places.iter())
+            // a custom location has no position, and its index lies past the matrix
+            .filter(|place| !matches!(place.location, Location::Custom { .. }))
+            .filter_map(|place| {
+                let stop_duration = place.stop_duration.filter(|&stop_duration| stop_duration > 0.)?;
+                coord_index.get_by_loc(&place.location).map(|location| (location, stop_duration))
+            }),
+    );
+
+    if stop_durations.is_empty() { None } else { Some(stop_durations) }
 }
 
 fn to_multi_format_error(error: GenericError) -> MultiFormatError {
@@ -223,6 +268,7 @@ fn get_problem_blocks(
     coord_index: Arc<CoordIndex>,
     job_index: &mut JobIndex,
     problem_props: &ProblemProperties,
+    candidate_jobs: &[Job],
 ) -> Result<ProblemBlocks, MultiFormatError> {
     // TODO pass environment from outside to allow parametrization
     let environment = Environment::default();
@@ -292,6 +338,13 @@ fn get_problem_blocks(
             })?
     };
 
+    // outermost: a stop duration is time at the destination, after the road, a ferry or a break on the way
+    let stop_durations = read_stop_durations(api_problem, candidate_jobs, &coord_index).map(Arc::new);
+    let transport: Arc<dyn TransportCost> = match &stop_durations {
+        Some(stop_durations) => Arc::new(StopDurationTransportCost::new(transport, stop_durations.clone())),
+        None => transport,
+    };
+
     let (jobs, locks) = read_jobs_with_extra_locks(
         api_problem,
         problem_props,
@@ -312,6 +365,7 @@ fn get_problem_blocks(
         locks,
         reserved_times_index,
         ferry_transport,
+        stop_durations,
         opposite_side_cells: Arc::new(opposite_side_cells),
     })
 }

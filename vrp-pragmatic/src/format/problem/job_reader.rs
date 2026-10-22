@@ -484,6 +484,7 @@ fn read_reloads(
             tag: reload.tag.clone(),
             requested_time: None,
             curb_side: None,
+            stop_duration: None,
         }),
     )
 }

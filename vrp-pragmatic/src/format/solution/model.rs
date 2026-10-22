@@ -24,7 +24,7 @@ pub struct Timing {
     /// Commuting time.
     #[serde(default = "i64::default")]
     pub commuting: i64,
-    /// Parking time.
+    /// Parking time: stop durations of job places and the parking time of vicinity clustering.
     #[serde(default = "i64::default")]
     pub parking: i64,
 }
@@ -220,7 +220,7 @@ pub struct PointStop {
     pub distance: i64,
     /// Vehicle load after departure from this stop.
     pub load: Vec<i32>,
-    /// Parking time.
+    /// Parking time: the stop duration of a stop which pays one, or the parking time of vicinity clustering.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parking: Option<Interval>,
     /// Activities performed at the stop.

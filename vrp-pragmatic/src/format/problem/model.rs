@@ -134,6 +134,10 @@ pub struct JobPlace {
     /// side in `oppositeSideArrivals`; the solver does not read it.
     #[serde(skip_serializing_if = "Option::is_none", rename = "curbSide")]
     pub curb_side: Option<CurbSide>,
+    /// Time to stop at the place's location (pull in, park, open doors), in seconds. Charged once per arrival at the
+    /// location from another location, on top of `duration`; places at one location share the largest.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "stopDuration")]
+    pub stop_duration: Option<Float>,
 }
 
 /// Which side of the road a vehicle should arrive with a place on.

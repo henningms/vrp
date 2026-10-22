@@ -7,7 +7,15 @@ use vrp_core::models::common::Duration;
 use vrp_core::prelude::Float;
 
 pub fn create_job_place(location: (f64, f64), tag: Option<String>) -> JobPlace {
-    JobPlace { times: None, location: location.to_loc(), duration: 1., tag, requested_time: None, curb_side: None }
+    JobPlace {
+        times: None,
+        location: location.to_loc(),
+        duration: 1.,
+        tag,
+        requested_time: None,
+        curb_side: None,
+        stop_duration: None,
+    }
 }
 
 pub fn create_task(location: (f64, f64), tag: Option<String>) -> JobTask {
@@ -32,6 +40,19 @@ pub fn create_job(id: &str) -> Job {
         max_ride_duration: None,
         site: None,
     }
+}
+
+pub fn set_stop_duration(mut job: Job, stop_duration: Option<Float>) -> Job {
+    job.pickups
+        .iter_mut()
+        .chain(job.deliveries.iter_mut())
+        .chain(job.services.iter_mut())
+        .chain(job.replacements.iter_mut())
+        .flatten()
+        .flat_map(|task| task.places.iter_mut())
+        .for_each(|place| place.stop_duration = stop_duration);
+
+    job
 }
 
 pub fn create_delivery_job(id: &str, location: (f64, f64)) -> Job {
@@ -183,6 +204,7 @@ pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
                 tag: None,
                 requested_time: None,
                 curb_side: None,
+                stop_duration: None,
             }],
             demand: Some(vec![1]),
             named_demand: None,

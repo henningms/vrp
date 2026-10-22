@@ -580,3 +580,180 @@ mod per_run_cost {
         assert_eq!(run_fees_of(&by_name(after)) - run_fees_of(&by_name(before)), delta);
     }
 }
+
+mod stop_durations {
+    use super::*;
+    use crate::construction::enablers::TotalDurationTourState;
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::models::problem::{StopDurationTransportCost, StopDurations};
+    use crate::models::solution::Activity;
+    use rosomaxa::prelude::Float;
+    use std::sync::Arc;
+
+    fn create_feature() -> Feature {
+        let stop_durations = Arc::new(StopDurations::new(vec![(10, 30.), (20, 40.)]));
+        TransportFeatureBuilder::new("transport")
+            .set_violation_code(VIOLATION_CODE)
+            .set_transport_cost(Arc::new(StopDurationTransportCost::new(
+                TestTransportCost::new_shared(),
+                stop_durations,
+            )))
+            .set_activity_cost(TestActivityCost::new_shared())
+            .build_minimize_duration()
+            .unwrap()
+    }
+
+    fn activity(location: Location, time: (Timestamp, Timestamp)) -> Activity {
+        ActivityBuilder::with_location_tw_and_duration(location, TimeWindow::new(time.0, time.1), 5.).build()
+    }
+
+    fn job(location: Location) -> Activity {
+        activity(location, (0., 1000.))
+    }
+
+    /// A scheduled route of a vehicle starting at `start` at time 0 and ending at 0.
+    fn create_route(feature: &Feature, start: Location, activities: Vec<Activity>) -> RouteContext {
+        let fleet = FleetBuilder::default()
+            .add_driver(test_driver())
+            .add_vehicles(vec![
+                TestVehicleBuilder::default()
+                    .id("v1")
+                    .details(vec![create_detail((Some(start), Some(0)), Some((0., 1000.)))])
+                    .build(),
+            ])
+            .build();
+        let mut route_ctx = RouteContextBuilder::default()
+            .with_route(RouteBuilder::default().with_vehicle(&fleet, "v1").add_activities(activities).build())
+            .build();
+        feature.state.as_ref().unwrap().accept_route_state(&mut route_ctx);
+
+        route_ctx
+    }
+
+    /// Arrival and departure of every activity after the start, the end included.
+    fn schedules(route_ctx: &RouteContext) -> Vec<(Timestamp, Timestamp)> {
+        route_ctx.route().tour.all_activities().skip(1).map(|a| (a.schedule.arrival, a.schedule.departure)).collect()
+    }
+
+    fn total_duration(route_ctx: &RouteContext) -> Float {
+        *route_ctx.state().get_total_duration().unwrap()
+    }
+
+    /// Estimates inserting `target` after the tour activity at `index`.
+    fn estimate(feature: &Feature, route_ctx: &RouteContext, target: &Activity, index: usize) -> Float {
+        let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+        let tour = &route_ctx.route().tour;
+        let activity_ctx = ActivityContext { index, prev: tour.get(index).unwrap(), target, next: tour.get(index + 1) };
+
+        feature.objective.as_ref().unwrap().estimate(&MoveContext::activity(&solution_ctx, route_ctx, &activity_ctx))
+    }
+
+    /// Evaluates the time constraint for inserting `target` after the tour activity at `index`.
+    fn evaluate(
+        feature: &Feature,
+        route_ctx: &RouteContext,
+        target: &Activity,
+        index: usize,
+    ) -> Option<ConstraintViolation> {
+        let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+        let tour = &route_ctx.route().tour;
+        let activity_ctx = ActivityContext { index, prev: tour.get(index).unwrap(), target, next: tour.get(index + 1) };
+
+        feature.constraint.as_ref().unwrap().evaluate(&MoveContext::activity(&solution_ctx, route_ctx, &activity_ctx))
+    }
+
+    /// Inserts `target` after the tour activity at `index` and updates the schedule.
+    fn insert(feature: &Feature, route_ctx: &mut RouteContext, target: Activity, index: usize) {
+        route_ctx.route_mut().tour.insert_at(target, index + 1);
+        feature.state.as_ref().unwrap().accept_route_state(route_ctx);
+    }
+
+    #[test]
+    fn charges_a_stop_duration_once_per_arrival_and_again_on_a_revisit() {
+        let feature = create_feature();
+
+        let route_ctx = create_route(&feature, 0, vec![job(10), job(10), job(20), job(10)]);
+
+        assert_eq!(schedules(&route_ctx), vec![(40., 45.), (45., 50.), (100., 105.), (145., 150.), (160., 160.)]);
+    }
+
+    #[test]
+    fn charges_none_from_the_start_at_the_same_location_or_into_an_end_without_one() {
+        let feature = create_feature();
+
+        let route_ctx = create_route(&feature, 10, vec![job(10), job(20)]);
+
+        assert_eq!(schedules(&route_ctx), vec![(0., 5.), (55., 60.), (80., 80.)]);
+    }
+
+    #[test]
+    fn inserting_at_the_previous_location_adds_only_its_own_duration() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, 0, vec![job(10)]);
+        assert_eq!(total_duration(&route_ctx), 55.);
+
+        assert_eq!(estimate(&feature, &route_ctx, &job(10), 1), 0.);
+        insert(&feature, &mut route_ctx, job(10), 1);
+
+        assert_eq!(schedules(&route_ctx), vec![(40., 45.), (45., 50.), (60., 60.)]);
+        assert_eq!(total_duration(&route_ctx), 60.);
+    }
+
+    #[test]
+    fn inserting_another_location_between_two_activities_at_one_location_makes_the_second_pay() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, 0, vec![job(10), job(10)]);
+        assert_eq!(total_duration(&route_ctx), 60.);
+
+        let delta = estimate(&feature, &route_ctx, &job(20), 1);
+        insert(&feature, &mut route_ctx, job(20), 1);
+
+        assert_eq!(delta, 90.);
+        assert_eq!(schedules(&route_ctx), vec![(40., 45.), (95., 100.), (140., 145.), (155., 155.)]);
+        // the estimate covers travel and stop durations; the inserted job's own 5 completes the change
+        assert_eq!(total_duration(&route_ctx) - 60., delta + 5.);
+    }
+
+    #[test]
+    fn inserting_at_the_next_location_removes_its_stop_duration() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, 0, vec![job(20), job(10)]);
+        assert_eq!(schedules(&route_ctx), vec![(60., 65.), (105., 110.), (120., 120.)]);
+
+        assert_eq!(estimate(&feature, &route_ctx, &job(10), 1), 0.);
+        insert(&feature, &mut route_ctx, job(10), 1);
+
+        assert_eq!(schedules(&route_ctx), vec![(60., 65.), (105., 110.), (110., 115.), (125., 125.)]);
+    }
+
+    #[test]
+    fn rejects_a_target_whose_window_closes_within_its_stop_duration() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, 0, vec![job(10)]);
+
+        // the vehicle leaves 10 at 45 and is ready at 20 at 45 + 10 + 40 = 95
+        assert_eq!(
+            evaluate(&feature, &route_ctx, &activity(20, (0., 94.)), 1),
+            ConstraintViolation::skip(VIOLATION_CODE)
+        );
+        assert_eq!(evaluate(&feature, &route_ctx, &activity(20, (0., 95.)), 1), None);
+
+        insert(&feature, &mut route_ctx, activity(20, (0., 95.)), 1);
+        assert_eq!(route_ctx.route().tour.get(2).unwrap().schedule.arrival, 95.);
+    }
+
+    #[test]
+    fn rejects_a_target_which_pushes_the_next_activity_past_its_window() {
+        let feature = create_feature();
+
+        // a job at 10 first makes the job at 20 ready at 0 + 10 + 30 + 5 + 10 + 40 = 95
+        let route_ctx = create_route(&feature, 0, vec![activity(20, (0., 94.))]);
+        assert_eq!(evaluate(&feature, &route_ctx, &job(10), 0), ConstraintViolation::skip(VIOLATION_CODE));
+
+        let mut route_ctx = create_route(&feature, 0, vec![activity(20, (0., 95.))]);
+        assert_eq!(evaluate(&feature, &route_ctx, &job(10), 0), None);
+
+        insert(&feature, &mut route_ctx, job(10), 0);
+        assert_eq!(route_ctx.route().tour.get(2).unwrap().schedule.arrival, 95.);
+    }
+}

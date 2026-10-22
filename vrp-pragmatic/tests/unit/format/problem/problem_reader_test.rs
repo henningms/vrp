@@ -110,3 +110,100 @@ fn wrapping_order_charges_both_the_ferry_and_an_overlapping_required_break() {
     // final answer and this would read 7 instead.
     assert_eq!(duration, 37.);
 }
+
+#[test]
+fn reads_stop_duration_from_json() {
+    let place: JobPlace =
+        serde_json::from_str(r#"{"location":{"lat":1,"lng":0},"duration":5,"stopDuration":30}"#).unwrap();
+
+    assert_eq!(place.stop_duration, Some(30.));
+    assert!(!serde_json::to_string(&create_job_place((1., 0.), None)).unwrap().contains("stopDuration"));
+}
+
+#[test]
+fn leaves_the_transport_unwrapped_without_a_positive_stop_duration() {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                create_delivery_job("job1", (100., 0.)),
+                set_stop_duration(create_delivery_job("job2", (50., 0.)), Some(0.)),
+            ],
+            ..create_empty_plan()
+        },
+        fleet: create_default_fleet(),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    // job1 is location 0, job2 location 1 and the depot location 2
+    assert!(core_problem.extras.get_stop_durations().is_none());
+    assert_eq!(core_problem.transport.duration_approx(&Profile::default(), 2, 0), 100.);
+}
+
+#[test]
+fn reads_the_largest_stop_duration_per_location_into_the_transport() {
+    let alternatives = Job {
+        deliveries: Some(vec![JobTask {
+            places: vec![
+                JobPlace { stop_duration: Some(10.), ..create_job_place((50., 0.), None) },
+                JobPlace { stop_duration: Some(20.), ..create_job_place((70., 0.), None) },
+            ],
+            demand: Some(vec![1]),
+            named_demand: None,
+            order: None,
+        }]),
+        ..create_job("alternatives")
+    };
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![
+                set_stop_duration(create_delivery_job("short", (100., 0.)), Some(30.)),
+                set_stop_duration(create_delivery_job("long", (100., 0.)), Some(60.)),
+                alternatives,
+            ],
+            ..create_empty_plan()
+        },
+        fleet: create_default_fleet(),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    // (100, 0) is location 0, (50, 0) is 1, (70, 0) is 2 and the depot 3
+    let stop_durations = core_problem.extras.get_stop_durations().expect("stop durations published");
+    assert_eq!((0..4).map(|location| stop_durations.get(location)).collect::<Vec<_>>(), vec![60., 10., 20., 0.]);
+    let profile = Profile::default();
+    assert_eq!(core_problem.transport.duration_approx(&profile, 3, 0), 160.);
+    assert_eq!(core_problem.transport.duration_approx(&profile, 0, 3), 100.);
+    assert_eq!(core_problem.transport.duration_approx(&profile, 0, 0), 0.);
+    assert_eq!(core_problem.transport.distance_approx(&profile, 3, 0), 100.);
+}
+
+#[test]
+fn adds_the_stop_duration_outside_the_ferry_aware_transport() {
+    // the setup of `ferry_crossings_install_a_ferry_aware_transport_reachable_through_extras`: 7 by ferry, 100 by road
+    let mut crossing = create_ferry_crossing("crossing1", (1., 0.), (99., 0.));
+    crossing.crossing_sec = 5.;
+    crossing.boarding_buffer_sec = 0.;
+    crossing.sailings = FerrySailings { a_to_b: vec![FerrySailing { dep: 0., arr: 5. }], b_to_a: vec![] };
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![set_stop_duration(create_delivery_job("job1", (100., 0.)), Some(30.))],
+            ..create_empty_plan()
+        },
+        fleet: create_default_fleet(),
+        ferry_crossings: Some(vec![crossing]),
+        ..create_empty_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    let profile = Profile::default();
+    let road = core_problem.extras.get_ferry_transport().expect("ferry transport published").road.clone();
+    assert_eq!(road.duration_approx(&profile, 1, 0), 100.);
+    assert_eq!(core_problem.transport.duration_approx(&profile, 1, 0), 37.);
+}

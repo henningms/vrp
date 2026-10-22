@@ -14,3 +14,6 @@ pub use self::fleet::*;
 
 mod jobs;
 pub use self::jobs::*;
+
+mod stop_duration;
+pub use self::stop_duration::*;

@@ -15,7 +15,11 @@ use vrp_core::prelude::GenericResult;
 
 /// Checks that matrix routing information is used properly.
 pub fn check_routing(context: &CheckerContext) -> Result<(), Vec<GenericError>> {
-    combine_error_results(&[check_routing_rules(context), check_ferry_legs_rules(context)])
+    combine_error_results(&[
+        check_routing_rules(context),
+        check_ferry_legs_rules(context),
+        check_stop_duration_rules(context),
+    ])
 }
 
 fn check_routing_rules(context: &CheckerContext) -> GenericResult<()> {
@@ -354,6 +358,90 @@ fn check_one_ferry_leg(
         return Err(format!(
             "ferryLeg '{}' next stop arrival mismatch: expected ~{expected_to_arrival}, got {to_arrival}",
             leg.crossing_id
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Checks every stop's `parking` and activity starts against the stop duration it pays, and each tour's parking
+/// statistic against their sum. The solution carries whole seconds, so every comparison allows one second.
+fn check_stop_duration_rules(context: &CheckerContext) -> GenericResult<()> {
+    // vicinity clustering reports its own parking through the same field
+    if context.clustering.is_some() {
+        return Ok(());
+    }
+
+    let stop_durations = read_stop_durations(&context.problem, &[], &context.coord_index);
+
+    context.solution.tours.iter().try_for_each(|tour| {
+        let (_, expected) = tour
+            .stops
+            .iter()
+            .enumerate()
+            .filter_map(|(stop_idx, stop)| stop.as_point().map(|point| (stop_idx, stop, point)))
+            .try_fold::<_, _, GenericResult<_>>((None, 0_i64), |(prev_location, total), (stop_idx, stop, point)| {
+                let location = context.get_location_index(&point.location)?;
+                let expected = match (stop_durations.as_ref(), prev_location) {
+                    (Some(stop_durations), Some(prev_location)) => stop_durations.on_leg(prev_location, location),
+                    _ => 0.,
+                };
+
+                check_stop_duration(context, tour, stop_idx, stop, point, expected)?;
+
+                Ok((Some(location), total + expected as i64))
+            })?;
+
+        let actual = tour.statistic.times.parking;
+        if (expected - actual).abs() > 1 {
+            return Err(format!(
+                "parking statistic mismatch for tour '{}': expected '{expected}', got '{actual}'",
+                tour.vehicle_id
+            )
+            .into());
+        }
+
+        Ok(())
+    })
+}
+
+fn check_stop_duration(
+    context: &CheckerContext,
+    tour: &Tour,
+    stop_idx: usize,
+    stop: &Stop,
+    point: &PointStop,
+    expected: Duration,
+) -> GenericResult<()> {
+    let arrival = parse_time(&point.time.arrival);
+    let is_close = |time: &str, expected_time: Timestamp| (parse_time(time) - expected_time).abs() <= 1.;
+
+    let is_parking_valid = match (&point.parking, expected > 0.) {
+        (Some(parking), true) => is_close(&parking.start, arrival) && is_close(&parking.end, arrival + expected),
+        (None, false) => true,
+        _ => false,
+    };
+    if !is_parking_valid {
+        return Err(format!(
+            "parking at stop {stop_idx} in tour '{}' does not match its stop duration of {expected}s",
+            tour.vehicle_id
+        )
+        .into());
+    }
+
+    if expected <= 0. {
+        return Ok(());
+    }
+
+    let early_activity = point
+        .activities
+        .iter()
+        .find(|activity| context.get_activity_time(stop, activity).start + 1. < arrival + expected);
+    if let Some(activity) = early_activity {
+        return Err(format!(
+            "activity '{}' at stop {stop_idx} in tour '{}' starts before its stop duration ends",
+            activity.job_id, tour.vehicle_id
         )
         .into());
     }

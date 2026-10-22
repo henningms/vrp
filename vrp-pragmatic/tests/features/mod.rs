@@ -22,6 +22,7 @@ mod reload;
 mod site_mixing;
 mod skills;
 mod solo_riding;
+mod stop_duration;
 mod timing;
 mod tour_shape;
 mod unassigned;

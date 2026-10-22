@@ -83,6 +83,7 @@ prop_compose! {
           tag,
           requested_time: None,
           curb_side: None,
+          stop_duration: None,
         }
     }
 }

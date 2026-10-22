@@ -1,11 +1,14 @@
 use crate::format::feasibility::{FeasibilityContext, job_locations};
 use crate::format::problem::*;
+use crate::format::solution::{Interval, Solution};
 use crate::format::{CoordIndex, Location};
+use crate::format_time;
 use crate::helpers::*;
 use std::sync::Arc;
 use std::time::Instant;
 use vrp_core::construction::heuristics::InsertionContext;
 use vrp_core::models::Problem as CoreProblem;
+use vrp_core::prelude::{Float, GenericError};
 use vrp_core::solver::{Solver, VrpConfigBuilder};
 use vrp_core::utils::{Environment, Parallelism};
 
@@ -1072,7 +1075,7 @@ fn check_job_resolves_candidate_coordinate_absent_from_problem() {
 }
 
 /// Builds a single vehicle whose shift starts at depot (0,0) with NO end (open
-/// route), capacity 10. Mirrors Ferd's open shifts (driver goes off-duty
+/// route), capacity 10. Mirrors an open shift (driver goes off-duty
 /// wherever the last drop-off is; no forced return-to-depot).
 fn open_windowed_vehicle() -> VehicleType {
     VehicleType {
@@ -1127,9 +1130,9 @@ fn open_windowed_solution_json() -> String {
 /// Regression for the OPEN-route insertion-check append false negative.
 ///
 /// Same shape as `can_append_candidate_after_last_stop_with_slack`, but the shift
-/// has NO end (open route) and the solution has NO arrival stop. This mirrors the
-/// Ferd production payload (open shifts) that produced a spurious
-/// `TIME_WINDOW_CONSTRAINT` while `/solve` placed the same candidate trivially.
+/// has NO end (open route) and the solution has NO arrival stop. This mirrors a
+/// production payload (open shifts) that produced a spurious
+/// `TIME_WINDOW_CONSTRAINT` while a full solve placed the same candidate trivially.
 ///
 /// Root cause (fixed in `initial_reader::create_core_route`): for an open route
 /// `CoreTour::new` creates only a start activity, so `tour.end()` — which returns
@@ -1229,4 +1232,131 @@ fn feasibility_context_transport_is_ferry_aware() {
 
     assert_eq!(road_duration, 100.);
     assert_eq!(context_duration, 7., "FeasibilityContext's transport must be the ferry-aware one");
+}
+
+/// job1 and job2 as in `can_append_candidate_after_last_stop_with_slack`.
+fn windowed_jobs() -> Vec<Job> {
+    vec![
+        create_delivery_job_with_times("job1", (1.0, 0.0), vec![(100, 110)], 1.),
+        create_delivery_job_with_times("job2", (2.0, 0.0), vec![(200, 210)], 1.),
+    ]
+}
+
+/// The candidate's window [215, 230] opens after job2's closes, so it can only follow job2. The vehicle leaves job2
+/// at (2,0) at 201 and pulls in at (3,0) at 202: the window is met with a stop duration of 20 (ready at 222) and missed
+/// with 60 (ready at 262).
+fn stop_candidate(stop_duration: Option<Float>) -> Job {
+    set_stop_duration(create_delivery_job_with_times("candidate", (3.0, 0.0), vec![(215, 230)], 1.), stop_duration)
+}
+
+fn windowed_context_with_candidates(vehicle: VehicleType, candidate: &Job) -> Result<FeasibilityContext, GenericError> {
+    let (problem, matrix) =
+        build_problem_and_matrix_with_extra(vec![vehicle], windowed_jobs(), &job_locations(candidate));
+
+    FeasibilityContext::new_with_candidates(
+        problem,
+        vec![matrix],
+        &windowed_solution_json(),
+        std::slice::from_ref(candidate),
+    )
+}
+
+#[test]
+fn gives_a_candidate_at_a_new_location_its_stop_duration() {
+    for (stop_duration, is_feasible) in [(None, true), (Some(20.), true), (Some(60.), false)] {
+        let candidate = stop_candidate(stop_duration);
+        let ctx = windowed_context_with_candidates(windowed_vehicle(1000), &candidate).expect("cannot build context");
+
+        let result = ctx.check_job(&candidate).expect("check_job failed");
+
+        assert_eq!(result.is_feasible, is_feasible, "{stop_duration:?}: {:?}", result.vehicles);
+    }
+}
+
+#[test]
+fn reports_the_stop_duration_of_an_accepted_candidate() {
+    let candidate = stop_candidate(Some(20.));
+    let mut ctx = windowed_context_with_candidates(windowed_vehicle(1000), &candidate).expect("cannot build context");
+
+    assert!(ctx.accept_job(&candidate).expect("accept_job failed").is_feasible);
+
+    let solution: Solution = serde_json::from_str(&ctx.to_solution_json().unwrap()).unwrap();
+    let stop = solution.tours[0]
+        .stops
+        .iter()
+        .filter_map(|stop| stop.as_point())
+        .find(|stop| stop.activities.iter().any(|activity| activity.job_id == "candidate"))
+        .expect("a stop with the candidate");
+    assert_eq!(stop.time.arrival, format_time(202.));
+    assert_eq!(stop.parking, Some(Interval { start: format_time(202.), end: format_time(222.) }));
+}
+
+#[test]
+fn refuses_a_candidate_whose_stop_duration_the_context_was_not_built_with() {
+    let candidate = stop_candidate(Some(20.));
+    let extra = job_locations(&candidate);
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![windowed_vehicle(1000)], windowed_jobs(), &extra);
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &windowed_solution_json(), &extra)
+        .expect("cannot build context");
+
+    let error = ctx.check_job(&candidate).expect_err("an unknown stop duration");
+
+    assert!(error.to_string().contains("new_with_candidates"), "{error}");
+    assert!(ctx.accept_job(&candidate).is_err());
+    assert!(ctx.check_job(&stop_candidate(None)).is_ok());
+}
+
+#[test]
+fn rejects_candidates_with_an_invalid_or_unsupported_stop_duration() {
+    let error = windowed_context_with_candidates(windowed_vehicle(1000), &stop_candidate(Some(-1.)))
+        .err()
+        .expect("an invalid stop duration");
+    assert!(error.to_string().contains("invalid stopDuration"), "{error}");
+
+    let mut vehicle = windowed_vehicle(1000);
+    vehicle.shifts[0].breaks = Some(vec![VehicleBreak::Required {
+        time: VehicleRequiredBreakTime::OffsetTime { earliest: 500., latest: 500. },
+        duration: 10.,
+    }]);
+    let error = windowed_context_with_candidates(vehicle, &stop_candidate(Some(20.))).err().expect("a conflict");
+    assert!(error.to_string().contains("required breaks"), "{error}");
+}
+
+#[test]
+fn rejects_an_invalid_stop_duration_on_a_context_not_built_with_the_candidate() {
+    let extra = job_locations(&stop_candidate(None));
+    let (problem, matrix) = build_problem_and_matrix_with_extra(vec![windowed_vehicle(1000)], windowed_jobs(), &extra);
+    let mut ctx = FeasibilityContext::new(problem, vec![matrix], &windowed_solution_json(), &extra)
+        .expect("cannot build context");
+
+    for stop_duration in [-1., Float::NAN, Float::INFINITY] {
+        let candidate = stop_candidate(Some(stop_duration));
+
+        let check_error = ctx.check_job(&candidate).expect_err("an invalid stop duration");
+        let accept_error = ctx.accept_job(&candidate).expect_err("an invalid stop duration");
+
+        let expected = "candidate job 'candidate' has an invalid stopDuration: use a finite, non-negative value";
+        assert_eq!(check_error.to_string(), expected, "{stop_duration}");
+        assert_eq!(accept_error.to_string(), expected, "{stop_duration}");
+    }
+}
+
+#[test]
+fn refuses_a_candidate_needing_a_larger_stop_duration_at_a_known_location() {
+    let mut jobs = windowed_jobs();
+    jobs[1] = set_stop_duration(jobs[1].clone(), Some(10.));
+    let (problem, matrix) = build_problem_and_matrix(vec![windowed_vehicle(1000)], jobs);
+    let ctx =
+        FeasibilityContext::new(problem, vec![matrix], &windowed_solution_json(), &[]).expect("cannot build context");
+    // at job2's location
+    let candidate =
+        |stop_duration| set_stop_duration(create_delivery_job("candidate", (2.0, 0.0)), Some(stop_duration));
+
+    let error = ctx.check_job(&candidate(20.)).expect_err("a larger stop duration");
+    assert!(error.to_string().contains("new_with_candidates"), "{error}");
+
+    for stop_duration in [10., 5.] {
+        let result = ctx.check_job(&candidate(stop_duration)).expect("a stop duration the context knows");
+        assert!(result.is_feasible, "{stop_duration}: {:?}", result.vehicles);
+    }
 }

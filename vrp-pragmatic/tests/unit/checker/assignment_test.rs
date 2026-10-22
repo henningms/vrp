@@ -133,6 +133,7 @@ fn check_jobs_impl(
                     tag: Some(format!("{tgt}{idx}")),
                     requested_time: None,
                     curb_side: None,
+                    stop_duration: None,
                 }],
                 demand: if tgt != "service" { Some(vec![1]) } else { None },
                 named_demand: None,

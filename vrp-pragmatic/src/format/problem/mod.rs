@@ -7,7 +7,7 @@ use std::sync::Arc;
 use vrp_core::construction::features::OppositeSideCells;
 use vrp_core::models::Lock;
 use vrp_core::models::common::TimeWindow;
-use vrp_core::models::problem::FerryTransport;
+use vrp_core::models::problem::{FerryTransport, StopDurations};
 use vrp_core::prelude::{ActivityCost, Fleet as CoreFleet, Jobs as CoreJobs, TransportCost};
 use vrp_core::utils::*;
 
@@ -34,7 +34,7 @@ pub(crate) mod job_reader;
 mod problem_reader;
 
 mod site_reader;
-pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props};
+pub(crate) use self::problem_reader::{get_problem_properties, map_to_problem_with_props, read_stop_durations};
 use self::problem_reader::{map_to_problem_with_approx, map_to_problem_with_matrices};
 
 /// Reads specific problem definition from various sources.
@@ -163,6 +163,8 @@ struct ProblemBlocks {
     /// transport `transport` was wrapped around, so a later pass can re-walk a tour without
     /// needing to downcast `transport` back out of its wrapper.
     ferry_transport: Option<Arc<FerryTransport>>,
+    /// `None` when no job place has a positive stop duration, so `transport` is not wrapped.
+    stop_durations: Option<Arc<StopDurations>>,
     opposite_side_cells: Arc<OppositeSideCells>,
 }
 

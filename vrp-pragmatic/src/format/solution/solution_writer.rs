@@ -11,8 +11,8 @@ use vrp_core::construction::features::JobDemandDimension;
 use vrp_core::construction::heuristics::UnassignmentInfo;
 use vrp_core::models::common::*;
 use vrp_core::models::problem::{
-    FerryAwareTransportCost, FerryDirection, FerryTransportExtraProperty, JobIdDimension, Multi, TravelTime,
-    VehicleIdDimension, VehiclePerRunCostDimension,
+    FerryAwareTransportCost, FerryDirection, FerryTransportExtraProperty, JobIdDimension, Multi,
+    StopDurationsExtraProperty, TravelTime, VehicleIdDimension, VehiclePerRunCostDimension,
 };
 use vrp_core::models::solution::{Activity, Route};
 use vrp_core::prelude::Float;
@@ -76,6 +76,7 @@ fn create_tour(
     let actor = route.actor.as_ref();
     let vehicle = actor.vehicle.as_ref();
     let transport = problem.transport.as_ref();
+    let stop_durations = problem.extras.get_stop_durations();
 
     let mut tour = Tour {
         vehicle_id: vehicle.dimens.get_vehicle_id().unwrap().clone(),
@@ -172,12 +173,19 @@ fn create_tour(
                 let commute = act.commute.clone().unwrap_or_default();
                 let commuting = commute.duration();
 
+                // the transport adds it to the leg, so `act.schedule.arrival` is when service can start
+                let stop_duration = match (stop_durations.as_ref(), act.commute.is_none()) {
+                    (Some(stop_durations), true) => stop_durations.on_leg(prev_location, act.place.location),
+                    _ => 0.,
+                };
+                let pull_in = act.schedule.arrival - stop_duration;
+
                 let (driving, transport_cost) = if commute.is_zero_distance() {
                     // NOTE: use original cost traits to adapt time-based costs (except waiting/commuting)
                     let prev_departure = TravelTime::Departure(prev_departure);
                     let duration = transport.duration(route, prev_location, act.place.location, prev_departure);
                     let transport_cost = transport.cost(route, prev_location, act.place.location, prev_departure);
-                    (duration, transport_cost)
+                    (duration - stop_duration, transport_cost)
                 } else {
                     // NOTE: no need to drive in case of non-zero commute, this goes to commuting time
                     (0., commuting * vehicle.costs.per_service_time)
@@ -215,12 +223,12 @@ fn create_tour(
                 if is_new_stop {
                     tour.stops.push(Stop::Point(PointStop {
                         location: coord_index.get_by_idx(act.place.location).unwrap(),
-                        time: format_schedule(&act.schedule),
+                        time: format_schedule(&DomainSchedule::new(pull_in, act.schedule.departure)),
                         load: prev_load.as_vec(),
                         distance,
-                        parking: if parking > 0. {
+                        parking: if parking + stop_duration > 0. {
                             Some(Interval {
-                                start: format_time(act.schedule.arrival),
+                                start: format_time(pull_in),
                                 end: format_time(act.schedule.arrival + parking),
                             })
                         } else {
@@ -283,7 +291,7 @@ fn create_tour(
                             waiting: leg.statistic.times.waiting + waiting as i64,
                             break_time: leg.statistic.times.break_time + (if is_break { serving as i64 } else { 0 }),
                             commuting: leg.statistic.times.commuting + commuting as i64,
-                            parking: leg.statistic.times.parking + parking as i64,
+                            parking: leg.statistic.times.parking + parking as i64 + stop_duration as i64,
                         },
                     },
                     load: Some(load),

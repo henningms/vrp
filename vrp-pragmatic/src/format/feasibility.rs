@@ -15,7 +15,10 @@ use crate::format::problem::{
 };
 use crate::format::solution::map_code_reason;
 use crate::format::solution::read_init_solution;
-use crate::format::{CoordIndexExtraProperty, CoreProblem, Location, ShiftIndexDimension, VehicleTypeDimension};
+use crate::format::{
+    CoordIndex, CoordIndexExtraProperty, CoreProblem, Location, ShiftIndexDimension, VehicleTypeDimension,
+};
+use crate::validation::{get_stop_duration_conflict, is_valid_stop_duration};
 use serde::{Deserialize, Serialize};
 use std::io::BufReader;
 use std::sync::Arc;
@@ -23,7 +26,7 @@ use vrp_core::construction::heuristics::{
     BestResultSelector, EvaluationContext, InsertionPosition, InsertionResult, LegSelection, ResultSelector,
     UnassignmentInfo, apply_insertion_success, eval_job_insertion_in_route,
 };
-use vrp_core::models::problem::VehicleIdDimension;
+use vrp_core::models::problem::{StopDurationsExtraProperty, VehicleIdDimension};
 use vrp_core::prelude::*;
 
 type ApiJob = crate::format::problem::Job;
@@ -33,6 +36,7 @@ type ApiJob = crate::format::problem::Job;
 /// services). Pass the result as `extra_locations` to [`FeasibilityContext::new`]
 /// (and append the same coordinates, in this order, when building the routing
 /// matrix) so a candidate that introduces new coordinates is index-aligned.
+/// [`FeasibilityContext::new_with_candidates`] registers them itself.
 pub fn job_locations(job: &ApiJob) -> Vec<Location> {
     [job.pickups.as_ref(), job.deliveries.as_ref(), job.replacements.as_ref(), job.services.as_ref()]
         .into_iter()
@@ -41,6 +45,20 @@ pub fn job_locations(job: &ApiJob) -> Vec<Location> {
         .flat_map(|task| task.places.iter())
         .map(|place| place.location.clone())
         .collect()
+}
+
+fn get_stop_durations(job: &ApiJob) -> impl Iterator<Item = Float> + '_ {
+    job.all_tasks_iter().flat_map(|task| task.places.iter()).filter_map(|place| place.stop_duration)
+}
+
+/// Refuses a negative or non-finite stop duration, as the problem validation does for a plan job.
+fn check_valid_stop_durations(candidate: &ApiJob) -> Result<(), GenericError> {
+    if get_stop_durations(candidate).all(is_valid_stop_duration) {
+        Ok(())
+    } else {
+        Err(format!("candidate job '{}' has an invalid stopDuration: use a finite, non-negative value", candidate.id)
+            .into())
+    }
 }
 
 /// Information about a constraint violation.
@@ -98,24 +116,74 @@ impl FeasibilityContext {
     /// All constraint features (skills, compatibility, order, etc.) are force-enabled
     /// so that a candidate job introducing a new constraint type is still checked correctly.
     /// `extra_locations` are coordinates referenced by the candidate job(s) that
-    /// will be passed to [`check_job`]/[`accept_job`] but are NOT present in the
+    /// will be passed to [`check_job`](Self::check_job)/[`accept_job`](Self::accept_job) but are NOT present in the
     /// stored problem (e.g. a brand-new booking pickup/dropoff). They are
     /// registered in the `CoordIndex` so the candidate's locations resolve to
     /// valid matrix indices instead of `None`. The caller MUST build `matrices`
     /// with the same problem-then-extras coordinate ordering (see
     /// [`job_locations`]); pass `&[]` when every candidate coordinate is already
     /// part of the problem.
+    ///
+    /// Use [`FeasibilityContext::new_with_candidates`] instead whenever a candidate has a `stopDuration`: this
+    /// context knows only the stop durations of the problem's own jobs.
     pub fn new(
         api_problem: ApiProblem,
         matrices: Vec<Matrix>,
         solution_json: &str,
         extra_locations: &[Location],
     ) -> Result<Self, GenericError> {
+        Self::build(api_problem, matrices, solution_json, extra_locations, &[])
+    }
+
+    /// Creates a new feasibility context which knows the candidate jobs that will be passed to
+    /// [`check_job`](Self::check_job)/[`accept_job`](Self::accept_job): their locations are registered as
+    /// `extra_locations` are in [`FeasibilityContext::new`] (build `matrices` with the problem's coordinates followed
+    /// by each candidate's [`job_locations`], in order), and their places' stop durations apply.
+    ///
+    /// Use it whenever a candidate has a `stopDuration`. Every candidate's stop duration applies from build time and to
+    /// the existing routes too: a route already visiting a candidate's location pays the larger stop duration there
+    /// whether or not that candidate is accepted. So build a context with only the candidates checked together.
+    ///
+    /// Returns an error when a candidate's stop duration is negative or non-finite, or positive in a problem with a
+    /// feature which cannot be combined with stop durations.
+    pub fn new_with_candidates(
+        api_problem: ApiProblem,
+        matrices: Vec<Matrix>,
+        solution_json: &str,
+        candidates: &[ApiJob],
+    ) -> Result<Self, GenericError> {
+        let conflict = get_stop_duration_conflict(&api_problem);
+
+        for candidate in candidates {
+            check_valid_stop_durations(candidate)?;
+
+            let has_positive = get_stop_durations(candidate).any(|stop_duration| stop_duration > 0.);
+            if let Some(feature) = conflict.filter(|_| has_positive) {
+                return Err(format!(
+                    "candidate job '{}' has a stopDuration, which cannot be combined with {feature}",
+                    candidate.id
+                )
+                .into());
+            }
+        }
+
+        let extra_locations = candidates.iter().flat_map(job_locations).collect::<Vec<_>>();
+
+        Self::build(api_problem, matrices, solution_json, &extra_locations, candidates)
+    }
+
+    fn build(
+        api_problem: ApiProblem,
+        matrices: Vec<Matrix>,
+        solution_json: &str,
+        extra_locations: &[Location],
+        candidates: &[ApiJob],
+    ) -> Result<Self, GenericError> {
         let properties = get_problem_properties(&api_problem, &matrices).with_all_constraints_enabled();
 
-        let coord_index = crate::format::CoordIndex::new_with_extra_locations(&api_problem, extra_locations);
+        let coord_index = CoordIndex::new_with_extra_locations(&api_problem, extra_locations);
         let core_problem: CoreProblem =
-            map_to_problem_with_props(api_problem.clone(), matrices, coord_index, Some(properties.clone()))
+            map_to_problem_with_props(api_problem.clone(), matrices, coord_index, Some(properties.clone()), candidates)
                 .map_err(|e: crate::format::MultiFormatError| e.to_string())?;
         let core_problem = Arc::new(core_problem);
 
@@ -133,6 +201,7 @@ impl FeasibilityContext {
     pub fn check_job(&self, candidate: &ApiJob) -> Result<FeasibilityResult, GenericError> {
         let coord_index =
             self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
+        self.check_known_stop_durations(candidate, &coord_index)?;
 
         let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 
@@ -214,6 +283,7 @@ impl FeasibilityContext {
     pub fn accept_job(&mut self, candidate: &ApiJob) -> Result<VehicleFeasibility, GenericError> {
         let coord_index =
             self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
+        self.check_known_stop_durations(candidate, &coord_index)?;
 
         let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 
@@ -275,6 +345,37 @@ impl FeasibilityContext {
         }
     }
 
+    /// Refuses a candidate needing a larger stop duration than the context's table holds: the transport and the
+    /// routes' schedules were built with that table, so an answer would silently use the smaller one.
+    fn check_known_stop_durations(&self, candidate: &ApiJob, coord_index: &CoordIndex) -> Result<(), GenericError> {
+        check_valid_stop_durations(candidate)?;
+
+        let stop_durations = self.problem.extras.get_stop_durations();
+        let known_stop_duration =
+            |location: &Location| match (stop_durations.as_ref(), coord_index.get_by_loc(location)) {
+                (Some(stop_durations), Some(index)) => stop_durations.get(index),
+                _ => 0.,
+            };
+
+        let has_unknown = candidate
+            .all_tasks_iter()
+            .flat_map(|task| task.places.iter())
+            // a custom location has no position, and its index lies past the matrix
+            .filter(|place| !matches!(place.location, Location::Custom { .. }))
+            .any(|place| place.stop_duration.is_some_and(|value| value > known_stop_duration(&place.location)));
+
+        if has_unknown {
+            Err(format!(
+                "candidate job '{}' has a stopDuration the context was not built with: build the context with \
+                 FeasibilityContext::new_with_candidates",
+                candidate.id
+            )
+            .into())
+        } else {
+            Ok(())
+        }
+    }
+
     /// Serializes the current solution state to a JSON string.
     ///
     /// Builds a domain `Solution` from the internal `InsertionContext` and converts it
@@ -333,8 +434,12 @@ pub fn check_insertion_feasibility(
 
     let candidate: ApiJob = serde_json::from_str(candidate_job_json).map_err(|e: serde_json::Error| e.to_string())?;
 
-    let extra_locations = job_locations(&candidate);
-    let ctx = FeasibilityContext::new(api_problem, matrices, solution_json, &extra_locations)?;
+    let ctx = FeasibilityContext::new_with_candidates(
+        api_problem,
+        matrices,
+        solution_json,
+        std::slice::from_ref(&candidate),
+    )?;
     let result = ctx.check_job(&candidate)?;
 
     serde_json::to_string_pretty(&result).map_err(|e: serde_json::Error| e.to_string().into())

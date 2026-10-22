@@ -4,7 +4,7 @@ use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
 use crate::helpers::models::problem::{FleetBuilder, TestSingleBuilder, test_driver, test_vehicle_with_id};
 use crate::helpers::models::solution::{RouteBuilder, RouteContextBuilder};
 use crate::models::common::{ConfigurableLoad, Demand, Distance, Location, MultiDimLoad, Profile, Schedule};
-use crate::models::problem::{Multi, TransportCost, TravelTime};
+use crate::models::problem::{Multi, StopDurationTransportCost, StopDurations, TransportCost, TravelTime};
 use crate::models::solution::{Activity, Place, Route};
 use std::sync::Arc;
 
@@ -564,4 +564,96 @@ fn test_delivery_insertion_just_over_limit() {
     let result = feature.constraint.unwrap().evaluate(&move_ctx);
 
     assert!(result.is_some(), "Expected violation when ride duration exceeds limit");
+}
+
+/// Location 10 (the pickup) has a stop duration of 30, location 20 (the delivery) one of 40 and location 30 one of 25.
+fn create_stop_duration_transport() -> Arc<dyn TransportCost> {
+    let stop_durations = Arc::new(StopDurations::new(vec![(10, 30.), (20, 40.), (30, 25.)]));
+    Arc::new(StopDurationTransportCost::new(ScaledTransportCost::new_shared(1.), stop_durations))
+}
+
+parameterized_test! {can_count_the_stop_duration_at_the_delivery_place_in_the_ride, (limit, expected), {
+    can_count_the_stop_duration_at_the_delivery_place_in_the_ride_impl(limit, expected);
+}}
+
+can_count_the_stop_duration_at_the_delivery_place_in_the_ride! {
+    case01_at_limit: (50., None),
+    case02_over_limit: (49., Some(MAX_RIDE_DURATION_CODE)),
+}
+
+/// The pickup departs at 100 and the delivery service starts at 100 + 10 + 40 = 150. The pickup's own stop duration
+/// is spent before its departure, so a ride of 80 would mean it was counted.
+fn can_count_the_stop_duration_at_the_delivery_place_in_the_ride_impl(
+    limit: Duration,
+    expected: Option<ViolationCode>,
+) {
+    let feature =
+        create_max_ride_duration_feature("test", MAX_RIDE_DURATION_CODE, create_stop_duration_transport()).unwrap();
+    let multi = create_configurable_pudo_multi_job(limit);
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default()
+                .with_vehicle(&fleet, "v1")
+                .add_activity(create_pickup_activity(10, 100., multi.jobs[0].clone()))
+                .build(),
+        )
+        .build();
+    let delivery = create_delivery_activity(20, multi.jobs[1].clone());
+    let activity_ctx = ActivityContext {
+        index: 1,
+        prev: route_ctx.route().tour.get(1).unwrap(),
+        target: &delivery,
+        next: route_ctx.route().tour.get(2),
+    };
+    let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+
+    let result = feature.constraint.unwrap().evaluate(&MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx));
+
+    assert_eq!(result.map(|violation| violation.code), expected);
+}
+
+parameterized_test! {can_count_the_stop_duration_between_pickup_and_delivery_in_the_ride, (limit, expected), {
+    can_count_the_stop_duration_between_pickup_and_delivery_in_the_ride_impl(limit, expected);
+}}
+
+can_count_the_stop_duration_between_pickup_and_delivery_in_the_ride! {
+    case01_at_limit: (95., None),
+    case02_over_limit: (94., Some(MAX_RIDE_DURATION_CODE)),
+}
+
+/// An unrelated stop at 30 between the pickup and its delivery: the ride is
+/// `100 -> 100 + 20 + 25 = 145 -> 145 + 10 + 40 = 195`, i.e. 95.
+fn can_count_the_stop_duration_between_pickup_and_delivery_in_the_ride_impl(
+    limit: Duration,
+    expected: Option<ViolationCode>,
+) {
+    let feature =
+        create_max_ride_duration_feature("test", MAX_RIDE_DURATION_CODE, create_stop_duration_transport()).unwrap();
+    let multi = create_configurable_pudo_multi_job(limit);
+    let pickup = create_pickup_activity(10, 100., multi.jobs[0].clone());
+    let delivery = create_delivery_activity(20, multi.jobs[1].clone());
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default().with_vehicle(&fleet, "v1").add_activity(pickup).add_activity(delivery).build(),
+        )
+        .build();
+    let unrelated = Activity {
+        place: Place { idx: 0, location: 30, duration: 0.0, time: TimeWindow::new(0.0, 10_000.0) },
+        schedule: Schedule::new(0.0, 0.0),
+        job: Some(TestSingleBuilder::default().build_shared()),
+        commute: None,
+    };
+    let activity_ctx = ActivityContext {
+        index: 1,
+        prev: route_ctx.route().tour.get(1).unwrap(),
+        target: &unrelated,
+        next: route_ctx.route().tour.get(2),
+    };
+    let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+
+    let result = feature.constraint.unwrap().evaluate(&MoveContext::activity(&solution_ctx, &route_ctx, &activity_ctx));
+
+    assert_eq!(result.map(|violation| violation.code), expected);
 }

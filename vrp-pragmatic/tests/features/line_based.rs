@@ -20,6 +20,7 @@ fn create_line_task(
             tag: Some(tag.to_string()),
             requested_time: None,
             curb_side: None,
+            stop_duration: None,
         }],
         demand,
         named_demand: None,

@@ -264,6 +264,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
                 tag: None,
                 requested_time: None,
                 curb_side: None,
+                stop_duration: None,
             }],
             demand: None,
             named_demand: None,

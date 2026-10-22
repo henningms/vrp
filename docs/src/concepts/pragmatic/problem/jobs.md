@@ -56,9 +56,33 @@ Each `place` consists of the following properties:
   on, so a rider does not cross the road. It tells whoever builds the routing matrix to route arrivals at the place's
   location on the curb side and to mark the cells which cannot be; the `minimize-opposite-side-arrivals` objective counts
   the marked cells. The solver itself does not read it.
+- **stopDuration** (optional): time to stop at the place's location (pull in, park, open doors), in seconds, charged
+  once per arrival at the location from another location, on top of each activity's `duration`. See
+  [stop duration](#stop-duration) below.
 
 Multiple places on single task can help model variable job location, e.g. visit customer at different location
 depending on time of the day.
+
+
+## Stop duration
+
+Jobs served one after another at one location share one stop, so a fixed time to pull in, park and open doors is
+better modelled once per stop than in each job's `duration`. A place's `stopDuration` is charged when the vehicle
+arrives at the place's location from a different location:
+
+- jobs served one after another at one location pay it once; a later visit, after the vehicle was elsewhere, pays it
+  again
+- places at one location share the largest `stopDuration`
+- the vehicle's start, end, via points, required stops, breaks, reloads and recharge stations have none of their own.
+  When one of them has the same location as a job place with a `stopDuration`, it is the same location to the solver:
+  a tour returning to an end location which is also a job place's location pays that place's `stopDuration`
+- waiting for a time window overlaps it: service starts at the later of arrival plus `stopDuration` and the window
+  start. Time windows, `requestedTime` and `maxRideDuration` apply to the service start
+- the vehicle profile's `scale` does not apply to it, and distances do not change
+
+In the solution, a stop's arrival is when the vehicle pulled in, and the stop's `parking` holds its stop duration.
+`stopDuration` cannot be combined with vicinity clustering or required breaks (E9105) and is not allowed on vehicle
+shift places (E9307).
 
 
 ## Pickup job

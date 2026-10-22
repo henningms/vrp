@@ -26,6 +26,7 @@ fn can_combine_required_and_via_stops() {
                             tag: Some("req1".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (8., 0.).to_loc(),
@@ -34,6 +35,7 @@ fn can_combine_required_and_via_stops() {
                             tag: Some("req2".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                     via: Some(vec![
@@ -44,6 +46,7 @@ fn can_combine_required_and_via_stops() {
                             tag: Some("via1".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (10., 0.).to_loc(),
@@ -52,6 +55,7 @@ fn can_combine_required_and_via_stops() {
                             tag: Some("via2".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                 }],
@@ -136,6 +140,7 @@ fn required_stops_take_precedence_over_via_stops() {
                             tag: Some("req_first".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (7., 0.).to_loc(),
@@ -144,6 +149,7 @@ fn required_stops_take_precedence_over_via_stops() {
                             tag: Some("req_second".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                     via: Some(vec![JobPlace {
@@ -153,6 +159,7 @@ fn required_stops_take_precedence_over_via_stops() {
                         tag: Some("via_between".to_string()),
                         requested_time: None,
                         curb_side: None,
+                        stop_duration: None,
                     }]),
                 }],
                 ..create_default_vehicle_type()
@@ -222,6 +229,7 @@ fn complex_mixed_route_with_jobs_required_and_via() {
                             tag: Some("checkpoint1".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (20., 0.).to_loc(),
@@ -230,6 +238,7 @@ fn complex_mixed_route_with_jobs_required_and_via() {
                             tag: Some("checkpoint2".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                     via: Some(vec![
@@ -240,6 +249,7 @@ fn complex_mixed_route_with_jobs_required_and_via() {
                             tag: Some("optional_waypoint1".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (13., 0.).to_loc(),
@@ -248,6 +258,7 @@ fn complex_mixed_route_with_jobs_required_and_via() {
                             tag: Some("optional_waypoint2".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                         JobPlace {
                             location: (22., 0.).to_loc(),
@@ -256,6 +267,7 @@ fn complex_mixed_route_with_jobs_required_and_via() {
                             tag: Some("optional_waypoint3".to_string()),
                             requested_time: None,
                             curb_side: None,
+                            stop_duration: None,
                         },
                     ]),
                 }],
