@@ -735,14 +735,15 @@ mod ferry_aware_transport_cost {
 
     #[test]
     fn takes_the_offset_on_the_drive_after_the_sailing_at_disembarkation() {
-        // leave 06:20, quay A at 06:25, sail at 07:00, disembark at 07:20, then 600 s plus 480 s from quay B
+        // leave 06:20, quay A at 06:25, sail at 06:45 before the band, disembark at 07:05 in it, then 600 s plus
+        // 480 s from quay B; read at boarding, the drive would take 600 s
         let inner = rush_hour_on(2 * 4 + 3, ferry_test_transport(10_000., 10_000.));
-        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(420.), min(440.)));
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(405.), min(425.)));
         let ferry_aware = FerryAwareTransportCost::new(inner, index);
 
         let duration = ferry_aware.duration(&test_route(), 0, 3, TravelTime::Departure(min(380.)));
 
-        assert_eq!(duration, 300. + 2100. + 1200. + 1080.);
+        assert_eq!(duration, 300. + 1200. + 1200. + 1080.);
     }
 
     #[test]
@@ -764,9 +765,37 @@ mod ferry_aware_transport_cost {
     }
 
     #[test]
+    fn times_the_drive_to_the_quay_by_its_arrival_as_the_band_clears() {
+        // the 09:15 sailing boards by 09:05, while the band clears: reaching quay A by 09:05 means leaving at 08:52
+        // (300 s + 480 s). Leaving at 09:05 would take 300 s + 180 s, and arriving by the 09:15 sailing only 300 s
+        let inner = rush_hour_on(1, ferry_test_transport(10_000., 10_000.));
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(555.), min(575.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+
+        let path = ferry_aware.resolve(&test_route(), 0, 3, TravelTime::Arrival(min(600.))).expect("a crossing");
+
+        assert_eq!((path.arrive_quay_at, path.depart_at), (min(545.), min(532.)));
+    }
+
+    #[test]
+    fn times_the_drive_after_the_sailing_by_the_arrival_for_an_arrival() {
+        // the 08:45 sailing lands at 09:05, when the drive from quay B takes 600 s + 180 s and arrives at 09:18: an
+        // arrival by 09:20 can take it, one by 09:15 cannot, although the base drive alone would make it
+        let inner = rush_hour_on(2 * 4 + 3, ferry_test_transport(10_000., 10_000.));
+        let index = Arc::new(one_way_crossing(min(20.), min(10.), min(525.), min(545.)));
+        let ferry_aware = FerryAwareTransportCost::new(inner, index);
+        let route = test_route();
+
+        let path = ferry_aware.resolve(&route, 0, 3, TravelTime::Arrival(min(560.))).expect("a crossing");
+
+        assert_eq!((path.sailing_dep, path.depart_at), (min(525.), min(510.)));
+        assert!(ferry_aware.resolve(&route, 0, 3, TravelTime::Arrival(min(555.))).is_none());
+    }
+
+    #[test]
     fn keeps_every_road_part_at_the_outer_time_without_duration_offsets() {
         // timestamped road: quay B -> to takes 2880 s at 06:20 and 3240 s at 07:20; without offsets both parts stay
-        // anchored at the departure, as before
+        // anchored at the outer departure
         let matrix = |timestamp: Timestamp, egress: Duration| {
             let mut durations = vec![0.; 16];
             durations[1] = 300.;

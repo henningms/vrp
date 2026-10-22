@@ -507,9 +507,10 @@ impl FerryAwareTransportCost {
         }
 
         // with duration offsets each road part is read at its own time, and the base duration is a
-        // floor for those reads because offsets are never negative. Without offsets every part is
-        // read once, at the outer leg's time: a timestamped matrix has no floor to prune with, and
-        // a time-independent one gains nothing from a second read.
+        // floor for those reads: offsets are never negative, and they are added only to a matrix
+        // which does not depend on time (offsets on a timestamped matrix are refused). Without
+        // offsets every part is read once, at the outer leg's time: a timestamped matrix has no
+        // floor to prune with, and a time-independent one gains nothing from a second read.
         let path = if self.inner.has_duration_offsets() {
             let road = |a: Location, b: Location, at: TravelTime| self.inner.duration(route, a, b, at);
             let road_floor = |a: Location, b: Location| self.inner.duration_approx(&route.actor.vehicle.profile, a, b);
