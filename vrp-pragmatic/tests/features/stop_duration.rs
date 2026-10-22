@@ -205,12 +205,29 @@ fn solves_identically_with_a_zero_or_no_stop_duration() {
     assert_eq!(zero.statistic, none.statistic);
 }
 
+type Invariants = (String, Vec<String>, Vec<(String, std::collections::BTreeSet<String>)>);
+
+/// What a solution means, without the order among equally good optima: the cost, the unassigned jobs and, per
+/// vehicle, the jobs it serves.
+fn solution_invariants(solution: &Solution) -> Invariants {
+    let unassigned = solution.unassigned.iter().flatten().map(|job| job.job_id.clone()).collect();
+    let tours = solution
+        .tours
+        .iter()
+        .map(|tour| {
+            let jobs = tour.stops.iter().flat_map(|stop| stop.activities()).map(|activity| activity.job_id.clone());
+            (tour.vehicle_id.clone(), jobs.collect())
+        })
+        .collect();
+
+    (format!("{:.3}", solution.statistic.cost), unassigned, tours)
+}
+
 #[test]
-fn solves_identically_without_duration_offsets_or_with_zero_cells() {
+fn solves_equivalently_without_duration_offsets_or_with_zero_cells() {
     // A full solve with the default heuristic, whose post-processing moves departures; cheapest insertion runs none.
-    // The repeatable generator is a per-thread generator seeded with 0 and not reset between solves, so the second
-    // solve draws other numbers than the first. The comparison holds because this problem has a single best
-    // solution: 30 sequential solves of it serialize identically.
+    // The problem has several optima of equal cost and the repeatable generator is per thread and not reset between
+    // solves, so equally good solutions may differ in job order: the comparison is on what a solution means.
     let problem = create_parity_problem(None);
     let matrix = create_matrix_from_problem(&problem);
     // a profile on at every time, so that a zero cell read as an offset would change the solution
@@ -219,7 +236,7 @@ fn solves_identically_without_duration_offsets_or_with_zero_cells() {
     let none = solve_with_metaheuristic(problem.clone(), Some(vec![matrix]));
     let zero = solve_with_metaheuristic(problem, Some(vec![zero_cells]));
 
-    assert_eq!(serde_json::to_string(&zero).unwrap(), serde_json::to_string(&none).unwrap());
+    assert_eq!(solution_invariants(&zero), solution_invariants(&none));
 }
 
 /// Sixteen jobs of 5 at (10, 0) with a stop duration of 30, as in `serves_many_jobs_at_one_stop_paying_the_stop_duration_once`.
