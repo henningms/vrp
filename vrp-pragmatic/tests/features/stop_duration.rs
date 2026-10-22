@@ -213,7 +213,8 @@ fn solves_identically_without_duration_offsets_or_with_zero_cells() {
     // solution: 30 sequential solves of it serialize identically.
     let problem = create_parity_problem(None);
     let matrix = create_matrix_from_problem(&problem);
-    let zero_cells = set_duration_offsets(matrix.clone(), vec![create_rush_hour_offset_profile()], &[]);
+    // a profile on at every time, so that a zero cell read as an offset would change the solution
+    let zero_cells = set_duration_offsets(matrix.clone(), vec![create_duration_offset_profile(&[(0., 100.)])], &[]);
 
     let none = solve_with_metaheuristic(problem.clone(), Some(vec![matrix]));
     let zero = solve_with_metaheuristic(problem, Some(vec![zero_cells]));
