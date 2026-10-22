@@ -59,6 +59,9 @@ Routing matrix example:
 {{#include ../../../../../examples/data/pragmatic/simple.basic.matrix.json}}
 ```
 
+If you have already your routing matrix, you can use location indices instead of geocoordinates as described
+[here](../routing/index.md#location-format).
+
 ## Duration offsets
 
 Some roads are slow only at certain times, e.g. a queue on a bridge or at a junction during rush hour. Modelling this
@@ -66,8 +69,8 @@ with one timestamped matrix per period repeats the whole matrix for a few slow c
 `durationOffsets`: delays which depend on the departure time and apply only to the chosen cells.
 
 - `profiles`: a list of delay profiles. A profile has `points`, each with an RFC3339 `time` and an `offset` in seconds.
-    The offset is linear between points and held at the first (last) point's value before (after) it. A band on several
-    dates is simply more points.
+    The offset is linear between points and held at the first point's value before it and the last point's value after
+    it. A band on several dates is simply more points.
 - `cells`: one unsigned 16-bit entry per matrix cell, in the same order as `travelTimes`. `0` means no offset, `k` means
     `profiles[k - 1]`. A cell costs two bytes whatever the number of points.
 
@@ -92,9 +95,6 @@ Its 600 s base duration costs +240 s when leaving at 06:56, +480 s at 07:30, +24
 ```json
 {{#include ../../../../../examples/data/pragmatic/basics/duration-offsets.basic.matrix.json}}
 ```
-
-If you have already your routing matrix, you can use location indices instead of geocoordinates as described
-[here](../routing/index.md#location-format).
 
 
 ## Experimental
