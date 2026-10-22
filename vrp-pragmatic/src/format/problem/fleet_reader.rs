@@ -197,6 +197,11 @@ pub(super) fn read_fleet(
                     if let Some(configurations) = configurations {
                         dimens.set_vehicle_capacity(ConfigurableLoad::new(configurations));
                     }
+
+                    // NOTE the names mark the vehicle as one with layouts, which the solution reports per stop
+                    if let Some(configs) = vehicle.capacity_configurations.as_ref() {
+                        dimens.set_capacity_layout_names(configs.iter().map(|config| config.name.clone()).collect());
+                    }
                 } else if props.has_multi_dimen_capacity {
                     if let Some(capacity) = &vehicle.capacity {
                         dimens.set_vehicle_capacity(MultiDimLoad::new(capacity.clone()));

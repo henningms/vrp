@@ -30,6 +30,15 @@ are already published. So, I stick to it for now.
   locations are registered (as with `job_locations`) and their stop durations apply. `check_job` and `accept_job`
   return an error for a candidate with an invalid stop duration or one the context was not built with, and
   `check_insertion_feasibility` uses the new constructor
+* `breaking`: the solution reports the capacity layout of tours of vehicle types with `capacityConfigurations`. Every
+  stop has a `layout` (`index` in `capacityConfigurations` and `name`) for when the vehicle leaves it, and the tour has
+  `capacityLayouts`, the spans of consecutive stops in the same layout. When several layouts fit, the fewest layout
+  changes with passengers aboard win, then the fewest changes, and ties go to the layout listed first. The json format
+  only gains optional fields. In Rust, `Tour`, `PointStop` and `TransitStop` have new public fields, so code which
+  builds them with struct literals needs `capacity_layouts: None` and `layout: None`
+* the solution checker checks the capacity layouts of tours which have them: both fields or neither, a vehicle type
+  with `capacityConfigurations`, every stop's layout exists with the same name and fits the stop's load, and the spans
+  match the stops. Tours without the fields are not checked
 
 ## [1.41.0] 2026-10-21
 
