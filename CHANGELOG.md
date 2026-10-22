@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.42.0] 2026-10-22
+
 ### Added
 
 * job place `stopDuration`: the time a vehicle needs to stop at the place's location (pull in, park, open doors),
