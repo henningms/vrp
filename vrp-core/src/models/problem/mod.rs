@@ -6,6 +6,9 @@ pub use self::builders::*;
 mod costs;
 pub use self::costs::*;
 
+mod duration_offsets;
+pub use self::duration_offsets::*;
+
 mod ferry;
 pub use self::ferry::*;
 
