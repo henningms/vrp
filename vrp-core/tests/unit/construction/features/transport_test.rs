@@ -768,8 +768,8 @@ mod duration_offsets {
     use crate::models::solution::Activity;
     use std::sync::Arc;
 
-    /// Locations: 0 depot, 1 A, 2 B, 3 X (A -> B is cell 4 + 2). Every leg takes 60 s except A -> B: 600 s, plus 480 s for departures from
-    /// 07:00 to 09:00, eased in from 06:30 and out by 09:12.
+    /// Locations: 0 depot, 1 A, 2 B, 3 X. Every leg takes 60 s except A -> B (row 1, column 2): 600 s, plus 480 s for
+    /// departures from 07:00 to 09:00, eased in from 06:30 and out by 09:12.
     fn create_feature() -> Feature {
         let mut durations = vec![60.; 16];
         (0..4).for_each(|idx| durations[idx * 4 + idx] = 0.);
