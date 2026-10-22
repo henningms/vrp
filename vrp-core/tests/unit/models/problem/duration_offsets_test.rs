@@ -1,6 +1,16 @@
 use super::*;
-use crate::helpers::models::problem::{clock, rush_hour_offset_profile};
+use crate::construction::enablers::DynamicTransportCost;
+use crate::helpers::models::problem::{clock, rush_hour_offset_profile, test_driver, test_vehicle};
+use crate::helpers::models::solution::test_actor_with_profile;
+use crate::models::Extras;
+use crate::models::common::Profile;
+use crate::models::problem::{
+    Actor, FerryAwareTransportCost, FerryIndex, MatrixData, StopDurationTransportCost, StopDurations, Vehicle,
+    create_matrix_transport_cost,
+};
+use crate::models::solution::Route;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
+use std::sync::Arc;
 
 #[test]
 fn interpolates_the_offset_at_a_departure() {
@@ -169,4 +179,164 @@ fn inverts_random_profiles_exactly() {
         assert!((departure + base + profile.at(departure) - deadline).abs() < 1e-6);
         assert!(departure + 1. + base + profile.at(departure + 1.) > deadline);
     }
+}
+
+fn route() -> Route {
+    Route { actor: test_actor_with_profile(0), tour: Default::default() }
+}
+
+/// A route whose vehicle profile scales durations.
+fn scaled_route(scale: Float) -> Route {
+    let actor = Actor {
+        vehicle: Arc::new(Vehicle { profile: Profile::new(0, Some(scale)), ..test_vehicle(0) }),
+        driver: Arc::new(test_driver()),
+        detail: test_actor_with_profile(0).detail.clone(),
+    };
+    Route { actor: Arc::new(actor), tour: Default::default() }
+}
+
+/// Three locations; the cells named in `cells` take the rush hour offset.
+fn wrap(durations: Vec<Float>, cells: Vec<u16>) -> DurationOffsetTransportCost {
+    let distances = vec![0., 5000., 500., 5000., 0., 500., 500., 500., 0.];
+    let inner = create_matrix_transport_cost(vec![MatrixData::new(0, None, durations, distances)]).unwrap();
+    let offsets = DurationOffsets::new(3, vec![(0, cells, vec![rush_hour_offset_profile()])]).unwrap();
+
+    DurationOffsetTransportCost::new(inner, Arc::new(offsets))
+}
+
+/// 0 → 1 takes 600 s and the rush hour offset, every other leg 60 s.
+fn example_transport() -> DurationOffsetTransportCost {
+    wrap(vec![0., 600., 60., 600., 0., 60., 60., 60., 0.], vec![0, 1, 0, 0, 0, 0, 0, 0, 0])
+}
+
+#[test]
+fn adds_the_offset_at_the_departure_to_the_base() {
+    let (transport, route) = (example_transport(), route());
+    let at = |from, to, time| transport.duration(&route, from, to, TravelTime::Departure(time));
+
+    assert_eq!(at(0, 1, clock(6., 56.)), 840.);
+    assert_eq!(at(0, 1, clock(7., 30.)), 1080.);
+    assert_eq!(at(0, 1, clock(9., 4.)), 840.);
+    assert_eq!(at(0, 1, clock(9., 10.)), 600.);
+    assert_eq!(at(1, 0, clock(7., 30.)), 600.);
+    assert_eq!(at(0, 2, clock(7., 30.)), 60.);
+}
+
+#[test]
+fn returns_the_duration_of_the_latest_departure_which_arrives_in_time() {
+    let (transport, route) = (example_transport(), route());
+    let by = |from, to, time| transport.duration(&route, from, to, TravelTime::Arrival(time));
+
+    // leaving at 08:54 in the band arrives at 09:12; leaving at 09:02, as the arrival time alone suggests, is 6 min late
+    assert_eq!(by(0, 1, clock(9., 12.)), 1080.);
+    assert_eq!(by(0, 1, clock(9., 20.)), 600.);
+    assert_eq!(by(1, 0, clock(9., 12.)), 600.);
+}
+
+#[test]
+fn keeps_the_base_for_an_unbounded_arrival() {
+    let (transport, route) = (example_transport(), route());
+    let by = |time| transport.duration(&route, 0, 1, TravelTime::Arrival(time));
+
+    // an unbounded latest departure would cancel against the arrival to a leg of no duration at all
+    assert_eq!(by(Float::MAX), 600.);
+    assert_eq!(by(Float::INFINITY), 600.);
+}
+
+#[test]
+fn keeps_the_base_for_estimates_and_distances() {
+    let (transport, route) = (example_transport(), route());
+
+    assert_eq!(transport.duration_approx(&Profile::default(), 0, 1), 600.);
+    assert_eq!(transport.distance(&route, 0, 1, TravelTime::Departure(clock(7., 30.))), 5000.);
+    assert_eq!(transport.distance_approx(&Profile::default(), 0, 1), 5000.);
+    assert_eq!(transport.size(), 3);
+}
+
+#[test]
+fn adds_the_offset_after_the_profile_scale() {
+    let transport = example_transport();
+    let route = scaled_route(1.5);
+
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Departure(clock(7., 30.))), 1380.);
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Arrival(clock(9., 15.))), 1380.);
+    assert_eq!(transport.duration_approx(&Profile::new(0, Some(1.5)), 0, 1), 900.);
+}
+
+#[test]
+fn keeps_unreachable_cells_unreachable() {
+    // both markers name the profile: -1 (no route) on 0 -> 1 and the 1e9 sentinel on 0 -> 2
+    let transport = wrap(vec![0., -1., 1e9, 600., 0., 60., 60., 60., 0.], vec![0, 1, 1, 0, 0, 0, 0, 0, 0]);
+    let route = route();
+
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Departure(clock(7., 30.))), -1.);
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Arrival(clock(9., 12.))), -1.);
+    assert_eq!(transport.duration(&route, 0, 2, TravelTime::Departure(clock(7., 30.))), 1e9);
+}
+
+#[test]
+fn charges_no_offset_outside_the_matrix_or_for_another_profile() {
+    let offsets =
+        DurationOffsets::new(3, vec![(0, vec![0, 1, 0, 0, 0, 0, 0, 0, 0], vec![rush_hour_offset_profile()])]).unwrap();
+
+    assert!(offsets.get(0, 0, 1).is_some());
+    assert!(offsets.get(0, 1, 0).is_none());
+    assert!(offsets.get(0, 0, 3).is_none());
+    assert!(offsets.get(0, 3, 1).is_none());
+    assert!(offsets.get(1, 0, 1).is_none());
+}
+
+#[test]
+fn refuses_cells_which_do_not_match_the_matrix() {
+    let table = |cells: Vec<u16>| (0, cells, vec![rush_hour_offset_profile()]);
+
+    // all zero but one cell short: the shape is checked before all-zero tables are dropped
+    assert!(DurationOffsets::new(3, vec![table(vec![0; 8])]).is_err());
+    assert!(DurationOffsets::new(3, vec![table(vec![0, 2, 0, 0, 0, 0, 0, 0, 0])]).is_err());
+    assert!(DurationOffsets::new(3, vec![table(vec![0, 1, 0, 0, 0, 0, 0, 0, 0]), table(vec![1; 9])]).is_err());
+}
+
+#[test]
+fn ignores_tables_without_a_cell_which_names_a_profile() {
+    let zero = |index| (index, vec![0; 9], vec![rush_hour_offset_profile()]);
+
+    // two all-zero tables for one profile index are not a duplicate: neither applies
+    assert!(DurationOffsets::new(3, vec![zero(0), zero(0)]).unwrap().is_empty());
+}
+
+#[test]
+fn keeps_the_cells_it_was_given_without_copying() {
+    let cells: Vec<u16> = vec![0, 1, 0, 0, 0, 0, 0, 0, 0];
+    let pointer = cells.as_ptr();
+
+    let offsets = DurationOffsets::new(3, vec![(0, cells, vec![rush_hour_offset_profile()])]).unwrap();
+
+    assert_eq!(offsets.cells(0).unwrap().as_ptr(), pointer);
+}
+
+#[test]
+fn reports_duration_offsets_through_every_wrapper() {
+    let offsets: Arc<dyn TransportCost> = Arc::new(example_transport());
+    let plain = create_matrix_transport_cost(vec![MatrixData::new(0, None, vec![0.; 9], vec![0.; 9])]).unwrap();
+
+    assert!(offsets.has_duration_offsets());
+    assert!(!plain.has_duration_offsets());
+    assert!(
+        StopDurationTransportCost::new(offsets.clone(), Arc::new(StopDurations::new(vec![(1, 30.)])))
+            .has_duration_offsets()
+    );
+    assert!(FerryAwareTransportCost::new(offsets.clone(), Arc::new(FerryIndex::default())).has_duration_offsets());
+    assert!(DynamicTransportCost::new(Default::default(), offsets).unwrap().has_duration_offsets());
+}
+
+#[test]
+fn keeps_duration_offsets_in_extras() {
+    let offsets = Arc::new(
+        DurationOffsets::new(3, vec![(0, vec![0, 1, 0, 0, 0, 0, 0, 0, 0], vec![rush_hour_offset_profile()])]).unwrap(),
+    );
+    let mut extras = Extras::default();
+
+    extras.set_duration_offsets(offsets.clone());
+
+    assert!(Arc::ptr_eq(&extras.get_duration_offsets().unwrap(), &offsets));
 }

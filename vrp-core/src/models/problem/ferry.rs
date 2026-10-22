@@ -527,6 +527,10 @@ impl TransportCost for FerryAwareTransportCost {
     fn size(&self) -> usize {
         self.inner.size()
     }
+
+    fn has_duration_offsets(&self) -> bool {
+        self.inner.has_duration_offsets()
+    }
 }
 
 /// Ferry index plus the pre-wrap road transport, published in the core problem's `Extras` so a
