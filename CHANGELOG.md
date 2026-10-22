@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.43.0] 2026-10-22
+
 ### Added
 
 * matrix `durationOffsets`: delays which depend on the departure time, on chosen cells of a routing matrix, for example
