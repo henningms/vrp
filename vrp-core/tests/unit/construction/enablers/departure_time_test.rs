@@ -377,3 +377,32 @@ fn can_recede_departure_time_impl(
 
     assert_eq!(departure_time, expected);
 }
+
+parameterized_test! {is_late_when_service_or_waiting_at_a_stop_delays_the_next_leg, (first_window_start, service, expected), {
+    is_late_when_service_or_waiting_at_a_stop_delays_the_next_leg_impl(first_window_start, service, expected);
+}}
+
+is_late_when_service_or_waiting_at_a_stop_delays_the_next_leg! {
+    case01_no_wait_no_service: (0., 0., true),
+    case02_service_delays_the_next_leg: (0., 20., false),
+    case03_waiting_delays_the_next_leg: (50., 0., false),
+}
+
+fn is_late_when_service_or_waiting_at_a_stop_delays_the_next_leg_impl(
+    first_window_start: Timestamp,
+    service: Duration,
+    expected: bool,
+) {
+    // stop 1 is 10 s from the start and stop 2 another 10 s on, closing at 35 s
+    let route = RouteBuilder::with_default_vehicle()
+        .add_activity(
+            ActivityBuilder::with_location_tw_and_duration(10, TimeWindow::new(first_window_start, 100.), service)
+                .build(),
+        )
+        .add_activity(ActivityBuilder::with_location_and_tw(20, TimeWindow::new(0., 35.)).build())
+        .build();
+
+    let on_time = is_on_time_when_leaving_at(&route, &SimpleActivityCost::default(), &TestTransportCost::default(), 0.);
+
+    assert_eq!(on_time, expected);
+}
