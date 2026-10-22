@@ -15,7 +15,12 @@ pub fn advance_departure_time(
     transport: &dyn TransportCost,
     consider_whole_tour: bool,
 ) {
-    if let Some(new_departure_time) = try_advance_departure_time(route_ctx, transport, consider_whole_tour) {
+    // the clamp's backward bound holds only up to rounding, and a ferry's arrival lookup can be optimistic, so under
+    // offsets the start moves only when the whole tour, re-timed from it, is still on time
+    if let Some(new_departure_time) = try_advance_departure_time(route_ctx, transport, consider_whole_tour)
+        && (!transport.has_duration_offsets()
+            || is_on_time_when_leaving_at(route_ctx.route(), activity, transport, new_departure_time))
+    {
         update_route_departure(route_ctx, activity, transport, new_departure_time);
     }
 }
@@ -65,22 +70,15 @@ fn try_advance_departure_time(
 
     // a later start can make a leg longer under offsets; the backward pass inverts every leg, so the latest arrival at
     // the first activity bounds every later window. The inverse holds only up to rounding, and a ferry turns arriving
-    // at the quay one ulp late into a missed sailing, so the start is backed off to a whole second and kept only when
-    // leaving then still arrives in time
+    // at the quay one ulp late into a missed sailing, so the start is backed off to a whole second
     let new_departure_time = if transport.has_duration_offsets()
         && let Some(latest) = route_ctx.state().get_schedule_at(1).map(|state| state.latest_arrival)
         && latest < Float::MAX
     {
-        let (from, to) = (start.place.location, first.place.location);
-        let to_first = transport.duration(route, from, to, TravelTime::Arrival(latest));
-        let departure = new_departure_time.min((latest - to_first).floor());
-        let arrival = departure + transport.duration(route, from, to, TravelTime::Departure(departure));
+        let to_first =
+            transport.duration(route, start.place.location, first.place.location, TravelTime::Arrival(latest));
 
-        if arrival > latest {
-            return None;
-        }
-
-        departure
+        new_departure_time.min((latest - to_first).floor())
     } else {
         new_departure_time
     };

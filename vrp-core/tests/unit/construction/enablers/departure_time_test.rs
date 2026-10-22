@@ -119,7 +119,7 @@ can_clamp_an_advanced_departure_to_the_window_of_a_later_stop! {
 
 fn can_clamp_an_advanced_departure_to_the_window_of_a_later_stop_impl(optimize_whole_tour: bool) {
     // leaving at 07:10 reaches the first stop at 07:28, long before it closes, but the second one at 07:38
-    let (transport, mut route_ctx) = create_route_to_two_stops();
+    let (transport, mut route_ctx) = create_route_to_two_stops(clock(7., 35.), clock(23., 0.));
     update_route_schedule(&mut route_ctx, &SimpleActivityCost::default(), transport.as_ref());
 
     let departure_time = try_advance_departure_time(&route_ctx, transport.as_ref(), optimize_whole_tour);
@@ -141,18 +141,64 @@ fn can_clamp_an_advanced_departure_to_a_whole_second_which_still_catches_the_sai
 
 #[test]
 fn keeps_the_departure_when_leaving_at_the_clamped_start_would_arrive_late() {
-    // the backward lookup puts the latest start at 07:07:02, from which the stop is reached at 07:25:02
-    let (transport, mut route_ctx) = create_route_to_one_stop(clock(7., 20.), true);
-    let transport = ShortArrivalLookup(transport);
-    update_route_schedule(&mut route_ctx, &SimpleActivityCost::default(), &transport);
+    // the backward lookup on the second leg puts the latest start at 07:07:02, from which the first stop is reached in
+    // time, at 07:25:02, but the second one at 07:35:02
+    let (transport, mut route_ctx) = create_route_to_two_stops(clock(7., 35.), clock(23., 0.));
+    let transport = ShortArrivalLookup(transport, (1, 2));
+    let activity = SimpleActivityCost::default();
+    update_route_schedule(&mut route_ctx, &activity, &transport);
+    let schedules = get_schedules(&route_ctx);
 
-    let departure_time = try_advance_departure_time(&route_ctx, &transport, true);
+    advance_departure_time(&mut route_ctx, &activity, &transport, true);
 
-    assert_eq!(departure_time, None);
+    assert_eq!(get_schedules(&route_ctx), schedules);
+}
+
+parameterized_test! {keeps_the_departure_when_the_first_leg_checks_out_but_a_later_arrival_is_late, case, {
+    keeps_the_departure_when_the_first_leg_checks_out_but_a_later_arrival_is_late_impl(case);
+}}
+
+keeps_the_departure_when_the_first_leg_checks_out_but_a_later_arrival_is_late! {
+    case01_at_a_later_stop: (clock(7., 35.), clock(23., 0.), (1, 2)),
+    case02_at_the_tour_end: (clock(9., 0.), clock(7., 45.), (2, 0)),
+}
+
+fn keeps_the_departure_when_the_first_leg_checks_out_but_a_later_arrival_is_late_impl(
+    (second_stop_end, shift_end, short_leg): (Timestamp, Timestamp, (Location, Location)),
+) {
+    let (transport, mut route_ctx) = create_route_to_two_stops(second_stop_end, shift_end);
+    let transport = ShortArrivalLookup(transport, short_leg);
+    let activity = SimpleActivityCost::default();
+    update_route_schedule(&mut route_ctx, &activity, &transport);
+    let start = try_advance_departure_time(&route_ctx, &transport, true).expect("an advance");
+    let latest = route_ctx.state().get_schedule_at(1).expect("a schedule state").latest_arrival;
+    let arrival = start + transport.duration(route_ctx.route(), 0, 1, TravelTime::Departure(start));
+    assert!(arrival <= latest, "leaving at {start} reaches the first stop at {arrival}, after {latest}");
+
+    advance_departure_time(&mut route_ctx, &activity, &transport, true);
+
+    assert_eq!(route_ctx.route().tour.start().unwrap().schedule.departure, clock(6., 0.));
+}
+
+#[test]
+fn advances_the_departure_when_the_whole_tour_stays_on_time() {
+    let (transport, mut route_ctx) = create_route_to_two_stops(clock(7., 35.), clock(23., 0.));
+    let activity = SimpleActivityCost::default();
+    update_route_schedule(&mut route_ctx, &activity, transport.as_ref());
+
+    advance_departure_time(&mut route_ctx, &activity, transport.as_ref(), true);
+
+    assert_eq!(route_ctx.route().tour.start().unwrap().schedule.departure, clock(7., 7.));
+    assert_eq!(route_ctx.route().tour.get(2).unwrap().schedule.arrival, clock(7., 35.));
+}
+
+fn get_schedules(route_ctx: &RouteContext) -> Vec<Schedule> {
+    route_ctx.route().tour.all_activities().map(|activity| activity.schedule.clone()).collect()
 }
 
 /// Answers a lookup keyed by arrival two seconds short of the forward one, more than a backoff to whole seconds absorbs.
-struct ShortArrivalLookup(Arc<dyn TransportCost>);
+/// Only the leg it names is short.
+struct ShortArrivalLookup(Arc<dyn TransportCost>, (Location, Location));
 
 impl TransportCost for ShortArrivalLookup {
     fn duration_approx(&self, profile: &Profile, from: Location, to: Location) -> Duration {
@@ -167,8 +213,8 @@ impl TransportCost for ShortArrivalLookup {
         let duration = self.0.duration(route, from, to, travel_time);
 
         match travel_time {
-            TravelTime::Arrival(_) => duration - 2.,
-            TravelTime::Departure(_) => duration,
+            TravelTime::Arrival(_) if (from, to) == self.1 => duration - 2.,
+            _ => duration,
         }
     }
 
@@ -195,20 +241,24 @@ fn create_route_to_one_stop(window_start: Timestamp, has_offsets: bool) -> (Arc<
         transport = Arc::new(DurationOffsetTransportCost::new(transport, Arc::new(offsets)));
     }
 
-    (transport, create_route_from_the_depot(vec![stop(1, window_start, clock(7., 25.))]))
+    (transport, create_route_from_the_depot(vec![stop(1, window_start, clock(7., 25.))], clock(23., 0.)))
 }
 
 /// Leaves the depot at 06:00 for a stop ten minutes away which opens at 07:20 and closes at 09:00, then for a second
-/// stop ten minutes on which closes at 07:35. The leg to the first stop takes eight minutes longer from 07:00.
-fn create_route_to_two_stops() -> (Arc<dyn TransportCost>, RouteContext) {
+/// stop ten minutes on which opens at 07:30 and closes at `second_stop_end`, and is back ten minutes later, by
+/// `shift_end`. The leg to the first stop takes eight minutes longer from 07:00.
+fn create_route_to_two_stops(
+    second_stop_end: Timestamp,
+    shift_end: Timestamp,
+) -> (Arc<dyn TransportCost>, RouteContext) {
     let matrix = vec![0., 600., 600., 600., 0., 600., 600., 600., 0.];
     let transport = create_matrix_transport_cost(vec![MatrixData::new(0, None, matrix.clone(), matrix)]).unwrap();
     let cells = vec![0, 1, 0, 0, 0, 0, 0, 0, 0];
     let offsets = DurationOffsets::new(3, vec![(0, cells, vec![rush_hour_offset_profile()])]).unwrap();
     let transport: Arc<dyn TransportCost> = Arc::new(DurationOffsetTransportCost::new(transport, Arc::new(offsets)));
-    let stops = vec![stop(1, clock(7., 20.), clock(9., 0.)), stop(2, clock(7., 30.), clock(7., 35.))];
+    let stops = vec![stop(1, clock(7., 20.), clock(9., 0.)), stop(2, clock(7., 30.), second_stop_end)];
 
-    (transport, create_route_from_the_depot(stops))
+    (transport, create_route_from_the_depot(stops, shift_end))
 }
 
 /// Leaves the depot (0) at 06:00 for one stop (3) open from 07:40 to 08:00, over a crossing from quay A (1) to quay B
@@ -238,15 +288,15 @@ fn create_route_over_a_ferry() -> (Arc<dyn TransportCost>, RouteContext) {
         Arc::new(FerryIndex::new(vec![crossing])),
     ));
 
-    (transport, create_route_from_the_depot(vec![stop(3, clock(7., 40.), clock(8., 0.))]))
+    (transport, create_route_from_the_depot(vec![stop(3, clock(7., 40.), clock(8., 0.))], clock(23., 0.)))
 }
 
 fn stop(location: Location, start: Timestamp, end: Timestamp) -> Activity {
     ActivityBuilder::with_location_tw_and_duration(location, TimeWindow::new(start, end), 0.).build()
 }
 
-/// Leaves the depot, location 0, at 06:00 for the stops and returns there by 23:00.
-fn create_route_from_the_depot(stops: Vec<Activity>) -> RouteContext {
+/// Leaves the depot, location 0, at 06:00 for the stops and returns there by `shift_end`.
+fn create_route_from_the_depot(stops: Vec<Activity>, shift_end: Timestamp) -> RouteContext {
     let fleet = FleetBuilder::default()
         .add_driver(test_driver())
         .add_vehicle(Vehicle {
@@ -255,10 +305,7 @@ fn create_route_from_the_depot(stops: Vec<Activity>) -> RouteContext {
                     location: 0,
                     time: TimeInterval { earliest: Some(clock(6., 0.)), latest: None },
                 }),
-                end: Some(VehiclePlace {
-                    location: 0,
-                    time: TimeInterval { earliest: None, latest: Some(clock(23., 0.)) },
-                }),
+                end: Some(VehiclePlace { location: 0, time: TimeInterval { earliest: None, latest: Some(shift_end) } }),
             }],
             ..test_vehicle_with_id("v1")
         })
