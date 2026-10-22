@@ -757,3 +757,133 @@ mod stop_durations {
         assert_eq!(route_ctx.route().tour.get(2).unwrap().schedule.arrival, 95.);
     }
 }
+
+mod duration_offsets {
+    use super::*;
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::models::problem::{
+        DurationOffsetTransportCost, DurationOffsets, MatrixData, OffsetProfile, SimpleActivityCost,
+        create_matrix_transport_cost,
+    };
+    use crate::models::solution::Activity;
+    use std::sync::Arc;
+
+    /// Locations: 0 depot, 1 A, 2 B, 3 X (A -> B is cell 4 + 2). Every leg takes 60 s except A -> B: 600 s, plus 480 s for departures from
+    /// 07:00 to 09:00, eased in from 06:30 and out by 09:12.
+    fn create_feature() -> Feature {
+        let mut durations = vec![60.; 16];
+        (0..4).for_each(|idx| durations[idx * 4 + idx] = 0.);
+        durations[4 + 2] = 600.;
+        let mut cells = vec![0_u16; 16];
+        cells[4 + 2] = 1;
+
+        let inner = create_matrix_transport_cost(vec![MatrixData::new(0, None, durations, vec![0.; 16])]).unwrap();
+        let profile = OffsetProfile::new(vec![
+            (clock(6., 30.), 0.),
+            (clock(7., 0.), 480.),
+            (clock(9., 0.), 480.),
+            (clock(9., 12.), 0.),
+        ])
+        .unwrap();
+        let offsets = DurationOffsets::new(4, vec![(0, cells, vec![profile])]).unwrap();
+
+        TransportFeatureBuilder::new("transport")
+            .set_violation_code(VIOLATION_CODE)
+            .set_transport_cost(Arc::new(DurationOffsetTransportCost::new(inner, Arc::new(offsets))))
+            .set_activity_cost(Arc::new(SimpleActivityCost::default()))
+            .build_minimize_cost()
+            .unwrap()
+    }
+
+    fn activity(location: Location, start: Timestamp, end: Timestamp) -> Activity {
+        ActivityBuilder::with_location_tw_and_duration(location, TimeWindow::new(start, end), 0.).build()
+    }
+
+    /// Leaves the depot at 06:00 for A (open all day), then B (closing at `b_end`); the vehicle returns by 23:00.
+    fn create_route(feature: &Feature, b_end: Timestamp) -> RouteContext {
+        let fleet = FleetBuilder::default()
+            .add_driver(test_driver())
+            .add_vehicles(vec![
+                TestVehicleBuilder::default()
+                    .id("v1")
+                    .details(vec![create_detail((Some(0), Some(0)), Some((clock(6., 0.), clock(23., 0.))))])
+                    .build(),
+            ])
+            .build();
+        let mut route_ctx = RouteContextBuilder::default()
+            .with_route(
+                RouteBuilder::default()
+                    .with_vehicle(&fleet, "v1")
+                    .add_activities(vec![activity(1, 0., clock(23., 0.)), activity(2, 0., b_end)])
+                    .build(),
+            )
+            .build();
+        route_ctx.route_mut().tour.get_mut(0).unwrap().schedule.departure = clock(6., 0.);
+        feature.state.as_ref().unwrap().accept_route_state(&mut route_ctx);
+
+        route_ctx
+    }
+
+    /// Evaluates inserting X (location 3, open from `x_open` for an hour) between the depot and A.
+    fn evaluate_x_before_a(
+        feature: &Feature,
+        route_ctx: &RouteContext,
+        x_open: Timestamp,
+    ) -> Option<ConstraintViolation> {
+        let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+        let target = activity(3, x_open, x_open + 3600.);
+        let tour = &route_ctx.route().tour;
+        let activity_ctx = ActivityContext { index: 0, prev: tour.get(0).unwrap(), target: &target, next: tour.get(1) };
+
+        feature.constraint.as_ref().unwrap().evaluate(&MoveContext::activity(&solution_ctx, route_ctx, &activity_ctx))
+    }
+
+    /// Inserts that X and updates the schedule.
+    fn insert_x_before_a(feature: &Feature, route_ctx: &mut RouteContext, x_open: Timestamp) {
+        route_ctx.route_mut().tour.insert_at(activity(3, x_open, x_open + 3600.), 1);
+        feature.state.as_ref().unwrap().accept_route_state(route_ctx);
+    }
+
+    #[test]
+    fn stores_the_latest_departure_which_arrives_in_time_as_the_latest_arrival() {
+        let route_ctx = create_route(&create_feature(), clock(9., 12.));
+
+        assert_eq!(route_ctx.state().get_schedule_at(1).unwrap().latest_arrival, clock(8., 54.));
+    }
+
+    #[test]
+    fn refuses_an_insertion_which_would_arrive_late_after_the_band() {
+        let feature = create_feature();
+        let route_ctx = create_route(&feature, clock(9., 12.));
+
+        let verdict = evaluate_x_before_a(&feature, &route_ctx, clock(9., 1.));
+
+        assert_eq!(verdict.map(|violation| violation.code), Some(VIOLATION_CODE));
+    }
+
+    #[test]
+    fn accepts_an_insertion_which_arrives_in_time_and_stays_on_time() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, clock(9., 12.));
+
+        assert_eq!(evaluate_x_before_a(&feature, &route_ctx, clock(8., 52.)), None);
+        insert_x_before_a(&feature, &mut route_ctx, clock(8., 52.));
+
+        let tour = &route_ctx.route().tour;
+        assert_eq!(tour.get(2).unwrap().schedule.departure, clock(8., 53.));
+        assert_eq!(tour.get(3).unwrap().schedule.arrival, clock(9., 11.));
+    }
+
+    #[test]
+    fn accepts_a_departure_on_the_rising_edge_which_arrives_in_time() {
+        let feature = create_feature();
+        let mut route_ctx = create_route(&feature, clock(7., 5.));
+
+        assert_eq!(evaluate_x_before_a(&feature, &route_ctx, clock(6., 48.)), None);
+        insert_x_before_a(&feature, &mut route_ctx, clock(6., 48.));
+
+        let tour = &route_ctx.route().tour;
+        assert_eq!(tour.get(2).unwrap().schedule.departure, clock(6., 49.));
+        assert_eq!(tour.get(3).unwrap().schedule.arrival, clock(7., 4.) + 4.);
+    }
+}

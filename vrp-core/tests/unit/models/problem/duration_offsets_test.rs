@@ -330,6 +330,30 @@ fn reports_duration_offsets_through_every_wrapper() {
 }
 
 #[test]
+fn reports_no_duration_offsets_through_wrappers_around_a_plain_matrix() {
+    let plain = create_matrix_transport_cost(vec![MatrixData::new(0, None, vec![0.; 9], vec![0.; 9])]).unwrap();
+
+    assert!(
+        !StopDurationTransportCost::new(plain.clone(), Arc::new(StopDurations::new(vec![(1, 30.)])))
+            .has_duration_offsets()
+    );
+    assert!(!FerryAwareTransportCost::new(plain.clone(), Arc::new(FerryIndex::default())).has_duration_offsets());
+    assert!(!DynamicTransportCost::new(Default::default(), plain).unwrap().has_duration_offsets());
+}
+
+#[test]
+fn adds_the_offset_on_the_road_and_the_stop_duration_after_it() {
+    let transport =
+        StopDurationTransportCost::new(Arc::new(example_transport()), Arc::new(StopDurations::new(vec![(1, 30.)])));
+    let route = route();
+
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Departure(clock(6., 56.))), 870.);
+    // pulls in at 09:15 after leaving at 08:57 in the band, then stops for 30 s
+    assert_eq!(transport.duration(&route, 0, 1, TravelTime::Arrival(clock(9., 15.) + 30.)), 1110.);
+    assert_eq!(transport.duration_approx(&Profile::default(), 0, 1), 630.);
+}
+
+#[test]
 fn keeps_duration_offsets_in_extras() {
     let offsets = Arc::new(
         DurationOffsets::new(3, vec![(0, vec![0, 1, 0, 0, 0, 0, 0, 0, 0], vec![rush_hour_offset_profile()])]).unwrap(),
