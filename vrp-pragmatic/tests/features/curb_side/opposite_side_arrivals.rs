@@ -142,3 +142,24 @@ fn counts_an_arrival_at_a_shared_location_whichever_job_is_served_first() {
 
     assert_eq!(order.last().map(String::as_str), Some("near"), "{order:?}");
 }
+
+#[test]
+fn counts_opposite_side_arrivals_on_a_matrix_with_duration_offsets() {
+    // a constant second on depot -> near puts the transport behind the offsets without changing which order is cheaper
+    let create_problem_with_offsets = |objectives| {
+        let (problem, matrix) = create_problem(Some(CurbSide::Prefer), objectives);
+        let coord_index = CoordIndex::new(&problem);
+        let index = |location: (f64, f64)| coord_index.get_by_loc(&location.to_loc()).unwrap();
+        let cells = [(index((0., 0.)), index(NEAR), 1)];
+        let matrix = set_duration_offsets(matrix, vec![create_duration_offset_profile(&[(0., 1.)])], &cells);
+
+        (problem, matrix)
+    };
+
+    let (problem, matrix) = create_problem_with_offsets(lexicographic());
+    assert_eq!(served_order(problem, matrix), vec!["far", "near"]);
+
+    let (problem, matrix) =
+        create_problem_with_offsets(vec![Objective::MinimizeUnassigned { breaks: None }, Objective::MinimizeCost]);
+    assert_eq!(served_order(problem, matrix), vec!["near", "far"]);
+}
