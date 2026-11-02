@@ -8,21 +8,21 @@
             "places": [
               {
                 "location": { "lat": 52.5200, "lng": 13.4050 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "companion_pickup"
               }
             ],
-            "demand": [1],
-            "tag": "companion_pickup"
+            "demand": [1]
           },
           {
             "places": [
               {
                 "location": { "lat": 52.5210, "lng": 13.4100 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "rider_pickup"
               }
             ],
-            "demand": [1],
-            "tag": "rider_pickup"
+            "demand": [1]
           }
         ],
         "deliveries": [
@@ -30,21 +30,21 @@
             "places": [
               {
                 "location": { "lat": 52.5270, "lng": 13.4000 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "rider_delivery"
               }
             ],
-            "demand": [1],
-            "tag": "rider_delivery"
+            "demand": [1]
           },
           {
             "places": [
               {
                 "location": { "lat": 52.5280, "lng": 13.3950 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "companion_delivery"
               }
             ],
-            "demand": [1],
-            "tag": "companion_delivery"
+            "demand": [1]
           }
         ],
         "fixedOrder": true
@@ -56,21 +56,21 @@
             "places": [
               {
                 "location": { "lat": 52.5150, "lng": 13.3900 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "companion_pickup"
               }
             ],
-            "demand": [1],
-            "tag": "companion_pickup"
+            "demand": [1]
           },
           {
             "places": [
               {
                 "location": { "lat": 52.5160, "lng": 13.3920 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "rider_pickup"
               }
             ],
-            "demand": [1],
-            "tag": "rider_pickup"
+            "demand": [1]
           }
         ],
         "deliveries": [
@@ -78,21 +78,21 @@
             "places": [
               {
                 "location": { "lat": 52.5310, "lng": 13.4180 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "rider_delivery"
               }
             ],
-            "demand": [1],
-            "tag": "rider_delivery"
+            "demand": [1]
           },
           {
             "places": [
               {
                 "location": { "lat": 52.5300, "lng": 13.4150 },
-                "duration": 180.0
+                "duration": 180.0,
+                "tag": "companion_delivery"
               }
             ],
-            "demand": [1],
-            "tag": "companion_delivery"
+            "demand": [1]
           }
         ],
         "fixedOrder": true
@@ -104,7 +104,8 @@
             "places": [
               {
                 "location": { "lat": 52.5180, "lng": 13.4000 },
-                "duration": 120.0
+                "duration": 120.0,
+                "tag": "regular_pickup"
               }
             ],
             "demand": [1]
@@ -115,7 +116,8 @@
             "places": [
               {
                 "location": { "lat": 52.5250, "lng": 13.4200 },
-                "duration": 120.0
+                "duration": 120.0,
+                "tag": "regular_delivery"
               }
             ],
             "demand": [1]
