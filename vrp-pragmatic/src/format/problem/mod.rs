@@ -110,7 +110,7 @@ pub(crate) struct ProblemProperties {
     pub(crate) has_configurable_capacity: bool,
     pub(crate) has_breaks: bool,
     pub(crate) has_skills: bool,
-    pub(crate) has_preferences: bool,
+    pub(crate) has_preferred_skills: bool,
     pub(crate) has_unreachable_locations: bool,
     pub(crate) has_reloads: bool,
     pub(crate) has_recharges: bool,
@@ -137,7 +137,6 @@ impl ProblemProperties {
     /// are NOT changed because they affect how demand values are interpreted.
     pub(crate) fn with_all_constraints_enabled(mut self) -> Self {
         self.has_skills = true;
-        self.has_preferences = true;
         self.has_order = true;
         self.has_group = true;
         self.has_compatibility = true;

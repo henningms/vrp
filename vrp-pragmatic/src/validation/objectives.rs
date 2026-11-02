@@ -166,6 +166,33 @@ fn check_e1607_jobs_with_value_but_no_objective(
     }
 }
 
+/// Checks that the preferred skills objective is specified when some jobs have preferred skills. Without it,
+/// preferred skills would have no effect on the solution.
+fn check_e9601_jobs_with_preferred_skills_but_no_objective(
+    ctx: &ValidationContext,
+    objectives: &[&Objective],
+) -> Result<(), FormatError> {
+    if objectives.is_empty() {
+        return Ok(());
+    }
+
+    let has_no_objective =
+        !get_objectives_flattened(objectives).any(|objective| matches!(objective, MinimizeUnmetPreferredSkills));
+    let has_jobs_with_preferred_skills = ctx.problem.plan.jobs.iter().any(|job| job.preferred_skills.is_some());
+
+    if has_no_objective && has_jobs_with_preferred_skills {
+        Err(FormatError::new(
+            "E9601".to_string(),
+            "missing preferred skills objective".to_string(),
+            "specify 'minimize-unmet-preferred-skills' objective, remove objectives property or remove \
+             preferredSkills property from jobs"
+                .to_string(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn get_objectives<'a>(ctx: &'a ValidationContext) -> Option<Vec<&'a Objective>> {
     ctx.problem.objectives.as_ref().map(|objectives| objectives.iter().collect())
 }
@@ -188,6 +215,7 @@ pub fn validate_objectives(ctx: &ValidationContext) -> Result<(), MultiFormatErr
             check_e1605_check_positive_value_and_order(ctx),
             check_e1606_check_multiple_cost_objectives(&objectives),
             check_e1607_jobs_with_value_but_no_objective(ctx, &objectives),
+            check_e9601_jobs_with_preferred_skills_but_no_objective(ctx, &objectives),
         ])
         .map_err(From::from)
     } else {

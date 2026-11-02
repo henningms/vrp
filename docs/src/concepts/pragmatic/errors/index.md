@@ -756,7 +756,7 @@ include the `maximize-value` objective.
 
 Errors from the E9xxx range are reserved for features which exist only in this fork. Upstream uses the E0xxx and E1xxx
 ranges, so keeping fork errors here avoids code collisions when upstream adds new errors. The second digit follows the
-upstream categories: E90xx general, E91xx jobs, E93xx vehicles, E95xx routing.
+upstream categories: E90xx general, E91xx jobs, E93xx vehicles, E95xx routing, E96xx objectives.
 
 ### E9001
 
@@ -859,3 +859,10 @@ a non-zero cell. Use duration offsets on a matrix without a timestamp instead of
 `duration offsets with required breaks` is returned when a matrix has `durationOffsets` with a non-zero cell and a
 vehicle shift has a required break. Required breaks are not supported together with duration offsets yet. To fix it,
 remove one of them.
+
+### E9601
+
+`missing preferred skills objective` is returned when some jobs have `preferredSkills`, but the user defined objectives
+don't include `minimize-unmet-preferred-skills`. Without the objective, preferred skills would have no effect on the
+solution. To fix it, add the objective, remove the objectives property to use the defaults, or remove
+`preferredSkills` from the jobs.

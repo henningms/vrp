@@ -40,6 +40,8 @@ constraints such as time windows. The objective has the following optional param
      this parameter to a value bigger than 1 is useful when it is highly desirable to have break assigned but its
      assignment leads to more jobs unassigned.
 * `minimize-tours`: minimizes total amount of tours present in solution
+* `minimize-unmet-preferred-skills`: minimizes the number of job `preferredSkills` groups which the vehicle serving the
+  job does not meet. Unassigned jobs are not counted, so keep it after `minimize-unassigned`
 * `maximize-tours`: maximizes total amount of tours present in solution
 * `minimize-arrival-time`: prefers solutions where work is finished earlier
 * `fast-service`: prefers solutions when jobs are served early in tours
@@ -127,6 +129,9 @@ If at least one job has non-zero value associated, then the following objective 
 
 If order on job task is specified, then it is also added to the list of objectives after `minimize-tours` objective.
 
+If at least one job has `preferredSkills`, then `minimize-unmet-preferred-skills` is added right before the cost
+objective: a preference never costs an unassigned job or an extra tour, but it outweighs any difference in cost.
+
 
 ## Hints
 
@@ -168,6 +173,7 @@ If order on job task is specified, then it is also added to the list of objectiv
 * [E1605 value or order of a job should be greater than zero](../errors/index.md#e1605)
 * [E1606 multiple cost objectives specified](../errors/index.md#e1606)
 * [E1607 missing value objective](../errors/index.md#e1607)
+* [E9601 missing preferred skills objective](../errors/index.md#e9601)
 
 
 ## Examples

@@ -8,6 +8,23 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* job `preferredSkills` with `oneOf` groups, read like `skills.oneOf`, and the `minimize-unmet-preferred-skills`
+  objective: every group the vehicle serving an assigned job does not meet counts one unit. A soft counterpart of
+  `skills`, e.g. a preferred vehicle or driver. When any job has `preferredSkills`, the default objectives add it right
+  before the cost objective, so a preference never costs an unassigned job or an extra tour. User defined objectives
+  without it are rejected with E9601. In core, `JobPreferredSkills` (`JobPreferredSkillsDimension`) and
+  `create_preferred_skills_feature`.
+
+### Removed
+
+* **Breaking:** job `preferences` (`preferred`, `acceptable`, `avoid`, `weight`) and, in core, `JobPreferences`,
+  `PreferencePenalty`, `VehicleAttributesDimension` and `create_preferences_feature`. The feature was never part of the
+  goal of optimization: the pragmatic reader added it as a feature but no objective layer used it, so preferences had
+  no effect on which vehicle served a job. Unknown job properties are ignored, so a `preferences` property is now
+  ignored as well; use `preferredSkills` with the `minimize-unmet-preferred-skills` objective instead.
+
 ## [1.43.0] 2026-10-22
 
 ### Added

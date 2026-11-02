@@ -9,9 +9,7 @@ use crate::parse_time_safe;
 use crate::utils::get_approx_transportation;
 use std::collections::HashSet;
 use vrp_core::construction::enablers::create_typed_actor_groups;
-use vrp_core::construction::features::{
-    VehicleAttributesDimension, VehicleCapacityDimension, VehicleLifoTagsDimension, VehicleSkillsDimension,
-};
+use vrp_core::construction::features::{VehicleCapacityDimension, VehicleLifoTagsDimension, VehicleSkillsDimension};
 use vrp_core::models::common::*;
 use vrp_core::models::problem::*;
 
@@ -252,9 +250,7 @@ pub(super) fn read_fleet(
 
                 if let Some(skills) = vehicle.skills.as_ref() {
                     let skills_set = skills.iter().cloned().collect::<HashSet<_>>();
-                    dimens.set_vehicle_skills(skills_set.clone());
-                    // Skills are also used as attributes for preference matching
-                    dimens.set_vehicle_attributes(skills_set);
+                    dimens.set_vehicle_skills(skills_set);
                 }
 
                 if let Some(lifo_tags) = vehicle.lifo_tags.as_ref() {

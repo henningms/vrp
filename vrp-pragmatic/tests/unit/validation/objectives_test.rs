@@ -207,3 +207,54 @@ fn can_detect_missing_value_objective_impl(objectives: Option<Vec<Objective>>, e
 
     assert_eq!(result.err().map(|e| e.code), expected);
 }
+
+parameterized_test! {can_detect_missing_preferred_skills_objective, (objectives, preferred_skills, expected), {
+    can_detect_missing_preferred_skills_objective_impl(objectives, preferred_skills, expected);
+}}
+
+can_detect_missing_preferred_skills_objective! {
+    case01: (Some(vec![
+                MinimizeUnassigned { breaks: None },
+                MinimizeCost,
+            ]), true, Some("E9601".to_string())),
+    case02: (Some(vec![
+                MinimizeUnassigned { breaks: None },
+                MinimizeUnmetPreferredSkills,
+                MinimizeCost,
+            ]), true, None),
+    case03: (Some(vec![
+                MinimizeUnassigned { breaks: None },
+                MultiObjective {
+                    strategy: MultiStrategy::Sum,
+                    objectives: vec![MinimizeUnmetPreferredSkills, MinimizeCost],
+                },
+            ]), true, None),
+    case04: (Some(vec![MinimizeUnassigned { breaks: None }, MinimizeCost]), false, None),
+    case05: (None, true, None),
+}
+
+fn can_detect_missing_preferred_skills_objective_impl(
+    objectives: Option<Vec<Objective>>,
+    preferred_skills: bool,
+    expected: Option<String>,
+) {
+    let problem = Problem {
+        plan: Plan {
+            jobs: vec![Job {
+                preferred_skills: preferred_skills
+                    .then(|| JobPreferredSkills { one_of: Some(vec![vec!["vehicle:a".to_string()]]) }),
+                ..create_delivery_job("job1", (1., 0.))
+            }],
+            ..create_empty_plan()
+        },
+        objectives,
+        ..create_empty_problem()
+    };
+    let coord_index = CoordIndex::new(&problem);
+    let ctx = ValidationContext::new(&problem, None, &coord_index);
+    let objectives = get_objectives(&ctx).unwrap_or_default();
+
+    let result = check_e9601_jobs_with_preferred_skills_but_no_objective(&ctx, objectives.as_slice());
+
+    assert_eq!(result.err().map(|e| e.code), expected);
+}

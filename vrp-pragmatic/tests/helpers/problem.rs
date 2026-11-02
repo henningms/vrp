@@ -30,7 +30,7 @@ pub fn create_job(id: &str) -> Job {
         replacements: None,
         services: None,
         skills: None,
-        preferences: None,
+        preferred_skills: None,
         value: None,
         group: None,
         compatibility: None,

@@ -38,6 +38,9 @@ pub use self::locked_jobs::*;
 mod minimize_unassigned;
 pub use self::minimize_unassigned::*;
 
+mod preferred_skills;
+pub use self::preferred_skills::{JobPreferredSkills, JobPreferredSkillsDimension, create_preferred_skills_feature};
+
 mod reachable;
 pub use self::reachable::create_reachable_feature;
 
@@ -49,11 +52,6 @@ pub use self::reloads::{ReloadFeatureFactory, ReloadIntervalsTourState, SharedRe
 
 mod skills;
 pub use self::skills::{JobSkills, JobSkillsDimension, VehicleSkillsDimension, create_skills_feature};
-
-mod preferences;
-pub use self::preferences::{
-    JobPreferences, JobPreferencesDimension, PreferencePenalty, VehicleAttributesDimension, create_preferences_feature,
-};
 
 mod total_value;
 pub use self::total_value::*;

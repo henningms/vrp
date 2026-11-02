@@ -64,10 +64,6 @@ pub(super) fn create_goal_context(
         features.push(create_skills_feature("skills", SKILL_CONSTRAINT_CODE)?)
     }
 
-    if props.has_preferences {
-        features.push(create_preferences_feature("preferences", PreferencePenalty::default())?)
-    }
-
     if props.has_lifo {
         features.push(create_lifo_ordering_feature(LIFO_CONSTRAINT_CODE)?)
     }
@@ -152,6 +148,7 @@ fn get_objective_feature_layer(
         Objective::MinimizeTours => create_minimize_tours_feature("min_tours"),
         Objective::MinimizeSiteMixing => create_site_mixing_feature("min_site_mixing"),
         Objective::MinimizeSiteVisits => create_site_visits_feature("min_site_visits"),
+        Objective::MinimizeUnmetPreferredSkills => create_preferred_skills_feature("min_unmet_preferred_skills"),
         Objective::MinimizeOppositeSideArrivals => {
             create_opposite_side_arrivals_feature("min_opposite_side_arrivals", blocks.opposite_side_cells.clone())
         }
@@ -287,6 +284,10 @@ fn get_objectives(api_problem: &ApiProblem, props: &ProblemProperties) -> Vec<Ob
     } else {
         let mut objectives =
             vec![Objective::MinimizeUnassigned { breaks: Some(1.) }, Objective::MinimizeTours, Objective::MinimizeCost];
+
+        if props.has_preferred_skills {
+            objectives.insert(objectives.len() - 1, Objective::MinimizeUnmetPreferredSkills)
+        }
 
         if props.has_value {
             objectives.insert(0, Objective::MaximizeValue { breaks: None })

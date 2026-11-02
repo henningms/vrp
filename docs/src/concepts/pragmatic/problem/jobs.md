@@ -17,6 +17,11 @@ consists of the following properties:
     drivers and a ramp or a lift. A flat list of skills, the form used before groups, is read as one group:
     `"oneOf": ["ramp", "lift"]` is the same as `"oneOf": [["ramp", "lift"]]`. `"oneOf": []`, like leaving `oneOf` out,
     means no `oneOf` condition. An empty group (`[[]]`) is rejected (E9103).
+- **preferredSkills** (optional): skills the job prefers its vehicle to have, defined by `oneOf` groups read like
+    `skills.oneOf`: `"preferredSkills": { "oneOf": [["vehicle:a", "vehicle:b"]] }`. Unlike `skills`, an unmet
+    preference never leaves a job unassigned: every group the serving vehicle does not meet counts one unit in the
+    `minimize-unmet-preferred-skills` objective, which is added to the default objectives before the cost objective.
+    Combine it with `skills` to require one of a set of vehicles and prefer one of them.
 - **value** (optional): a value associated with the job. With `maximize-value` objective, it is used to prioritize assignment
   of specific jobs. The difference between value and order (see in `Tasks` below) is that order related logic tries to assign
   jobs with lower order in the beginning of the tour. In contrast, value related logic tries to maximize total solution value

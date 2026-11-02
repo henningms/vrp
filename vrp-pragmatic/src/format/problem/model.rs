@@ -59,6 +59,18 @@ pub struct JobSkills {
     pub none_of: Option<Vec<String>>,
 }
 
+/// Skills a job prefers its vehicle to have: a soft counterpart of [`JobSkills`]. Every unmet group of an
+/// assigned job counts one unit in the `minimize-unmet-preferred-skills` objective.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct JobPreferredSkills {
+    /// Vehicle should have at least one skill of every group. A flat list of skills is read as one group.
+    #[serde(default, deserialize_with = "deserialize_one_of", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<JobSkillGroups>"))]
+    pub one_of: Option<Vec<Vec<String>>>,
+}
+
 /// Job skills `oneOf`: a list of skill groups, or a flat list of skills read as one group.
 #[derive(Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -77,36 +89,6 @@ where
         JobSkillGroups::Groups(groups) => groups,
         JobSkillGroups::Skills(skills) => vec![skills],
     }))
-}
-
-/// Job preferences for vehicle attributes (soft constraint).
-///
-/// Unlike skills (which are hard requirements), preferences express desired vehicle attributes
-/// that the solver tries to match but can violate if necessary with a cost penalty.
-#[derive(Clone, Deserialize, Debug, Serialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "camelCase")]
-pub struct JobPreferences {
-    /// List of preferred attributes. Penalty applied if NONE are present on the assigned vehicle.
-    /// Example: `["driver:alice", "driver:bob"]` means prefer Alice or Bob.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preferred: Option<Vec<String>>,
-
-    /// List of acceptable attributes. Additional penalty if no preferred AND no acceptable match.
-    /// Used as fallback tier: "these are OK if preferred isn't available".
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub acceptable: Option<Vec<String>>,
-
-    /// List of attributes to avoid. Penalty applied for EACH attribute present.
-    /// Example: `["shift:night", "vehicle:old"]` means avoid night shift and old vehicles.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avoid: Option<Vec<String>>,
-
-    /// Weight multiplier for preference penalties. Default is 1.0.
-    /// Higher values make this job's preferences more important.
-    /// Example: weight of 2.0 doubles the penalty for violating this job's preferences.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub weight: Option<Float>,
 }
 
 /// Specifies a place for sub job.
@@ -201,10 +183,10 @@ pub struct Job {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skills: Option<JobSkills>,
 
-    /// Job preferences for vehicle attributes (soft constraint).
-    /// Unlike skills, these are not hard requirements - they add cost penalties when not matched.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preferences: Option<JobPreferences>,
+    /// Skills the job prefers its vehicle to have. Unlike skills, an unmet preference does not prevent an
+    /// assignment: it is minimized by the `minimize-unmet-preferred-skills` objective.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "preferredSkills")]
+    pub preferred_skills: Option<JobPreferredSkills>,
 
     /// Job value, bigger value - more chances for assignment.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -747,6 +729,10 @@ pub enum Objective {
     /// An objective to minimize site visits: distinct job sites summed over runs, so every run serving
     /// a site counts as one unit. Pushes riders of the same site into the same run.
     MinimizeSiteVisits,
+
+    /// An objective to minimize unmet job preferred skills: every `preferredSkills.oneOf` group of an assigned
+    /// job which its vehicle does not meet counts as one unit.
+    MinimizeUnmetPreferredSkills,
 
     /// An objective to minimize opposite-side arrivals: every leg along a matrix cell marked in
     /// `oppositeSideArrivals` counts as one unit.
