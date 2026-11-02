@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.44.0] 2026-11-02
+
 ### Added
 
 * job `preferredSkills` with `oneOf` groups, read like `skills.oneOf`, and the `minimize-unmet-preferred-skills`
@@ -24,6 +26,11 @@ are already published. So, I stick to it for now.
   goal of optimization: the pragmatic reader added it as a feature but no objective layer used it, so preferences had
   no effect on which vehicle served a job. Unknown job properties are ignored, so a `preferences` property is now
   ignored as well; use `preferredSkills` with the `minimize-unmet-preferred-skills` objective instead.
+
+### Fixed
+
+* the `companion-trip-fixed-order` example sets its tags on the places instead of the tasks, so the solution checker
+  can match its activities
 
 ## [1.43.0] 2026-10-22
 
