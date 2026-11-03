@@ -10,8 +10,9 @@ use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
         JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
-        JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension,
-        LifoGroupDimension, LifoGroupId, LifoTagDimension,
+        JobRideStopLimitsDimension, JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
+        JobSoloRidingDimension, LifoGroupDimension, LifoGroupId, LifoTagDimension,
+        RideStopLimits as FeatureRideStopLimits,
     },
     models::common::*,
     models::problem::{
@@ -661,6 +662,14 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
 
     if let Some(solo_riding) = job.solo_riding {
         dimens.set_job_solo_riding(solo_riding);
+    }
+
+    if let Some(limits) = &job.ride_stop_limits {
+        dimens.set_job_ride_stop_limits(FeatureRideStopLimits {
+            pickups: limits.pickups,
+            deliveries: limits.deliveries,
+            stops: limits.stops,
+        });
     }
 
     if let Some(site) = &job.site {

@@ -32,6 +32,25 @@ consists of the following properties:
   the same tour. This is useful to avoid mixing cargo, such as hazardous goods and food.
 - **soloRiding** (optional): when `true`, ensures this pickup-delivery job rides alone in vehicle:
   no other pickup-delivery job can be onboard between its pickup and delivery.
+- **rideStopLimits** (optional): limits how many stops the vehicle makes while this pickup-delivery job is on board,
+  e.g. a passenger who must board last, or a direct ride with no stops on the way. All members are optional
+  non-negative integers, but at least one has to be set, and the job needs both pickups and deliveries:
+  `"rideStopLimits": { "pickups": 0, "deliveries": 1, "stops": 2 }`
+    - `pickups`: max number of stops where other jobs are picked up during the ride
+    - `deliveries`: max number of stops where other jobs are delivered during the ride
+    - `stops`: max number of stops where other jobs are picked up or delivered during the ride
+
+  How stops are counted:
+    - stops are counted from the job activities on the tour: consecutive pickup and delivery activities at the same
+      location form one stop
+    - pickup-only and delivery-only jobs count as stops
+    - jobs with no demand at all do not form stops
+    - breaks and reloads never count
+    - the stops where the job itself is picked up and delivered are excluded, even when other jobs are picked up or
+      delivered there as well
+
+  A job which cannot be assigned without exceeding a limit is reported as unassigned with the
+  `RIDE_STOP_LIMITS_CONSTRAINT` reason code.
 - **site** (optional): a site key, e.g. the school a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).

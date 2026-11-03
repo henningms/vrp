@@ -216,3 +216,41 @@ fn can_detect_stop_duration_conflict_impl(
 
     assert_eq!(result.err().map(|err| err.code), expected);
 }
+
+parameterized_test! {can_detect_invalid_ride_stop_limits, (job_kind, limits, expected), {
+    can_detect_invalid_ride_stop_limits_impl(job_kind, limits, expected);
+}}
+
+can_detect_invalid_ride_stop_limits! {
+    case01_pickup_delivery_with_limit: ("pickup_delivery", Some((Some(0), None, None)), None),
+    case02_pickup_delivery_with_all_limits: ("pickup_delivery", Some((Some(0), Some(1), Some(2))), None),
+    case03_no_limits: ("pickup_delivery", None, None),
+    case04_empty_limits: ("pickup_delivery", Some((None, None, None)), Some("at least one")),
+    case05_delivery_only: ("delivery", Some((Some(0), None, None)), Some("both pickups and deliveries")),
+    case06_pickup_only: ("pickup", Some((None, None, Some(1))), Some("both pickups and deliveries")),
+    case07_service: ("service", Some((None, Some(1), None)), Some("both pickups and deliveries")),
+}
+
+fn can_detect_invalid_ride_stop_limits_impl(
+    job_kind: &str,
+    limits: Option<(Option<usize>, Option<usize>, Option<usize>)>,
+    expected: Option<&str>,
+) {
+    let mut job = match job_kind {
+        "pickup_delivery" => create_pickup_delivery_job("job1", (1., 0.), (2., 0.)),
+        "delivery" => create_delivery_job("job1", (1., 0.)),
+        "pickup" => create_pickup_job("job1", (1., 0.)),
+        _ => create_service_job("job1", (1., 0.)),
+    };
+    job.ride_stop_limits = limits.map(|(pickups, deliveries, stops)| RideStopLimits { pickups, deliveries, stops });
+    let problem = Problem { plan: Plan { jobs: vec![job], ..create_empty_plan() }, ..create_empty_problem() };
+
+    let result =
+        check_e1108_ride_stop_limits(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
+
+    if let Some(action) = expected {
+        assert_result("E1108", action, result);
+    } else {
+        assert!(result.is_none());
+    }
+}
