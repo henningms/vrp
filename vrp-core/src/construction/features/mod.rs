@@ -84,6 +84,9 @@ pub use self::requested_time::{
 mod ride_duration;
 pub use self::ride_duration::{JobMaxRideDurationDimension, create_max_ride_duration_feature};
 
+mod ride_stop_limits;
+pub use self::ride_stop_limits::{JobRideStopLimitsDimension, RideStopLimits, create_ride_stop_limits_feature};
+
 mod site_mixing;
 pub use self::site_mixing::{JobSiteDimension, create_site_mixing_feature, create_site_visits_feature};
 
