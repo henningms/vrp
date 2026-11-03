@@ -21,6 +21,7 @@ pub fn check_assignment(ctx: &CheckerContext) -> Result<(), Vec<GenericError>> {
         check_fixed_order(ctx),
         check_max_ride_duration(ctx),
         check_solo_riding(ctx),
+        check_ride_stop_limits(ctx),
         check_lifo(ctx),
         check_groups(ctx),
     ])
@@ -441,6 +442,92 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
 
                 Ok(())
             })
+    })
+}
+
+/// A pickup or delivery activity with demand, used to count stops.
+struct DemandActivity<'a> {
+    job_id: &'a str,
+    is_pickup: bool,
+    location: usize,
+}
+
+/// Checks that the stops made during a ride do not exceed its `rideStopLimits`.
+/// A ride runs from the first pickup to the last delivery of the job. Consecutive pickup and delivery activities
+/// with demand at one location form a stop; the stops with the job's own first pickup and last delivery are excluded.
+fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
+    let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
+
+    if !jobs.values().any(|job| job.ride_stop_limits.is_some()) {
+        return Ok(());
+    }
+
+    ctx.solution.tours.iter().try_for_each(|tour| {
+        let mut sequence = Vec::<DemandActivity>::new();
+        for stop in tour.stops.iter() {
+            let Some(location) = stop.location() else { continue };
+            let location = ctx.get_location_index(location)?;
+            for activity in stop.activities() {
+                let Some(job) = jobs.get(activity.job_id.as_str()) else { continue };
+                if !matches!(activity.activity_type.as_str(), "pickup" | "delivery") {
+                    continue;
+                }
+                let Some(task) = get_activity_task(job, activity)? else { continue };
+                let has_demand = task.demand.as_ref().is_some_and(|demand| demand.iter().any(|value| *value != 0))
+                    || task.named_demand.as_ref().is_some_and(|demand| demand.values().any(|value| *value != 0));
+                if has_demand {
+                    sequence.push(DemandActivity {
+                        job_id: job.id.as_str(),
+                        is_pickup: activity.activity_type == "pickup",
+                        location,
+                    });
+                }
+            }
+        }
+
+        jobs.values().filter_map(|job| job.ride_stop_limits.as_ref().map(|limits| (*job, limits))).try_for_each(
+            |(job, limits)| {
+                let first = sequence.iter().position(|a| a.job_id == job.id && a.is_pickup);
+                let last = sequence.iter().rposition(|a| a.job_id == job.id && !a.is_pickup);
+                let Some((first, last)) = first.zip(last).filter(|(first, last)| first < last) else {
+                    return Ok(());
+                };
+
+                let pickup_location = sequence[first].location;
+                let pickup_stop_end =
+                    (first..last).find(|&idx| sequence[idx + 1].location != pickup_location).unwrap_or(last);
+                let delivery_location = sequence[last].location;
+                let delivery_stop_start = (pickup_stop_end + 1..=last)
+                    .rev()
+                    .find(|&idx| sequence[idx - 1].location != delivery_location)
+                    .unwrap_or(last);
+                let between = if pickup_stop_end < delivery_stop_start {
+                    &sequence[pickup_stop_end + 1..delivery_stop_start]
+                } else {
+                    &[]
+                };
+
+                let (mut pickups, mut deliveries, mut stops) = (0, 0, 0);
+                between.chunk_by(|left, right| left.location == right.location).for_each(|stop| {
+                    let has_pickup = stop.iter().any(|a| a.is_pickup && a.job_id != job.id);
+                    let has_delivery = stop.iter().any(|a| !a.is_pickup && a.job_id != job.id);
+                    pickups += usize::from(has_pickup);
+                    deliveries += usize::from(has_delivery);
+                    stops += usize::from(has_pickup || has_delivery);
+                });
+
+                [("pickups", pickups, limits.pickups), ("deliveries", deliveries, limits.deliveries), ("stops", stops, limits.stops)]
+                    .into_iter()
+                    .try_for_each(|(name, count, limit)| match limit {
+                        Some(limit) if count > limit => Err(format!(
+                            "ride stop limits are not respected in tour '{}'/{}: job '{}' has {} {} stops during its ride, limit is {}",
+                            tour.vehicle_id, tour.shift_index, job.id, count, name, limit
+                        )
+                        .into()),
+                        _ => Ok(()),
+                    })
+            },
+        )
     })
 }
 

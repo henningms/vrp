@@ -290,26 +290,6 @@ To fix the error, make sure that all durations are non negative.
 To fix the error, make sure that all demand values are non negative.
 
 
-#### E1108
-
-`empty ride stop limits` or `ride stop limits on a job which is not a pickup-delivery job` error is returned when a job
-has `rideStopLimits` with none of `pickups`, `deliveries` and `stops` set, or when such a job has no pickups or no
-deliveries:
-
-```json
-{
-  "id": "job",
-  /** Error: at least one limit has to be set **/
-  "rideStopLimits": {},
-  "pickups": [/* omitted */],
-  "deliveries": [/* omitted */]
-}
-```
-
-To fix the error, set at least one limit and make sure the job has both pickups and deliveries, or remove
-`rideStopLimits`.
-
-
 ### E12xx: Relations
 
 These errors are related to `plan.relations` property definition.
@@ -811,6 +791,25 @@ use a non-negative number, or `0` or no `stopDuration` for a place without one.
 uses vicinity clustering (`plan.clustering`) or a vehicle shift has a required break. Vicinity clustering has its own
 parking time per stop, and required breaks are not supported together with stop durations yet. To fix it, remove one
 of them.
+
+### E9106
+
+`empty ride stop limits` or `ride stop limits on a job which is not a pickup-delivery job` error is returned when a job
+has `rideStopLimits` with none of `pickups`, `deliveries` and `stops` set, or when such a job has no pickups or no
+deliveries:
+
+```json
+{
+  "id": "job",
+  /** Error: at least one limit has to be set **/
+  "rideStopLimits": {},
+  "pickups": [/* omitted */],
+  "deliveries": [/* omitted */]
+}
+```
+
+To fix the error, set at least one limit and make sure the job has both pickups and deliveries, or remove
+`rideStopLimits`.
 
 ### E9301
 

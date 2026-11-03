@@ -693,3 +693,109 @@ fn can_detect_group_violations() {
 
     assert_eq!(result, Err("job groups are not respected: 'group1'".into()));
 }
+
+fn create_ride_stop_limits_context(
+    limits: RideStopLimits,
+    activities: Vec<(&str, &str, &str, f64)>,
+    other_demand: Option<Vec<i32>>,
+) -> CheckerContext {
+    let mut limited = create_constraint_job("limited", &["lp"], &["ld"], false, false);
+    limited.ride_stop_limits = Some(limits);
+    let mut other = create_constraint_job("other", &["op"], &["od"], false, false);
+    other.pickups.as_mut().unwrap()[0].demand = other_demand.clone();
+    other.deliveries.as_mut().unwrap()[0].demand = other_demand;
+    let mut jobs = vec![limited, other];
+    activities.iter().for_each(|(job_id, activity_type, tag, x)| {
+        let job = jobs.iter_mut().find(|job| job.id == *job_id).unwrap();
+        let tasks = if *activity_type == "pickup" { job.pickups.as_mut() } else { job.deliveries.as_mut() };
+        tasks.unwrap().iter_mut().flat_map(|task| task.places.iter_mut()).for_each(|place| {
+            if place.tag.as_deref() == Some(*tag) {
+                place.location = (*x, 0.).to_loc();
+            }
+        });
+    });
+    let problem = Problem {
+        plan: Plan { jobs, ..create_empty_plan() },
+        fleet: Fleet { vehicles: vec![create_default_vehicle_type()], ..create_default_fleet() },
+        ..create_empty_problem()
+    };
+    let stops = activities
+        .into_iter()
+        .map(|(job_id, activity_type, tag, x)| {
+            StopBuilder::default().coordinate((x, 0.)).build_single_tag(job_id, activity_type, tag)
+        })
+        .collect();
+    let solution = SolutionBuilder::default().tour(TourBuilder::default().stops(stops).build()).build();
+
+    CheckerContext::new(create_example_problem(), problem, None, solution).unwrap()
+}
+
+fn no_pickups() -> RideStopLimits {
+    RideStopLimits { pickups: Some(0), deliveries: None, stops: None }
+}
+
+#[test]
+fn can_check_ride_stop_limits_when_limited_job_is_picked_up_last() {
+    let ctx = create_ride_stop_limits_context(
+        no_pickups(),
+        vec![
+            ("other", "pickup", "op", 1.),
+            ("limited", "pickup", "lp", 2.),
+            ("limited", "delivery", "ld", 5.),
+            ("other", "delivery", "od", 5.),
+        ],
+        Some(vec![1]),
+    );
+
+    assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_ride_stop_limits_violation() {
+    let ctx = create_ride_stop_limits_context(
+        no_pickups(),
+        vec![
+            ("limited", "pickup", "lp", 1.),
+            ("other", "pickup", "op", 2.),
+            ("limited", "delivery", "ld", 5.),
+            ("other", "delivery", "od", 6.),
+        ],
+        Some(vec![1]),
+    );
+
+    let error = check_ride_stop_limits(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("job 'limited' has 1 pickups stops during its ride, limit is 0"));
+}
+
+#[test]
+fn can_exclude_own_pickup_and_delivery_stops_from_ride_stop_limits() {
+    let ctx = create_ride_stop_limits_context(
+        RideStopLimits { pickups: Some(0), deliveries: Some(0), stops: Some(0) },
+        vec![
+            ("limited", "pickup", "lp", 1.),
+            ("other", "pickup", "op", 1.),
+            ("limited", "delivery", "ld", 5.),
+            ("other", "delivery", "od", 5.),
+        ],
+        Some(vec![1]),
+    );
+
+    assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
+}
+
+#[test]
+fn can_ignore_jobs_without_demand_in_ride_stop_limits() {
+    let ctx = create_ride_stop_limits_context(
+        no_pickups(),
+        vec![
+            ("limited", "pickup", "lp", 1.),
+            ("other", "pickup", "op", 2.),
+            ("limited", "delivery", "ld", 5.),
+            ("other", "delivery", "od", 6.),
+        ],
+        Some(vec![0]),
+    );
+
+    assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
+}

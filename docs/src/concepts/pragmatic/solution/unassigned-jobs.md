@@ -30,6 +30,10 @@ job was not added to the existing tours.
 | GROUP_CONSTRAINT              | `cannot be assigned due to group constraint`                   | try to reduce amount of jobs in the group?              |
 | COMPATIBILITY_CONSTRAINT      | `cannot be assigned due to compatibility constraint`           | review job's compatibilities                            |
 | RELOAD_RESOURCE_CONSTRAINT    | `cannot be assigned due to reload resource constraint`         | review shared resource allocation for vehicle reloads   |
+| LIFO_CONSTRAINT               | `cannot be assigned due to LIFO ordering constraint of vehicle` | review `lifoTag` of jobs and `lifoTags` of vehicles?    |
+| MAX_RIDE_DURATION_CONSTRAINT  | `cannot be assigned due to max ride duration constraint`       | relax `maxRideDuration` or allocate more vehicles?      |
+| SOLO_RIDING_CONSTRAINT        | `cannot be assigned due to solo riding constraint`             | allocate more vehicles or relax time windows?           |
+| RIDE_STOP_LIMITS_CONSTRAINT   | `cannot be assigned due to ride stop limits constraint`        | relax `rideStopLimits` or allocate more vehicles?       |
 
 ## Example
 

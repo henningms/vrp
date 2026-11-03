@@ -21,7 +21,7 @@ fn get_pickup_order(tour: &Tour) -> Vec<String> {
         .collect()
 }
 
-fn solve_single_vehicle(jobs: Vec<Job>) -> crate::format::solution::Solution {
+fn solve_single_vehicle(jobs: Vec<Job>, generations: usize) -> crate::format::solution::Solution {
     let problem = Problem {
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet {
@@ -32,7 +32,7 @@ fn solve_single_vehicle(jobs: Vec<Job>) -> crate::format::solution::Solution {
     };
     let matrix = create_matrix_from_problem(&problem);
 
-    solve_with_metaheuristic_and_iterations(problem, Some(vec![matrix]), 3000)
+    solve_with_metaheuristic_and_iterations(problem, Some(vec![matrix]), generations)
 }
 
 // All three jobs go to one destination and may only be delivered late, so the vehicle cannot serve the limited job
@@ -50,7 +50,7 @@ fn create_shared_destination_jobs(limits: Option<RideStopLimits>) -> Vec<Job> {
 
 #[test]
 fn can_serve_jobs_in_cheapest_order_without_limits() {
-    let solution = solve_single_vehicle(create_shared_destination_jobs(None));
+    let solution = solve_single_vehicle(create_shared_destination_jobs(None), 500);
 
     assert!(solution.unassigned.is_none());
     assert_eq!(get_pickup_order(&solution.tours[0]).first().map(String::as_str), Some("a"));
@@ -60,7 +60,7 @@ fn can_serve_jobs_in_cheapest_order_without_limits() {
 fn can_pick_up_limited_job_last() {
     let limits = RideStopLimits { pickups: Some(0), deliveries: None, stops: None };
 
-    let solution = solve_single_vehicle(create_shared_destination_jobs(Some(limits)));
+    let solution = solve_single_vehicle(create_shared_destination_jobs(Some(limits)), 3000);
 
     assert!(solution.unassigned.is_none());
     assert_eq!(get_pickup_order(&solution.tours[0]).last().map(String::as_str), Some("a"));
@@ -80,9 +80,9 @@ fn can_unassign_job_due_to_ride_stop_limits() {
         vec![limited, with_order(create_pickup_delivery_job("b", (2., 0.), (4., 0.)), 2, 4)]
     };
 
-    let regular_solution = solve_single_vehicle(jobs(None));
+    let regular_solution = solve_single_vehicle(jobs(None), 500);
     let limited_solution =
-        solve_single_vehicle(jobs(Some(RideStopLimits { pickups: Some(0), deliveries: None, stops: None })));
+        solve_single_vehicle(jobs(Some(RideStopLimits { pickups: Some(0), deliveries: None, stops: None })), 500);
 
     assert!(regular_solution.unassigned.is_none(), "both jobs fit without limits");
     assert_eq!(limited_solution.unassigned.as_ref().map_or(0, |unassigned| unassigned.len()), 1);

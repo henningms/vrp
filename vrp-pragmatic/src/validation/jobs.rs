@@ -201,9 +201,8 @@ fn check_e1107_negative_demand(ctx: &ValidationContext) -> Result<(), FormatErro
     }
 }
 
-/// Checks that demand and namedDemand are mutually exclusive.
 /// Checks that ride stop limits are not empty and are set only on pickup-delivery jobs.
-fn check_e1108_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatError> {
+fn check_e9106_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatError> {
     let (empty, not_pickup_delivery): (Vec<_>, Vec<_>) = ctx
         .jobs()
         .filter_map(|job| job.ride_stop_limits.as_ref().map(|limits| (job, limits)))
@@ -219,7 +218,7 @@ fn check_e1108_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatErr
     if !empty.is_empty() {
         let ids = empty.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
         Err(FormatError::new(
-            "E1108".to_string(),
+            "E9106".to_string(),
             "empty ride stop limits".to_string(),
             format!(
                 "set at least one of pickups, deliveries or stops in rideStopLimits of jobs with ids: '{}'",
@@ -229,7 +228,7 @@ fn check_e1108_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatErr
     } else if !not_pickup_delivery.is_empty() {
         let ids = not_pickup_delivery.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
         Err(FormatError::new(
-            "E1108".to_string(),
+            "E9106".to_string(),
             "ride stop limits on a job which is not a pickup-delivery job".to_string(),
             format!("remove rideStopLimits or add both pickups and deliveries in jobs with ids: '{}'", ids.join(", ")),
         ))
@@ -238,6 +237,7 @@ fn check_e1108_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatErr
     }
 }
 
+/// Checks that demand and namedDemand are mutually exclusive.
 fn check_e9101_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids: Vec<String> = ctx
         .jobs()
@@ -417,7 +417,7 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1105_empty_jobs(ctx),
         check_e1106_negative_duration(ctx),
         check_e1107_negative_demand(ctx),
-        check_e1108_ride_stop_limits(ctx),
+        check_e9106_ride_stop_limits(ctx),
         check_e9101_demand_named_demand_mutual_exclusion(ctx),
         check_e9102_named_demand_dimensions_exist(ctx),
         check_e9103_no_empty_one_of_skill_group(ctx),

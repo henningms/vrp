@@ -49,9 +49,11 @@ consists of the following properties:
     - the stops where the job itself is picked up and delivered are excluded, even when other jobs are picked up or
       delivered there as well
 
+  A limited job whose own tasks carry no demand has no stops of its own, so it is not constrained.
+
   A job which cannot be assigned without exceeding a limit is reported as unassigned with the
   `RIDE_STOP_LIMITS_CONSTRAINT` reason code.
-- **site** (optional): a site key, e.g. the school a rider travels to or from. Used by the
+- **site** (optional): a site key, e.g. the place a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).
 

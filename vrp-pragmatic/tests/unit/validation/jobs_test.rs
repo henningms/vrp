@@ -246,10 +246,10 @@ fn can_detect_invalid_ride_stop_limits_impl(
     let problem = Problem { plan: Plan { jobs: vec![job], ..create_empty_plan() }, ..create_empty_problem() };
 
     let result =
-        check_e1108_ride_stop_limits(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
+        check_e9106_ride_stop_limits(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
 
     if let Some(action) = expected {
-        assert_result("E1108", action, result);
+        assert_result("E9106", action, result);
     } else {
         assert!(result.is_none());
     }

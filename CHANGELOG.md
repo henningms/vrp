@@ -15,7 +15,7 @@ are already published. So, I stick to it for now.
   counted from the job activities on the tour, excluding the stops where the job itself is picked up and delivered;
   breaks, reloads and activities without demand never count. A job which cannot be assigned within its limits is
   reported as `RIDE_STOP_LIMITS_CONSTRAINT`. Empty limits and limits on a job which is not a pickup-delivery job are
-  rejected with E1108. In core, `JobRideStopLimits` (`JobRideStopLimitsDimension`) and
+  rejected with E9106. In core, `JobRideStopLimits` (`JobRideStopLimitsDimension`) and
   `create_ride_stop_limits_feature`.
 
 ## [1.44.0] 2026-11-02
