@@ -46,6 +46,7 @@ consists of the following properties:
     - pickup-only and delivery-only jobs count as stops
     - jobs with no demand at all do not form stops
     - a replacement stop counts as both a pickup stop and a delivery stop
+    - a vicinity cluster counts as one stop
     - breaks and reloads never count
     - the stops where the job itself is picked up and delivered are excluded, even when other jobs are picked up or
       delivered there as well

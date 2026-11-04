@@ -844,8 +844,7 @@ fn can_count_replacement_as_pickup_and_delivery_stop_impl(limits: RideStopLimits
     }
 }
 
-#[test]
-fn can_count_activities_of_one_stop_with_different_locations_as_separate_stops() {
+fn create_two_activity_stop_context(with_commute: bool) -> CheckerContext {
     let limits = RideStopLimits { pickups: None, deliveries: None, stops: Some(1) };
     let (problem, mut stops) = create_ride_stop_limits_parts(
         limits,
@@ -858,15 +857,31 @@ fn can_count_activities_of_one_stop_with_different_locations_as_separate_stops()
         Some(vec![1]),
     );
     let delivery = stops.remove(2).activities().first().cloned().unwrap();
-    let mut pickup_stop = stops.remove(1);
-    pickup_stop.activities_mut().push(delivery);
-    pickup_stop.activities_mut().iter_mut().zip([2., 3.]).for_each(|(activity, x)| {
+    let mut middle_stop = stops.remove(1);
+    middle_stop.activities_mut().push(delivery);
+    middle_stop.activities_mut().iter_mut().zip([2., 3.]).for_each(|(activity, x)| {
         activity.location = Some((x, 0.).to_loc());
+        if with_commute {
+            activity.commute = Some(Commute { forward: None, backward: None });
+        }
     });
-    stops.insert(1, pickup_stop);
-    let ctx = create_ride_stop_limits_checker(problem, stops);
+    stops.insert(1, middle_stop);
+
+    create_ride_stop_limits_checker(problem, stops)
+}
+
+#[test]
+fn can_count_activities_of_one_stop_with_different_locations_as_separate_stops() {
+    let ctx = create_two_activity_stop_context(false);
 
     let error = check_ride_stop_limits(&ctx).unwrap_err().to_string();
 
     assert!(error.contains("2 stops during its ride, limit is 1"));
+}
+
+#[test]
+fn can_count_vicinity_cluster_members_as_one_stop() {
+    let ctx = create_two_activity_stop_context(true);
+
+    assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
 }

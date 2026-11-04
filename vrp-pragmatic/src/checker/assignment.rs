@@ -467,7 +467,13 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
         let mut sequence = Vec::<DemandActivity>::new();
         for stop in tour.stops.iter() {
             for activity in stop.activities() {
-                let Some(location) = activity.location.as_ref().or(stop.location()) else { continue };
+                // A vicinity cluster is one activity at the cluster centre for the solver: its members are one stop.
+                let location = if activity.commute.is_some() {
+                    stop.location()
+                } else {
+                    activity.location.as_ref().or(stop.location())
+                };
+                let Some(location) = location else { continue };
                 let location = ctx.get_location_index(location)?;
                 let Some(job) = jobs.get(activity.job_id.as_str()) else { continue };
                 if !matches!(activity.activity_type.as_str(), "pickup" | "delivery" | "replacement") {
@@ -487,7 +493,7 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
             }
         }
 
-        jobs.values().filter_map(|job| job.ride_stop_limits.as_ref().map(|limits| (*job, limits))).try_for_each(
+        ctx.problem.plan.jobs.iter().filter_map(|job| job.ride_stop_limits.as_ref().map(|limits| (job, limits))).try_for_each(
             |(job, limits)| {
                 let first = sequence.iter().position(|a| a.job_id == job.id && a.is_pickup);
                 let last = sequence.iter().rposition(|a| a.job_id == job.id && a.is_delivery);

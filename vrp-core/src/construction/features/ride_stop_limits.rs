@@ -52,12 +52,14 @@ impl FeatureConstraint for RideStopLimitsConstraint {
             return None;
         };
 
-        // An activity which is neither a pickup nor a delivery cannot change any stop.
-        let target = StopActivity::new(activity_ctx.target)?;
         let tour = &route_ctx.route().tour;
-        if !has_limits(&target.job) && !tour.jobs().any(has_limits) {
+        let target_has_limits = activity_ctx.target.retrieve_job().is_some_and(|job| has_limits(&job));
+        if !target_has_limits && !tour.jobs().any(has_limits) {
             return None;
         }
+
+        // An activity which is neither a pickup nor a delivery cannot change any stop.
+        let target = StopActivity::new(activity_ctx.target)?;
 
         // `activity_ctx.index` is the index of `prev`: the target goes right after it.
         let before = (0..=activity_ctx.index).filter_map(|idx| tour.get(idx)).filter_map(StopActivity::new);
