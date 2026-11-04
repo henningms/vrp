@@ -56,6 +56,10 @@ pub(super) fn create_goal_context(
         features.push(create_solo_riding_feature("solo_riding", SOLO_RIDING_CONSTRAINT_CODE)?);
     }
 
+    if props.has_ride_stop_limits {
+        features.push(create_ride_stop_limits_feature("ride_stop_limits", RIDE_STOP_LIMITS_CONSTRAINT_CODE)?);
+    }
+
     if props.has_group {
         features.push(create_group_feature("group", blocks.jobs.size(), GROUP_CONSTRAINT_CODE)?);
     }

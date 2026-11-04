@@ -153,6 +153,25 @@ pub struct JobTask {
     pub order: Option<i32>,
 }
 
+/// Limits on the stops a vehicle makes while a job is on board. At least one limit has to be set.
+/// The stops where the job itself is picked up and delivered are not counted.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct RideStopLimits {
+    /// Max number of stops where other jobs are picked up.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pickups: Option<usize>,
+
+    /// Max number of stops where other jobs are delivered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deliveries: Option<usize>,
+
+    /// Max number of stops where other jobs are picked up or delivered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stops: Option<usize>,
+}
+
 /// A customer job model. Actual tasks of the job specified by list of pickups and deliveries
 /// which follows these rules:
 /// * all of them should be completed or none of them.
@@ -204,6 +223,11 @@ pub struct Job {
     /// no other pickup-delivery job can be onboard between its pickup and delivery.
     #[serde(skip_serializing_if = "Option::is_none", rename = "soloRiding")]
     pub solo_riding: Option<bool>,
+
+    /// Limits the stops the vehicle makes while this pickup-delivery job is on board, e.g. a passenger
+    /// who must board last or a direct ride with no stops on the way.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "rideStopLimits")]
+    pub ride_stop_limits: Option<RideStopLimits>,
 
     /// LIFO (Last-In-First-Out) tag/category.
     /// Specifies which LIFO stack this job belongs to (e.g., "wheelchair", "stroller").

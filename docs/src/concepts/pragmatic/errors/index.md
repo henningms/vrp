@@ -792,6 +792,25 @@ uses vicinity clustering (`plan.clustering`) or a vehicle shift has a required b
 parking time per stop, and required breaks are not supported together with stop durations yet. To fix it, remove one
 of them.
 
+### E9106
+
+`empty ride stop limits` or `ride stop limits on a job which is not a pickup-delivery job` error is returned when a job
+has `rideStopLimits` with none of `pickups`, `deliveries` and `stops` set, or when such a job has no pickups or no
+deliveries:
+
+```json
+{
+  "id": "job",
+  /** Error: at least one limit has to be set **/
+  "rideStopLimits": {},
+  "pickups": [/* omitted */],
+  "deliveries": [/* omitted */]
+}
+```
+
+To fix the error, set at least one limit and make sure the job has both pickups and deliveries, or remove
+`rideStopLimits`.
+
 ### E9301
 
 `capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,

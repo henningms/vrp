@@ -106,6 +106,9 @@ pub(crate) fn map_code_reason(code: ViolationCode) -> (&'static str, &'static st
             ("MAX_RIDE_DURATION_CONSTRAINT", "cannot be assigned due to max ride duration constraint")
         }
         SOLO_RIDING_CONSTRAINT_CODE => ("SOLO_RIDING_CONSTRAINT", "cannot be assigned due to solo riding constraint"),
+        RIDE_STOP_LIMITS_CONSTRAINT_CODE => {
+            ("RIDE_STOP_LIMITS_CONSTRAINT", "cannot be assigned due to ride stop limits constraint")
+        }
         _ => ("NO_REASON_FOUND", "unknown"),
     }
 }
@@ -130,6 +133,7 @@ fn map_reason_code(reason: &str) -> ViolationCode {
         "LIFO_CONSTRAINT" => LIFO_CONSTRAINT_CODE,
         "MAX_RIDE_DURATION_CONSTRAINT" => MAX_RIDE_DURATION_CONSTRAINT_CODE,
         "SOLO_RIDING_CONSTRAINT" => SOLO_RIDING_CONSTRAINT_CODE,
+        "RIDE_STOP_LIMITS_CONSTRAINT" => RIDE_STOP_LIMITS_CONSTRAINT_CODE,
         _ => ViolationCode::unknown(),
     }
 }

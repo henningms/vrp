@@ -208,3 +208,12 @@ fn can_merge_required_break_on_stop_arrival_time_properly() {
     assert_eq!(tour.stops.len(), 3);
     assert_eq!(get_ids_from_tour(&tour).into_iter().flatten().filter(|id| id == "break").count(), 1);
 }
+
+#[test]
+fn can_map_ride_stop_limits_reason() {
+    let (code, description) = map_code_reason(RIDE_STOP_LIMITS_CONSTRAINT_CODE);
+
+    assert_eq!(code, "RIDE_STOP_LIMITS_CONSTRAINT");
+    assert!(description.contains("ride stop limits"));
+    assert_eq!(map_reason_code(code), RIDE_STOP_LIMITS_CONSTRAINT_CODE);
+}
