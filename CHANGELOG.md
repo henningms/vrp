@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.45.0] 2026-11-04
+
 ### Added
 
 * job `rideStopLimits` with optional `pickups`, `deliveries` and `stops`: a hard limit on how many stops the vehicle
