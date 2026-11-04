@@ -445,10 +445,11 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
     })
 }
 
-/// A pickup or delivery activity with demand, used to count stops.
+/// A pickup, delivery or replacement activity with demand, used to count stops. A replacement is both.
 struct DemandActivity<'a> {
     job_id: &'a str,
     is_pickup: bool,
+    is_delivery: bool,
     location: usize,
 }
 
@@ -465,11 +466,11 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
     ctx.solution.tours.iter().try_for_each(|tour| {
         let mut sequence = Vec::<DemandActivity>::new();
         for stop in tour.stops.iter() {
-            let Some(location) = stop.location() else { continue };
-            let location = ctx.get_location_index(location)?;
             for activity in stop.activities() {
+                let Some(location) = activity.location.as_ref().or(stop.location()) else { continue };
+                let location = ctx.get_location_index(location)?;
                 let Some(job) = jobs.get(activity.job_id.as_str()) else { continue };
-                if !matches!(activity.activity_type.as_str(), "pickup" | "delivery") {
+                if !matches!(activity.activity_type.as_str(), "pickup" | "delivery" | "replacement") {
                     continue;
                 }
                 let Some(task) = get_activity_task(job, activity)? else { continue };
@@ -478,7 +479,8 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
                 if has_demand {
                     sequence.push(DemandActivity {
                         job_id: job.id.as_str(),
-                        is_pickup: activity.activity_type == "pickup",
+                        is_pickup: activity.activity_type != "delivery",
+                        is_delivery: activity.activity_type != "pickup",
                         location,
                     });
                 }
@@ -488,7 +490,7 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
         jobs.values().filter_map(|job| job.ride_stop_limits.as_ref().map(|limits| (*job, limits))).try_for_each(
             |(job, limits)| {
                 let first = sequence.iter().position(|a| a.job_id == job.id && a.is_pickup);
-                let last = sequence.iter().rposition(|a| a.job_id == job.id && !a.is_pickup);
+                let last = sequence.iter().rposition(|a| a.job_id == job.id && a.is_delivery);
                 let Some((first, last)) = first.zip(last).filter(|(first, last)| first < last) else {
                     return Ok(());
                 };
@@ -510,17 +512,21 @@ fn check_ride_stop_limits(ctx: &CheckerContext) -> GenericResult<()> {
                 let (mut pickups, mut deliveries, mut stops) = (0, 0, 0);
                 between.chunk_by(|left, right| left.location == right.location).for_each(|stop| {
                     let has_pickup = stop.iter().any(|a| a.is_pickup && a.job_id != job.id);
-                    let has_delivery = stop.iter().any(|a| !a.is_pickup && a.job_id != job.id);
+                    let has_delivery = stop.iter().any(|a| a.is_delivery && a.job_id != job.id);
                     pickups += usize::from(has_pickup);
                     deliveries += usize::from(has_delivery);
                     stops += usize::from(has_pickup || has_delivery);
                 });
 
-                [("pickups", pickups, limits.pickups), ("deliveries", deliveries, limits.deliveries), ("stops", stops, limits.stops)]
-                    .into_iter()
+                [
+                    ("pickup stops", pickups, limits.pickups),
+                    ("delivery stops", deliveries, limits.deliveries),
+                    ("stops", stops, limits.stops),
+                ]
+                .into_iter()
                     .try_for_each(|(name, count, limit)| match limit {
                         Some(limit) if count > limit => Err(format!(
-                            "ride stop limits are not respected in tour '{}'/{}: job '{}' has {} {} stops during its ride, limit is {}",
+                            "ride stop limits are not respected in tour '{}'/{}: job '{}' has {} {} during its ride, limit is {}",
                             tour.vehicle_id, tour.shift_index, job.id, count, name, limit
                         )
                         .into()),

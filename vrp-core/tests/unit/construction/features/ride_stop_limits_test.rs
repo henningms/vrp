@@ -567,3 +567,31 @@ fn merge_refuses_a_limited_job_impl(
 
     assert_eq!(result.map(|_| ()), expected);
 }
+
+parameterized_test! {counts_a_replacement_job_as_pickup_and_delivery_stop, (limits_param, expected), {
+    counts_a_replacement_job_as_pickup_and_delivery_stop_impl(limits_param, expected);
+}}
+
+counts_a_replacement_job_as_pickup_and_delivery_stop! {
+    case_01_zero_pickups: ((Some(0), None), Some(RIDE_STOP_LIMITS_CODE)),
+    case_02_zero_deliveries: ((None, Some(0)), Some(RIDE_STOP_LIMITS_CODE)),
+    case_03_one_of_each: ((Some(1), Some(1)), None),
+}
+
+fn counts_a_replacement_job_as_pickup_and_delivery_stop_impl(
+    (pickups, deliveries): (Option<usize>, Option<usize>),
+    expected: Option<ViolationCode>,
+) {
+    let (_limited, limited_pickup, limited_delivery) =
+        create_pudo_job("limited", limits(pickups, deliveries, None), 1, 10);
+    let route_ctx = create_route_ctx(vec![limited_pickup, limited_delivery]);
+    let replacement = Demand {
+        pickup: (SingleDimLoad::new(1), SingleDimLoad::default()),
+        delivery: (SingleDimLoad::new(1), SingleDimLoad::default()),
+    };
+
+    // Tour: [start(0), limited_pickup(1), limited_delivery(2), end(3)].
+    let result = evaluate_insertion(&route_ctx, &create_static_activity(5, replacement), 1);
+
+    assert_eq!(violation_code(result), expected);
+}
