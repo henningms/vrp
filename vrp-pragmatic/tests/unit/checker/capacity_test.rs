@@ -232,7 +232,7 @@ fn can_check_resource_consumption() {
 
     assert_eq!(
         result,
-        Err("consumed more resource 'resource_1' than available: [2, 0, 0, 0, 0, 0, 0, 0] vs [1, 0, 0, 0, 0, 0, 0, 0]"
+        Err("consumed more resource 'resource_1' than available: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] vs [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]"
             .into())
     );
 }

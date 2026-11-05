@@ -8,7 +8,9 @@ use std::fmt::{Debug, Display, Formatter};
 use std::iter::Sum;
 use std::ops::{Add, ControlFlow, Mul, Sub};
 
-const LOAD_DIMENSION_SIZE: usize = 8;
+// Aid types, shared-place constraints and seat claims use independent
+// dimensions. Keep room for their combined load while retaining Copy loads.
+const LOAD_DIMENSION_SIZE: usize = 16;
 
 /// Represents a load type used to represent customer's demand or vehicle's load.
 pub trait Load: Add + Sub + PartialOrd + Copy + Default + Debug + Send + Sync {
