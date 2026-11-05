@@ -8,6 +8,16 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.46.0] 2026-11-05
+
+### Changed
+
+* increase the shared load-dimension limit from 8 to 16 for `MultiDimLoad` and `ConfigurableLoad`, allowing combined
+  mobility-aid, seat-claim and other independent capacity constraints in one solve. Loads retain their fixed-array,
+  `Copy` representation; inputs above sixteen dimensions remain rejected. Fixed backing-array storage doubles for
+  multi-dimensional loads and each configurable layout; single-dimensional loads are unchanged. Rust code using
+  the public `load` arrays must accommodate their new length.
+
 ## [1.45.0] 2026-11-04
 
 ### Added
