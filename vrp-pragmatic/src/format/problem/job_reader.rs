@@ -8,11 +8,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
-        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
-        JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
-        JobRideStopLimitsDimension, JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
-        JobSoloRidingDimension, LifoGroupDimension, LifoGroupId, LifoTagDimension,
-        RideStopLimits as FeatureRideStopLimits,
+        BreakPolicy, ClassSeparation, JobClassSeparationDimension, JobCompatibilityDimension, JobDemandDimension,
+        JobGroupDimension, JobMaxRideDurationDimension, JobPreferredSkills as FeaturePreferredSkills,
+        JobPreferredSkillsDimension, JobRequestedTimesDimension, JobRideStopLimitsDimension, JobSiteDimension,
+        JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
+        LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
     },
     models::common::*,
     models::problem::{
@@ -669,6 +669,14 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
             pickups: limits.pickups,
             deliveries: limits.deliveries,
             stops: limits.stops,
+        });
+    }
+
+    if let Some(separation) = &job.separation {
+        dimens.set_job_class_separation(ClassSeparation {
+            class: separation.class.clone(),
+            not_in_same_run: separation.not_in_same_run.clone().unwrap_or_default(),
+            not_in_same_tour: separation.not_in_same_tour.clone().unwrap_or_default(),
         });
     }
 

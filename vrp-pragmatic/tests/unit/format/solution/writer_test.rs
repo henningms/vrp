@@ -217,3 +217,12 @@ fn can_map_ride_stop_limits_reason() {
     assert!(description.contains("ride stop limits"));
     assert_eq!(map_reason_code(code), RIDE_STOP_LIMITS_CONSTRAINT_CODE);
 }
+
+#[test]
+fn can_map_separation_reason() {
+    let (code, description) = map_code_reason(SEPARATION_CONSTRAINT_CODE);
+
+    assert_eq!(code, "SEPARATION_CONSTRAINT");
+    assert!(description.contains("separation"));
+    assert_eq!(map_reason_code(code), SEPARATION_CONSTRAINT_CODE);
+}

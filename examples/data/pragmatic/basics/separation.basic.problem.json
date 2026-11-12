@@ -1,0 +1,143 @@
+{
+  "plan": {
+    "jobs": [
+      {
+        "id": "rider_a1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0010, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_a1_pickup"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0090, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_a1_delivery"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "separation": {
+          "class": "service-a",
+          "notInSameRun": ["service-b"]
+        }
+      },
+      {
+        "id": "rider_b1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0020, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_b1_pickup"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0090, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_b1_delivery"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "separation": {
+          "class": "service-b"
+        }
+      },
+      {
+        "id": "rider_c1",
+        "pickups": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0030, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_c1_pickup"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "deliveries": [
+          {
+            "places": [
+              {
+                "location": { "lat": 0.0090, "lng": 0.0000 },
+                "duration": 60,
+                "tag": "rider_c1_delivery"
+              }
+            ],
+            "demand": [1]
+          }
+        ],
+        "separation": {
+          "class": "service-c",
+          "notInSameTour": ["service-a"]
+        }
+      }
+    ]
+  },
+  "fleet": {
+    "vehicles": [
+      {
+        "typeId": "vehicle",
+        "vehicleIds": ["vehicle_1", "vehicle_2"],
+        "profile": {
+          "matrix": "car"
+        },
+        "costs": {
+          "fixed": 20.0,
+          "distance": 0.001,
+          "time": 0.002
+        },
+        "shifts": [
+          {
+            "start": {
+              "earliest": "2024-01-01T08:00:00Z",
+              "location": { "lat": 0.0, "lng": 0.0 }
+            },
+            "end": {
+              "latest": "2024-01-01T20:00:00Z",
+              "location": { "lat": 0.0, "lng": 0.0 }
+            }
+          }
+        ],
+        "capacity": [3]
+      }
+    ],
+    "profiles": [
+      {
+        "name": "car"
+      }
+    ]
+  },
+  "objectives": [
+    {
+      "type": "minimize-unassigned"
+    },
+    {
+      "type": "minimize-tours"
+    },
+    {
+      "type": "minimize-cost"
+    }
+  ]
+}

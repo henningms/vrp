@@ -8,6 +8,16 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* job `separation` with a required `class` and optional `notInSameRun` and `notInSameTour` class lists: a hard
+  constraint which keeps jobs of conflicting classes out of one run (a stretch of the tour while a pickup-delivery job
+  is on board) or out of one tour, e.g. riders of passenger services which must not travel together or must not use
+  the same vehicle shift. Two jobs conflict when either one lists the other's class. A job which cannot be assigned
+  is reported as `SEPARATION_CONSTRAINT`; an empty class is rejected with E9107. The solution checker enforces both
+  levels on solution tours. A problem without `separation` builds the same goal as before. In core,
+  `ClassSeparation`, `JobClassSeparation` (`JobClassSeparationDimension`) and `create_class_separation_feature`.
+
 ## [1.46.0] 2026-11-05
 
 ### Changed

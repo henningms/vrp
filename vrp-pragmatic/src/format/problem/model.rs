@@ -172,6 +172,24 @@ pub struct RideStopLimits {
     pub stops: Option<usize>,
 }
 
+/// A job's class with the classes it must not share a run or a tour with. Two jobs conflict when either
+/// one lists the class of the other.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct JobSeparation {
+    /// The job's class.
+    pub class: String,
+
+    /// Classes of pickup-delivery jobs which must not be on board together with this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_in_same_run: Option<Vec<String>>,
+
+    /// Classes of jobs which must not be served in the same tour as this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub not_in_same_tour: Option<Vec<String>>,
+}
+
 /// A customer job model. Actual tasks of the job specified by list of pickups and deliveries
 /// which follows these rules:
 /// * all of them should be completed or none of them.
@@ -228,6 +246,11 @@ pub struct Job {
     /// who must board last or a direct ride with no stops on the way.
     #[serde(skip_serializing_if = "Option::is_none", rename = "rideStopLimits")]
     pub ride_stop_limits: Option<RideStopLimits>,
+
+    /// The job's class and the classes it must not share a run (pickup-delivery jobs on board together)
+    /// or a tour with, e.g. riders of different passenger services which must not travel together.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub separation: Option<JobSeparation>,
 
     /// LIFO (Last-In-First-Out) tag/category.
     /// Specifies which LIFO stack this job belongs to (e.g., "wheelchair", "stroller").

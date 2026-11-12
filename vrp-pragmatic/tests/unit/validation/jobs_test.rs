@@ -254,3 +254,41 @@ fn can_detect_invalid_ride_stop_limits_impl(
         assert!(result.is_none());
     }
 }
+
+parameterized_test! {can_detect_empty_separation_classes, (class, not_in_same_run, not_in_same_tour, expected), {
+    can_detect_empty_separation_classes_impl(class, not_in_same_run, not_in_same_tour, expected);
+}}
+
+can_detect_empty_separation_classes! {
+    case01_class_only: ("a", None, None, false),
+    case02_with_lists: ("a", Some(vec!["a", "b"]), Some(vec!["c"]), false),
+    case03_empty_lists: ("a", Some(vec![]), Some(vec![]), false),
+    case04_empty_class: ("", None, None, true),
+    case05_empty_run_class: ("a", Some(vec!["b", ""]), None, true),
+    case06_empty_tour_class: ("a", None, Some(vec![""]), true),
+}
+
+fn can_detect_empty_separation_classes_impl(
+    class: &str,
+    not_in_same_run: Option<Vec<&str>>,
+    not_in_same_tour: Option<Vec<&str>>,
+    expected: bool,
+) {
+    let to_classes = |classes: Option<Vec<&str>>| classes.map(|c| c.into_iter().map(str::to_string).collect());
+    let mut job = create_pickup_delivery_job("job1", (1., 0.), (2., 0.));
+    job.separation = Some(JobSeparation {
+        class: class.to_string(),
+        not_in_same_run: to_classes(not_in_same_run),
+        not_in_same_tour: to_classes(not_in_same_tour),
+    });
+    let problem = Problem { plan: Plan { jobs: vec![job], ..create_empty_plan() }, ..create_empty_problem() };
+
+    let result =
+        check_e9107_separation_classes(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
+
+    if expected {
+        assert_result("E9107", "non-empty classes", result);
+    } else {
+        assert!(result.is_none());
+    }
+}

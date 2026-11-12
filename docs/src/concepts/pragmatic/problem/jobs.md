@@ -55,6 +55,27 @@ consists of the following properties:
 
   A job which cannot be assigned without exceeding a limit is reported as unassigned with the
   `RIDE_STOP_LIMITS_CONSTRAINT` reason code.
+- **separation** (optional): the job's class and the classes it must not share a run or a tour with, e.g. riders of
+  several passenger services on one vehicle, where riders of some services must not be on board together and some
+  services must not use the same vehicle shift at all:
+  `"separation": { "class": "a", "notInSameRun": ["b"], "notInSameTour": ["c"] }`
+    - `class` (required): a non-empty class name
+    - `notInSameRun` (optional): classes of jobs which must not be in the same run as this job
+    - `notInSameTour` (optional): classes of jobs which must not be in the same tour as this job
+
+  How it is applied:
+    - two jobs conflict when either one lists the class of the other, so one side stating it is enough
+    - a class may be listed by its own job: then no two jobs of that class may share a run or a tour
+    - a *run* is a stretch of the tour while at least one job with several tasks, such as a pickup-delivery job, is on
+      board: from that job's first activity to its last, where overlapping rides form one run. Delivering one rider and
+      then picking up the next, even at the same stop, makes two runs
+    - `notInSameRun` applies to jobs with several tasks only; `notInSameTour` applies to every job
+    - a job without `separation` can still join two runs into one, so it is not inserted where that would put
+      conflicting classes into one run
+    - jobs with `separation` are not clustered by vicinity clustering
+
+  A job which cannot be assigned without breaking a separation is reported as unassigned with the
+  `SEPARATION_CONSTRAINT` reason code.
 - **site** (optional): a site key, e.g. the place a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).
