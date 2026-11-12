@@ -885,3 +885,118 @@ fn can_count_vicinity_cluster_members_as_one_stop() {
 
     assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
 }
+
+fn create_separated_jobs(not_in_same_run: &[&str], not_in_same_tour: &[&str]) -> Vec<Job> {
+    let to_classes = |classes: &[&str]| Some(classes.iter().map(|class| class.to_string()).collect());
+    let with_separation = |id: &str, separation: JobSeparation| Job {
+        separation: Some(separation),
+        ..create_constraint_job(id, &["p"], &["d"], false, false)
+    };
+
+    vec![
+        with_separation(
+            "a",
+            JobSeparation {
+                class: "x".to_string(),
+                not_in_same_run: to_classes(not_in_same_run),
+                not_in_same_tour: to_classes(not_in_same_tour),
+            },
+        ),
+        with_separation("b", JobSeparation { class: "y".to_string(), not_in_same_run: None, not_in_same_tour: None }),
+        create_constraint_job("n", &["p"], &["d"], false, false),
+    ]
+}
+
+fn create_separation_context(jobs: Vec<Job>, tours: Vec<Vec<(&str, &str)>>) -> CheckerContext {
+    let problem = Problem {
+        plan: Plan { jobs, ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                vehicle_ids: vec!["my_vehicle_1".to_string(), "my_vehicle_2".to_string()],
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+    let solution = tours
+        .into_iter()
+        .enumerate()
+        .fold(SolutionBuilder::default(), |builder, (idx, activities)| {
+            let stops = activities
+                .into_iter()
+                .map(|(job_id, activity_type)| {
+                    let tag = if activity_type == "pickup" { "p" } else { "d" };
+                    StopBuilder::default().coordinate((0., 0.)).build_single_tag(job_id, activity_type, tag)
+                })
+                .collect();
+            let vehicle_id = format!("my_vehicle_{}", idx + 1);
+            builder.tour(TourBuilder::default().vehicle_id(&vehicle_id).stops(stops).build())
+        })
+        .build();
+
+    CheckerContext::new(create_example_problem(), problem, None, solution).unwrap()
+}
+
+#[test]
+fn can_check_separated_classes_in_different_runs_of_one_tour() {
+    let ctx = create_separation_context(
+        create_separated_jobs(&["y"], &[]),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+
+    assert_eq!(check_separation(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_separated_classes_in_one_run() {
+    let ctx = create_separation_context(
+        create_separated_jobs(&["y"], &[]),
+        vec![vec![("a", "pickup"), ("b", "pickup"), ("a", "delivery"), ("b", "delivery")]],
+    );
+
+    let error = check_separation(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+}
+
+#[test]
+fn can_detect_separated_classes_in_a_run_joined_by_another_job() {
+    let ctx = create_separation_context(
+        create_separated_jobs(&["y"], &[]),
+        vec![vec![
+            ("a", "pickup"),
+            ("n", "pickup"),
+            ("a", "delivery"),
+            ("b", "pickup"),
+            ("n", "delivery"),
+            ("b", "delivery"),
+        ]],
+    );
+
+    let error = check_separation(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+}
+
+#[test]
+fn can_check_separated_classes_in_different_tours() {
+    let ctx = create_separation_context(
+        create_separated_jobs(&[], &["y"]),
+        vec![vec![("a", "pickup"), ("a", "delivery")], vec![("b", "pickup"), ("b", "delivery")]],
+    );
+
+    assert_eq!(check_separation(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_separated_classes_in_one_tour() {
+    let ctx = create_separation_context(
+        create_separated_jobs(&[], &["y"]),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+
+    let error = check_separation(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
+}
