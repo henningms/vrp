@@ -51,21 +51,21 @@ struct ClassSeparationConstraint {
 
 impl FeatureConstraint for ClassSeparationConstraint {
     fn evaluate(&self, move_ctx: &MoveContext<'_>) -> Option<ConstraintViolation> {
-        let has_conflict = match move_ctx {
+        match move_ctx {
             MoveContext::Route { route_ctx, job, .. } => {
                 let separation = job.dimens().get_job_class_separation()?;
                 with_tour_classes(route_ctx, |classes| {
                     classes.tour.conflicts_with_job(&separation.class, &separation.not_in_same_tour)
                 })
+                .then_some(ConstraintViolation { code: self.code, stopped: true })
             }
             MoveContext::Activity { route_ctx, activity_ctx, .. } => {
                 let job = activity_ctx.target.retrieve_job()?;
                 let size = job.as_multi()?.jobs.len();
                 with_tour_classes(route_ctx, |classes| classes.has_run_conflict(&job, size, activity_ctx.index))
+                    .then_some(ConstraintViolation { code: self.code, stopped: false })
             }
-        };
-
-        if has_conflict { ConstraintViolation::skip(self.code) } else { None }
+        }
     }
 
     fn merge(&self, source: Job, candidate: Job) -> Result<Job, ViolationCode> {
