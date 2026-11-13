@@ -172,6 +172,35 @@ pub struct RideStopLimits {
     pub stops: Option<usize>,
 }
 
+/// Labels a job carries with the labels it must not share a run or a tour with. Two jobs conflict when
+/// either one lists a label the other carries.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct JobSharing {
+    /// Labels the job carries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub labels: Option<Vec<String>>,
+
+    /// Labels of jobs with several tasks which must not be on board together with this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<JobSharingRule>,
+
+    /// Labels of jobs which must not be served in the same tour as this job.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tour: Option<JobSharingRule>,
+}
+
+/// Labels a job must not share a run or a tour with.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct JobSharingRule {
+    /// The job shares a run or a tour with no job carrying any of these labels.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub none_of: Option<Vec<String>>,
+}
+
 /// A customer job model. Actual tasks of the job specified by list of pickups and deliveries
 /// which follows these rules:
 /// * all of them should be completed or none of them.
@@ -228,6 +257,11 @@ pub struct Job {
     /// who must board last or a direct ride with no stops on the way.
     #[serde(skip_serializing_if = "Option::is_none", rename = "rideStopLimits")]
     pub ride_stop_limits: Option<RideStopLimits>,
+
+    /// Labels the job carries and the labels it must not share a run (pickup-delivery jobs on board
+    /// together) or a tour with, e.g. riders of different passenger services which must not travel together.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sharing: Option<JobSharing>,
 
     /// LIFO (Last-In-First-Out) tag/category.
     /// Specifies which LIFO stack this job belongs to (e.g., "wheelchair", "stroller").

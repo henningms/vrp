@@ -55,6 +55,33 @@ consists of the following properties:
 
   A job which cannot be assigned without exceeding a limit is reported as unassigned with the
   `RIDE_STOP_LIMITS_CONSTRAINT` reason code.
+- **sharing** (optional): labels the job carries and the labels it must not share a run or a tour with, e.g. riders
+  of several passenger services on one vehicle, where riders of some services must not be on board together and some
+  services must not use the same vehicle shift at all. The conditions use the vocabulary of `skills`:
+  ```json
+  "sharing": {
+    "labels": ["a"],
+    "run": { "noneOf": ["b"] },
+    "tour": { "noneOf": ["c"] }
+  }
+  ```
+    - `labels` (optional): non-empty labels the job carries; a job may carry several labels or none
+    - `run.noneOf` (optional): the job shares a run with no job with several tasks carrying any of these labels
+    - `tour.noneOf` (optional): the job shares a tour with no job carrying any of these labels
+
+  How it is applied:
+    - two jobs conflict when either one lists a label the other carries, so one side stating it is enough
+    - a job may list a label it carries itself: then no two jobs with that label and that list share a run or a tour
+    - a *run* is a stretch of the tour while at least one job with several tasks, such as a pickup-delivery job, is on
+      board: from that job's first activity to its last, where overlapping rides form one run. Delivering one rider and
+      then picking up the next, even at the same stop, makes two runs
+    - `run` applies to jobs with several tasks only; `tour` applies to every job
+    - a job without `sharing` can still join two runs into one, so it is not inserted where that would put
+      conflicting labels into one run
+    - jobs with `sharing` are not clustered by vicinity clustering
+
+  A job which cannot be assigned without a conflict is reported as unassigned with the `SHARING_CONSTRAINT` reason
+  code.
 - **site** (optional): a site key, e.g. the place a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).

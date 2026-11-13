@@ -22,6 +22,7 @@ pub fn check_assignment(ctx: &CheckerContext) -> Result<(), Vec<GenericError>> {
         check_max_ride_duration(ctx),
         check_solo_riding(ctx),
         check_ride_stop_limits(ctx),
+        check_sharing(ctx),
         check_lifo(ctx),
         check_groups(ctx),
     ])
@@ -442,6 +443,83 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
 
                 Ok(())
             })
+    })
+}
+
+/// Checks that jobs whose sharing conflicts share neither a run nor a tour. A run is a maximal stretch of a
+/// tour while at least one job with several tasks is on board: from the first to the last activity of the job.
+fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
+    let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
+
+    if !jobs.values().any(|job| job.sharing.is_some()) {
+        return Ok(());
+    }
+
+    ctx.solution.tours.iter().try_for_each(|tour| {
+        let mut tour_jobs = Vec::<&str>::new();
+        let mut spans = Vec::<(&str, usize, usize)>::new();
+        tour.stops.iter().flat_map(|stop| stop.activities()).enumerate().for_each(|(idx, activity)| {
+            let Some(job) = jobs.get(activity.job_id.as_str()) else { return };
+            if !tour_jobs.contains(&job.id.as_str()) {
+                tour_jobs.push(job.id.as_str());
+            }
+            if job.all_tasks_iter().count() > 1 {
+                match spans.iter_mut().find(|(job_id, ..)| *job_id == job.id) {
+                    Some((_, _, last)) => *last = idx,
+                    None => spans.push((job.id.as_str(), idx, idx)),
+                }
+            }
+        });
+
+        if let Some((left, right)) = find_sharing_conflict(&jobs, &tour_jobs, |sharing| &sharing.tour) {
+            return Err(format!(
+                "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a tour",
+                tour.vehicle_id, tour.shift_index
+            )
+            .into());
+        }
+
+        let mut runs = Vec::<(usize, Vec<&str>)>::new();
+        spans.iter().for_each(|&(job_id, first, last)| match runs.last_mut() {
+            Some((end, run_jobs)) if first < *end => {
+                *end = (*end).max(last);
+                run_jobs.push(job_id);
+            }
+            _ => runs.push((last, vec![job_id])),
+        });
+
+        runs.iter().try_for_each(|(_, run_jobs)| match find_sharing_conflict(&jobs, run_jobs, |sharing| &sharing.run) {
+            Some((left, right)) => Err(format!(
+                "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a run",
+                tour.vehicle_id, tour.shift_index
+            )
+            .into()),
+            None => Ok(()),
+        })
+    })
+}
+
+type SharingLevel = fn(&JobSharing) -> &Option<JobSharingRule>;
+
+/// Returns a pair of jobs where either one lists a label the other carries at the given level.
+fn find_sharing_conflict<'a>(
+    jobs: &HashMap<&str, &Job>,
+    job_ids: &[&'a str],
+    level: SharingLevel,
+) -> Option<(&'a str, &'a str)> {
+    let lists = |job: &Job, other: &Job| {
+        job.sharing.as_ref().zip(other.sharing.as_ref()).is_some_and(|(job_sharing, other_sharing)| {
+            let none_of = level(job_sharing).as_ref().and_then(|rule| rule.none_of.as_ref());
+            none_of.into_iter().flatten().any(|label| other_sharing.labels.iter().flatten().any(|other| other == label))
+        })
+    };
+
+    job_ids.iter().enumerate().find_map(|(idx, &left)| {
+        job_ids[idx + 1..]
+            .iter()
+            .copied()
+            .find(|&right| lists(jobs[left], jobs[right]) || lists(jobs[right], jobs[left]))
+            .map(|right| (left, right))
     })
 }
 

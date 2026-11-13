@@ -10,9 +10,9 @@ use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
         JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
-        JobRideStopLimitsDimension, JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension,
-        JobSoloRidingDimension, LifoGroupDimension, LifoGroupId, LifoTagDimension,
-        RideStopLimits as FeatureRideStopLimits,
+        JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension, JobSiteDimension,
+        JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
+        LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
     },
     models::common::*,
     models::problem::{
@@ -669,6 +669,15 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
             pickups: limits.pickups,
             deliveries: limits.deliveries,
             stops: limits.stops,
+        });
+    }
+
+    if let Some(sharing) = &job.sharing {
+        let none_of = |rule: &Option<JobSharingRule>| rule.as_ref().and_then(|rule| rule.none_of.clone());
+        dimens.set_job_sharing(FeatureJobSharing {
+            labels: sharing.labels.clone().unwrap_or_default(),
+            run_none_of: none_of(&sharing.run).unwrap_or_default(),
+            tour_none_of: none_of(&sharing.tour).unwrap_or_default(),
         });
     }
 

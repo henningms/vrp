@@ -232,6 +232,7 @@ pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matri
     let has_compatibility = api_problem.plan.jobs.iter().any(|job| job.compatibility.is_some());
     let has_solo_riding = api_problem.plan.jobs.iter().any(|job| job.solo_riding == Some(true));
     let has_ride_stop_limits = api_problem.plan.jobs.iter().any(|job| job.ride_stop_limits.is_some());
+    let has_sharing = api_problem.plan.jobs.iter().any(|job| job.sharing.is_some());
     let has_tour_size_limits =
         api_problem.fleet.vehicles.iter().any(|v| v.limits.as_ref().is_some_and(|l| l.tour_size.is_some()));
 
@@ -261,6 +262,7 @@ pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matri
         has_compatibility,
         has_solo_riding,
         has_ride_stop_limits,
+        has_sharing,
         has_tour_size_limits,
         has_tour_travel_limits,
         has_lifo,
