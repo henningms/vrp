@@ -886,28 +886,23 @@ fn can_count_vicinity_cluster_members_as_one_stop() {
     assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
 }
 
-fn create_separated_jobs(not_in_same_run: &[&str], not_in_same_tour: &[&str]) -> Vec<Job> {
-    let to_classes = |classes: &[&str]| Some(classes.iter().map(|class| class.to_string()).collect());
-    let with_separation = |id: &str, separation: JobSeparation| Job {
-        separation: Some(separation),
+fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> JobSharing {
+    let to_labels = |labels: &[&str]| Some(labels.iter().map(|label| label.to_string()).collect());
+    let to_rule = |labels: &[&str]| Some(JobSharingRule { none_of: to_labels(labels) });
+
+    JobSharing { labels: to_labels(labels), run: to_rule(run_none_of), tour: to_rule(tour_none_of) }
+}
+
+fn create_sharing_jobs(a: JobSharing, b: JobSharing) -> Vec<Job> {
+    let with_sharing = |id: &str, sharing: JobSharing| Job {
+        sharing: Some(sharing),
         ..create_constraint_job(id, &["p"], &["d"], false, false)
     };
 
-    vec![
-        with_separation(
-            "a",
-            JobSeparation {
-                class: "x".to_string(),
-                not_in_same_run: to_classes(not_in_same_run),
-                not_in_same_tour: to_classes(not_in_same_tour),
-            },
-        ),
-        with_separation("b", JobSeparation { class: "y".to_string(), not_in_same_run: None, not_in_same_tour: None }),
-        create_constraint_job("n", &["p"], &["d"], false, false),
-    ]
+    vec![with_sharing("a", a), with_sharing("b", b), create_constraint_job("n", &["p"], &["d"], false, false)]
 }
 
-fn create_separation_context(jobs: Vec<Job>, tours: Vec<Vec<(&str, &str)>>) -> CheckerContext {
+fn create_sharing_context(jobs: Vec<Job>, tours: Vec<Vec<(&str, &str)>>) -> CheckerContext {
     let problem = Problem {
         plan: Plan { jobs, ..create_empty_plan() },
         fleet: Fleet {
@@ -939,31 +934,31 @@ fn create_separation_context(jobs: Vec<Job>, tours: Vec<Vec<(&str, &str)>>) -> C
 }
 
 #[test]
-fn can_check_separated_classes_in_different_runs_of_one_tour() {
-    let ctx = create_separation_context(
-        create_separated_jobs(&["y"], &[]),
+fn can_check_conflicting_labels_in_different_runs_of_one_tour() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
         vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
     );
 
-    assert_eq!(check_separation(&ctx), Ok(()));
+    assert_eq!(check_sharing(&ctx), Ok(()));
 }
 
 #[test]
-fn can_detect_separated_classes_in_one_run() {
-    let ctx = create_separation_context(
-        create_separated_jobs(&["y"], &[]),
+fn can_detect_conflicting_labels_in_one_run() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
         vec![vec![("a", "pickup"), ("b", "pickup"), ("a", "delivery"), ("b", "delivery")]],
     );
 
-    let error = check_separation(&ctx).unwrap_err().to_string();
+    let error = check_sharing(&ctx).unwrap_err().to_string();
 
     assert!(error.contains("jobs 'a' and 'b' must not share a run"));
 }
 
 #[test]
-fn can_detect_separated_classes_in_a_run_joined_by_another_job() {
-    let ctx = create_separation_context(
-        create_separated_jobs(&["y"], &[]),
+fn can_detect_conflicting_labels_in_a_run_joined_by_another_job() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
         vec![vec![
             ("a", "pickup"),
             ("n", "pickup"),
@@ -974,29 +969,60 @@ fn can_detect_separated_classes_in_a_run_joined_by_another_job() {
         ]],
     );
 
-    let error = check_separation(&ctx).unwrap_err().to_string();
+    let error = check_sharing(&ctx).unwrap_err().to_string();
 
     assert!(error.contains("jobs 'a' and 'b' must not share a run"));
 }
 
 #[test]
-fn can_check_separated_classes_in_different_tours() {
-    let ctx = create_separation_context(
-        create_separated_jobs(&[], &["y"]),
+fn can_check_conflicting_labels_in_different_tours() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])),
         vec![vec![("a", "pickup"), ("a", "delivery")], vec![("b", "pickup"), ("b", "delivery")]],
     );
 
-    assert_eq!(check_separation(&ctx), Ok(()));
+    assert_eq!(check_sharing(&ctx), Ok(()));
 }
 
 #[test]
-fn can_detect_separated_classes_in_one_tour() {
-    let ctx = create_separation_context(
-        create_separated_jobs(&[], &["y"]),
+fn can_detect_conflicting_labels_in_one_tour() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])),
         vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
     );
 
-    let error = check_separation(&ctx).unwrap_err().to_string();
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
+}
+
+#[test]
+fn can_detect_conflict_through_either_of_two_labels() {
+    for label in ["x", "y"] {
+        let ctx = create_sharing_context(
+            create_sharing_jobs(sharing(&["z"], &[label], &[]), sharing(&["x", "y"], &[], &[])),
+            vec![vec![("a", "pickup"), ("b", "pickup"), ("a", "delivery"), ("b", "delivery")]],
+        );
+
+        let error = check_sharing(&ctx).unwrap_err().to_string();
+
+        assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+    }
+}
+
+#[test]
+fn can_detect_label_refused_by_a_job_without_labels() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&[], &[], &[]), sharing(&[], &[], &["y"])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+    assert_eq!(check_sharing(&ctx), Ok(()));
+
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["y"], &[], &[]), sharing(&[], &[], &["y"])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+    let error = check_sharing(&ctx).unwrap_err().to_string();
 
     assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
 }

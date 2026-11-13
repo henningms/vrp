@@ -210,7 +210,7 @@ const LIFO_CONSTRAINT_CODE: ViolationCode = ViolationCode(1001);
 const MAX_RIDE_DURATION_CONSTRAINT_CODE: ViolationCode = ViolationCode(1002);
 const SOLO_RIDING_CONSTRAINT_CODE: ViolationCode = ViolationCode(1003);
 const RIDE_STOP_LIMITS_CONSTRAINT_CODE: ViolationCode = ViolationCode(1004);
-const SEPARATION_CONSTRAINT_CODE: ViolationCode = ViolationCode(1005);
+const SHARING_CONSTRAINT_CODE: ViolationCode = ViolationCode(1005);
 
 /// An job id to job index.
 pub type JobIndex = HashMap<String, CoreJob>;

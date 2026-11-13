@@ -109,7 +109,7 @@ pub(crate) fn map_code_reason(code: ViolationCode) -> (&'static str, &'static st
         RIDE_STOP_LIMITS_CONSTRAINT_CODE => {
             ("RIDE_STOP_LIMITS_CONSTRAINT", "cannot be assigned due to ride stop limits constraint")
         }
-        SEPARATION_CONSTRAINT_CODE => ("SEPARATION_CONSTRAINT", "cannot be assigned due to separation constraint"),
+        SHARING_CONSTRAINT_CODE => ("SHARING_CONSTRAINT", "cannot be assigned due to sharing constraint"),
         _ => ("NO_REASON_FOUND", "unknown"),
     }
 }
@@ -135,7 +135,7 @@ fn map_reason_code(reason: &str) -> ViolationCode {
         "MAX_RIDE_DURATION_CONSTRAINT" => MAX_RIDE_DURATION_CONSTRAINT_CODE,
         "SOLO_RIDING_CONSTRAINT" => SOLO_RIDING_CONSTRAINT_CODE,
         "RIDE_STOP_LIMITS_CONSTRAINT" => RIDE_STOP_LIMITS_CONSTRAINT_CODE,
-        "SEPARATION_CONSTRAINT" => SEPARATION_CONSTRAINT_CODE,
+        "SHARING_CONSTRAINT" => SHARING_CONSTRAINT_CODE,
         _ => ViolationCode::unknown(),
     }
 }

@@ -255,39 +255,38 @@ fn can_detect_invalid_ride_stop_limits_impl(
     }
 }
 
-parameterized_test! {can_detect_empty_separation_classes, (class, not_in_same_run, not_in_same_tour, expected), {
-    can_detect_empty_separation_classes_impl(class, not_in_same_run, not_in_same_tour, expected);
+parameterized_test! {can_detect_empty_sharing_labels, (labels, run_none_of, tour_none_of, expected), {
+    can_detect_empty_sharing_labels_impl(labels, run_none_of, tour_none_of, expected);
 }}
 
-can_detect_empty_separation_classes! {
-    case01_class_only: ("a", None, None, false),
-    case02_with_lists: ("a", Some(vec!["a", "b"]), Some(vec!["c"]), false),
-    case03_empty_lists: ("a", Some(vec![]), Some(vec![]), false),
-    case04_empty_class: ("", None, None, true),
-    case05_empty_run_class: ("a", Some(vec!["b", ""]), None, true),
-    case06_empty_tour_class: ("a", None, Some(vec![""]), true),
+can_detect_empty_sharing_labels! {
+    case01_labels_only: (Some(vec!["a"]), None, None, false),
+    case02_with_lists: (Some(vec!["a", "b"]), Some(vec!["a", "b"]), Some(vec!["c"]), false),
+    case03_empty_lists: (Some(vec![]), Some(vec![]), Some(vec![]), false),
+    case04_no_labels: (None, Some(vec!["b"]), None, false),
+    case05_empty_label: (Some(vec![""]), None, None, true),
+    case06_empty_label_among_others: (Some(vec!["a", ""]), None, None, true),
+    case07_empty_run_label: (Some(vec!["a"]), Some(vec!["b", ""]), None, true),
+    case08_empty_tour_label: (None, None, Some(vec![""]), true),
 }
 
-fn can_detect_empty_separation_classes_impl(
-    class: &str,
-    not_in_same_run: Option<Vec<&str>>,
-    not_in_same_tour: Option<Vec<&str>>,
+fn can_detect_empty_sharing_labels_impl(
+    labels: Option<Vec<&str>>,
+    run_none_of: Option<Vec<&str>>,
+    tour_none_of: Option<Vec<&str>>,
     expected: bool,
 ) {
-    let to_classes = |classes: Option<Vec<&str>>| classes.map(|c| c.into_iter().map(str::to_string).collect());
+    let to_labels = |labels: Option<Vec<&str>>| labels.map(|l| l.into_iter().map(str::to_string).collect());
+    let to_rule = |labels: Option<Vec<&str>>| to_labels(labels).map(|labels| JobSharingRule { none_of: Some(labels) });
     let mut job = create_pickup_delivery_job("job1", (1., 0.), (2., 0.));
-    job.separation = Some(JobSeparation {
-        class: class.to_string(),
-        not_in_same_run: to_classes(not_in_same_run),
-        not_in_same_tour: to_classes(not_in_same_tour),
-    });
+    job.sharing =
+        Some(JobSharing { labels: to_labels(labels), run: to_rule(run_none_of), tour: to_rule(tour_none_of) });
     let problem = Problem { plan: Plan { jobs: vec![job], ..create_empty_plan() }, ..create_empty_problem() };
 
-    let result =
-        check_e9107_separation_classes(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
+    let result = check_e9107_sharing_labels(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
 
     if expected {
-        assert_result("E9107", "non-empty classes", result);
+        assert_result("E9107", "non-empty labels", result);
     } else {
         assert!(result.is_none());
     }

@@ -209,19 +209,18 @@ fn adds_the_stop_duration_outside_the_ferry_aware_transport() {
 }
 
 #[test]
-fn adds_separation_feature_only_when_a_job_has_separation() {
+fn adds_sharing_feature_only_when_a_job_has_sharing() {
     let problem = create_one_job_problem();
     let matrix = create_matrix_from_problem(&problem);
-    let mut separated = problem.clone();
-    separated.plan.jobs[0].separation =
-        Some(JobSeparation { class: "a".to_string(), not_in_same_run: None, not_in_same_tour: None });
+    let mut shared = problem.clone();
+    shared.plan.jobs[0].sharing = Some(JobSharing { labels: Some(vec!["a".to_string()]), run: None, tour: None });
 
     let regular_core = (problem.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem");
-    let separated_core = (separated.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem");
+    let shared_core = (shared.clone(), vec![matrix.clone()]).read_pragmatic().expect("valid problem");
 
-    assert!(!get_problem_properties(&problem, std::slice::from_ref(&matrix)).has_separation);
-    assert!(get_problem_properties(&separated, &[matrix]).has_separation);
-    assert_eq!(regular_core.goal.constraints().count() + 1, separated_core.goal.constraints().count());
+    assert!(!get_problem_properties(&problem, std::slice::from_ref(&matrix)).has_sharing);
+    assert!(get_problem_properties(&shared, &[matrix]).has_sharing);
+    assert_eq!(regular_core.goal.constraints().count() + 1, shared_core.goal.constraints().count());
 }
 
 /// A job at (100, 0) is location 0 and the depot at (0, 0) location 1.

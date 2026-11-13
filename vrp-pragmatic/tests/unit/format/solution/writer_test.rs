@@ -219,10 +219,10 @@ fn can_map_ride_stop_limits_reason() {
 }
 
 #[test]
-fn can_map_separation_reason() {
-    let (code, description) = map_code_reason(SEPARATION_CONSTRAINT_CODE);
+fn can_map_sharing_reason() {
+    let (code, description) = map_code_reason(SHARING_CONSTRAINT_CODE);
 
-    assert_eq!(code, "SEPARATION_CONSTRAINT");
-    assert!(description.contains("separation"));
-    assert_eq!(map_reason_code(code), SEPARATION_CONSTRAINT_CODE);
+    assert_eq!(code, "SHARING_CONSTRAINT");
+    assert!(description.contains("sharing"));
+    assert_eq!(map_reason_code(code), SHARING_CONSTRAINT_CODE);
 }

@@ -22,7 +22,7 @@ pub fn check_assignment(ctx: &CheckerContext) -> Result<(), Vec<GenericError>> {
         check_max_ride_duration(ctx),
         check_solo_riding(ctx),
         check_ride_stop_limits(ctx),
-        check_separation(ctx),
+        check_sharing(ctx),
         check_lifo(ctx),
         check_groups(ctx),
     ])
@@ -446,12 +446,12 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
     })
 }
 
-/// Checks that jobs whose classes are separated share neither a run nor a tour. A run is a maximal stretch of a
+/// Checks that jobs whose sharing conflicts share neither a run nor a tour. A run is a maximal stretch of a
 /// tour while at least one job with several tasks is on board: from the first to the last activity of the job.
-fn check_separation(ctx: &CheckerContext) -> GenericResult<()> {
+fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
     let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
 
-    if !jobs.values().any(|job| job.separation.is_some()) {
+    if !jobs.values().any(|job| job.sharing.is_some()) {
         return Ok(());
     }
 
@@ -471,9 +471,9 @@ fn check_separation(ctx: &CheckerContext) -> GenericResult<()> {
             }
         });
 
-        if let Some((left, right)) = find_separation_conflict(&jobs, &tour_jobs, |sep| &sep.not_in_same_tour) {
+        if let Some((left, right)) = find_sharing_conflict(&jobs, &tour_jobs, |sharing| &sharing.tour) {
             return Err(format!(
-                "separation is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a tour",
+                "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a tour",
                 tour.vehicle_id, tour.shift_index
             )
             .into());
@@ -488,32 +488,30 @@ fn check_separation(ctx: &CheckerContext) -> GenericResult<()> {
             _ => runs.push((last, vec![job_id])),
         });
 
-        runs.iter().try_for_each(|(_, run_jobs)| {
-            match find_separation_conflict(&jobs, run_jobs, |sep| &sep.not_in_same_run) {
-                Some((left, right)) => Err(format!(
-                    "separation is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a run",
-                    tour.vehicle_id, tour.shift_index
-                )
-                .into()),
-                None => Ok(()),
-            }
+        runs.iter().try_for_each(|(_, run_jobs)| match find_sharing_conflict(&jobs, run_jobs, |sharing| &sharing.run) {
+            Some((left, right)) => Err(format!(
+                "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a run",
+                tour.vehicle_id, tour.shift_index
+            )
+            .into()),
+            None => Ok(()),
         })
     })
 }
 
-type SeparationLevel = fn(&JobSeparation) -> &Option<Vec<String>>;
+type SharingLevel = fn(&JobSharing) -> &Option<JobSharingRule>;
 
-/// Returns a pair of jobs where either one lists the other's class at the given level.
-fn find_separation_conflict<'a>(
+/// Returns a pair of jobs where either one lists a label the other carries at the given level.
+fn find_sharing_conflict<'a>(
     jobs: &HashMap<&str, &Job>,
     job_ids: &[&'a str],
-    level: SeparationLevel,
+    level: SharingLevel,
 ) -> Option<(&'a str, &'a str)> {
     let lists = |job: &Job, other: &Job| {
-        job.separation
-            .as_ref()
-            .zip(other.separation.as_ref())
-            .is_some_and(|(job_sep, other_sep)| level(job_sep).iter().flatten().any(|class| *class == other_sep.class))
+        job.sharing.as_ref().zip(other.sharing.as_ref()).is_some_and(|(job_sharing, other_sharing)| {
+            let none_of = level(job_sharing).as_ref().and_then(|rule| rule.none_of.as_ref());
+            none_of.into_iter().flatten().any(|label| other_sharing.labels.iter().flatten().any(|other| other == label))
+        })
     };
 
     job_ids.iter().enumerate().find_map(|(idx, &left)| {

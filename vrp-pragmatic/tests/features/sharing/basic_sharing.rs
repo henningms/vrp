@@ -3,23 +3,22 @@ use crate::format::solution::{Solution, Tour, UnassignedJobDetail, UnassignedJob
 use crate::helpers::*;
 use std::collections::HashSet;
 
-fn separation(class: &str, not_in_same_run: &[&str], not_in_same_tour: &[&str]) -> Option<JobSeparation> {
-    let to_classes = |classes: &[&str]| Some(classes.iter().map(|class| class.to_string()).collect());
+fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> Option<JobSharing> {
+    let to_labels = |labels: &[&str]| -> Option<Vec<String>> {
+        if labels.is_empty() { None } else { Some(labels.iter().map(|label| label.to_string()).collect()) }
+    };
+    let to_rule = |labels: &[&str]| to_labels(labels).map(|labels| JobSharingRule { none_of: Some(labels) });
 
-    Some(JobSeparation {
-        class: class.to_string(),
-        not_in_same_run: to_classes(not_in_same_run),
-        not_in_same_tour: to_classes(not_in_same_tour),
-    })
+    Some(JobSharing { labels: to_labels(labels), run: to_rule(run_none_of), tour: to_rule(tour_none_of) })
 }
 
 // Both riders travel to one destination and are picked up close to each other, so sharing the ride is clearly
 // the cheapest plan.
-fn create_riders(a: Option<JobSeparation>, b: Option<JobSeparation>) -> Vec<Job> {
+fn create_riders(a: Option<JobSharing>, b: Option<JobSharing>) -> Vec<Job> {
     let mut job_a = create_pickup_delivery_job("a", (1., 0.), (10., 0.));
-    job_a.separation = a;
+    job_a.sharing = a;
     let mut job_b = create_pickup_delivery_job("b", (2., 0.), (10., 0.));
-    job_b.separation = b;
+    job_b.sharing = b;
 
     vec![job_a, job_b]
 }
@@ -59,8 +58,8 @@ fn find_tour<'a>(solution: &'a Solution, job_id: &str) -> &'a Tour {
 }
 
 #[test]
-fn can_share_ride_without_separation() {
-    let solution = solve(create_riders(separation("x", &[], &[]), separation("y", &[], &[])), 2);
+fn can_share_ride_without_conflicting_labels() {
+    let solution = solve(create_riders(sharing(&["x"], &[], &[]), sharing(&["y"], &[], &[])), 2);
 
     assert!(solution.unassigned.is_none());
     assert_eq!(solution.tours.len(), 1);
@@ -68,24 +67,32 @@ fn can_share_ride_without_separation() {
 }
 
 #[test]
-fn can_keep_conflicting_classes_in_separate_runs() {
-    let solution = solve(create_riders(separation("x", &["y"], &[]), separation("y", &[], &[])), 2);
+fn can_keep_conflicting_labels_in_separate_runs() {
+    let solution = solve(create_riders(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])), 2);
 
     assert!(solution.unassigned.is_none());
     assert!(solution.tours.iter().all(|tour| !ride_together(tour, "a", "b")));
 }
 
 #[test]
-fn can_keep_conflicting_classes_in_separate_runs_when_only_one_side_states_it() {
-    let solution = solve(create_riders(separation("x", &[], &[]), separation("y", &["x"], &[])), 2);
+fn can_keep_conflicting_labels_in_separate_runs_when_only_one_side_states_it() {
+    let solution = solve(create_riders(sharing(&["x"], &[], &[]), sharing(&["y"], &["x"], &[])), 2);
 
     assert!(solution.unassigned.is_none());
     assert!(solution.tours.iter().all(|tour| !ride_together(tour, "a", "b")));
 }
 
 #[test]
-fn can_keep_conflicting_classes_in_separate_tours() {
-    let solution = solve(create_riders(separation("x", &[], &["y"]), separation("y", &[], &[])), 2);
+fn can_keep_a_label_out_of_the_run_of_a_job_without_labels() {
+    let solution = solve(create_riders(sharing(&[], &["y"], &[]), sharing(&["x", "y"], &[], &[])), 2);
+
+    assert!(solution.unassigned.is_none());
+    assert!(solution.tours.iter().all(|tour| !ride_together(tour, "a", "b")));
+}
+
+#[test]
+fn can_keep_conflicting_labels_in_separate_tours() {
+    let solution = solve(create_riders(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])), 2);
 
     assert!(solution.unassigned.is_none());
     assert_eq!(solution.tours.len(), 2);
@@ -93,39 +100,39 @@ fn can_keep_conflicting_classes_in_separate_tours() {
 }
 
 #[test]
-fn can_unassign_job_due_to_tour_separation() {
-    let solution = solve(create_riders(separation("x", &[], &["y"]), separation("y", &[], &[])), 1);
+fn can_unassign_job_due_to_tour_sharing() {
+    let solution = solve(create_riders(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])), 1);
 
     assert_eq!(solution.tours.len(), 1);
     let reasons = solution.unassigned.iter().flatten().flat_map(|u| u.reasons.iter().cloned()).collect::<Vec<_>>();
     assert_eq!(
         reasons,
         vec![UnassignedJobReason {
-            code: "SEPARATION_CONSTRAINT".to_string(),
-            description: "cannot be assigned due to separation constraint".to_string(),
+            code: "SHARING_CONSTRAINT".to_string(),
+            description: "cannot be assigned due to sharing constraint".to_string(),
             details: Some(vec![UnassignedJobDetail { vehicle_id: "my_vehicle_1".to_string(), shift_index: 0 }])
         }]
     );
 }
 
 #[test]
-fn can_unassign_job_due_to_run_separation() {
+fn can_unassign_job_due_to_run_sharing() {
     // The tour order forces the second job to be picked up while the first one is on board.
     let with_order = |mut job: Job, pickup_order: i32, delivery_order: i32| {
         job.pickups.as_mut().unwrap()[0].order = Some(pickup_order);
         job.deliveries.as_mut().unwrap()[0].order = Some(delivery_order);
         job
     };
-    let jobs = |a: Option<JobSeparation>| {
-        let [job_a, job_b]: [Job; 2] = create_riders(a, separation("y", &[], &[])).try_into().unwrap();
+    let jobs = |a: Option<JobSharing>| {
+        let [job_a, job_b]: [Job; 2] = create_riders(a, sharing(&["y"], &[], &[])).try_into().unwrap();
         vec![with_order(job_a, 1, 3), with_order(job_b, 2, 4)]
     };
 
-    let regular_solution = solve(jobs(separation("x", &[], &[])), 1);
-    let separated_solution = solve(jobs(separation("x", &["y"], &[])), 1);
+    let regular_solution = solve(jobs(sharing(&["x"], &[], &[])), 1);
+    let refusing_solution = solve(jobs(sharing(&["x"], &["y"], &[])), 1);
 
-    assert!(regular_solution.unassigned.is_none(), "both jobs fit without separation");
+    assert!(regular_solution.unassigned.is_none(), "both jobs fit without a conflicting label");
     // NOTE the reported reason is the most frequent failure, which is the tour order of the positions tried
-    // outside the run; the regular problem fitting both jobs proves that separation causes the unassignment.
-    assert_eq!(separated_solution.unassigned.as_ref().map_or(0, |unassigned| unassigned.len()), 1);
+    // outside the run; the regular problem fitting both jobs proves that sharing causes the unassignment.
+    assert_eq!(refusing_solution.unassigned.as_ref().map_or(0, |unassigned| unassigned.len()), 1);
 }

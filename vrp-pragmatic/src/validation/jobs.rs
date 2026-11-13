@@ -237,16 +237,19 @@ fn check_e9106_ride_stop_limits(ctx: &ValidationContext) -> Result<(), FormatErr
     }
 }
 
-/// Checks that separation classes are not empty.
-fn check_e9107_separation_classes(ctx: &ValidationContext) -> Result<(), FormatError> {
+/// Checks that sharing labels are not empty.
+fn check_e9107_sharing_labels(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids = ctx
         .jobs()
         .filter(|job| {
-            job.separation.as_ref().is_some_and(|separation| {
-                std::iter::once(&separation.class)
-                    .chain(separation.not_in_same_run.iter().flatten())
-                    .chain(separation.not_in_same_tour.iter().flatten())
-                    .any(|class| class.is_empty())
+            job.sharing.as_ref().is_some_and(|sharing| {
+                let rules = [&sharing.run, &sharing.tour].into_iter().flatten();
+                sharing
+                    .labels
+                    .iter()
+                    .flatten()
+                    .chain(rules.flat_map(|rule| rule.none_of.iter().flatten()))
+                    .any(|label| label.is_empty())
             })
         })
         .map(|job| job.id.clone())
@@ -257,8 +260,8 @@ fn check_e9107_separation_classes(ctx: &ValidationContext) -> Result<(), FormatE
     } else {
         Err(FormatError::new(
             "E9107".to_string(),
-            "empty separation class".to_string(),
-            format!("use non-empty classes in separation of jobs with ids: '{}'", ids.join(", ")),
+            "empty sharing label".to_string(),
+            format!("use non-empty labels in sharing of jobs with ids: '{}'", ids.join(", ")),
         ))
     }
 }
@@ -444,7 +447,7 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1106_negative_duration(ctx),
         check_e1107_negative_demand(ctx),
         check_e9106_ride_stop_limits(ctx),
-        check_e9107_separation_classes(ctx),
+        check_e9107_sharing_labels(ctx),
         check_e9101_demand_named_demand_mutual_exclusion(ctx),
         check_e9102_named_demand_dimensions_exist(ctx),
         check_e9103_no_empty_one_of_skill_group(ctx),

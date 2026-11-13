@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
-        BreakPolicy, ClassSeparation, JobClassSeparationDimension, JobCompatibilityDimension, JobDemandDimension,
-        JobGroupDimension, JobMaxRideDurationDimension, JobPreferredSkills as FeaturePreferredSkills,
-        JobPreferredSkillsDimension, JobRequestedTimesDimension, JobRideStopLimitsDimension, JobSiteDimension,
+        BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
+        JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
+        JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension, JobSiteDimension,
         JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
         LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
     },
@@ -672,11 +672,12 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
         });
     }
 
-    if let Some(separation) = &job.separation {
-        dimens.set_job_class_separation(ClassSeparation {
-            class: separation.class.clone(),
-            not_in_same_run: separation.not_in_same_run.clone().unwrap_or_default(),
-            not_in_same_tour: separation.not_in_same_tour.clone().unwrap_or_default(),
+    if let Some(sharing) = &job.sharing {
+        let none_of = |rule: &Option<JobSharingRule>| rule.as_ref().and_then(|rule| rule.none_of.clone());
+        dimens.set_job_sharing(FeatureJobSharing {
+            labels: sharing.labels.clone().unwrap_or_default(),
+            run_none_of: none_of(&sharing.run).unwrap_or_default(),
+            tour_none_of: none_of(&sharing.tour).unwrap_or_default(),
         });
     }
 

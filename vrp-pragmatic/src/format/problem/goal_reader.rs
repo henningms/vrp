@@ -60,8 +60,8 @@ pub(super) fn create_goal_context(
         features.push(create_ride_stop_limits_feature("ride_stop_limits", RIDE_STOP_LIMITS_CONSTRAINT_CODE)?);
     }
 
-    if props.has_separation {
-        features.push(create_class_separation_feature("class_separation", SEPARATION_CONSTRAINT_CODE)?);
+    if props.has_sharing {
+        features.push(create_job_sharing_feature("job_sharing", SHARING_CONSTRAINT_CODE)?);
     }
 
     if props.has_group {
