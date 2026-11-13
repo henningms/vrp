@@ -813,20 +813,20 @@ To fix the error, set at least one limit and make sure the job has both pickups 
 
 ### E9107
 
-`empty separation class` error is returned when a job's `separation` has an empty `class`, or an empty class in
-`notInSameRun` or `notInSameTour`:
+`empty sharing label` error is returned when a job's `sharing` has an empty label in `labels`, `run.noneOf` or
+`tour.noneOf`:
 
 ```json
 {
   "id": "job",
-  /** Error: class has to be non-empty **/
-  "separation": { "class": "", "notInSameRun": ["b"] },
+  /** Error: labels have to be non-empty **/
+  "sharing": { "labels": [""], "run": { "noneOf": ["b"] } },
   "pickups": [/* omitted */],
   "deliveries": [/* omitted */]
 }
 ```
 
-To fix the error, use non-empty class names.
+To fix the error, use non-empty labels.
 
 ### E9301
 

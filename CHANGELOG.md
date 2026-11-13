@@ -10,13 +10,13 @@ are already published. So, I stick to it for now.
 
 ### Added
 
-* job `separation` with a required `class` and optional `notInSameRun` and `notInSameTour` class lists: a hard
-  constraint which keeps jobs of conflicting classes out of one run (a stretch of the tour while a pickup-delivery job
-  is on board) or out of one tour, e.g. riders of passenger services which must not travel together or must not use
-  the same vehicle shift. Two jobs conflict when either one lists the other's class. A job which cannot be assigned
-  is reported as `SEPARATION_CONSTRAINT`; an empty class is rejected with E9107. The solution checker enforces both
-  levels on solution tours. A problem without `separation` builds the same goal as before. In core,
-  `ClassSeparation`, `JobClassSeparation` (`JobClassSeparationDimension`) and `create_class_separation_feature`.
+* job `sharing` with optional `labels` and optional `run.noneOf` and `tour.noneOf` label lists: a hard constraint
+  which keeps jobs with conflicting labels out of one run (a stretch of the tour while a pickup-delivery job is on
+  board) or out of one tour, e.g. riders of passenger services which must not travel together or must not use the same
+  vehicle shift. Two jobs conflict when either one lists a label the other carries. A job which cannot be assigned is
+  reported as `SHARING_CONSTRAINT`; an empty label is rejected with E9107. The solution checker enforces both levels on
+  solution tours. A problem without `sharing` builds the same goal as before. In core, `JobSharing`
+  (`JobSharingDimension`) and `create_job_sharing_feature`.
 
 ## [1.46.0] 2026-11-05
 

@@ -27,9 +27,9 @@
             "demand": [1]
           }
         ],
-        "separation": {
-          "class": "service-a",
-          "notInSameRun": ["service-b"]
+        "sharing": {
+          "labels": ["service-a"],
+          "run": { "noneOf": ["service-b"] }
         }
       },
       {
@@ -58,8 +58,8 @@
             "demand": [1]
           }
         ],
-        "separation": {
-          "class": "service-b"
+        "sharing": {
+          "labels": ["service-b"]
         }
       },
       {
@@ -88,9 +88,9 @@
             "demand": [1]
           }
         ],
-        "separation": {
-          "class": "service-c",
-          "notInSameTour": ["service-a"]
+        "sharing": {
+          "labels": ["service-c"],
+          "tour": { "noneOf": ["service-a"] }
         }
       }
     ]

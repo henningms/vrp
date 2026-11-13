@@ -34,7 +34,7 @@ job was not added to the existing tours.
 | MAX_RIDE_DURATION_CONSTRAINT  | `cannot be assigned due to max ride duration constraint`       | relax `maxRideDuration` or allocate more vehicles?      |
 | SOLO_RIDING_CONSTRAINT        | `cannot be assigned due to solo riding constraint`             | allocate more vehicles or relax time windows?           |
 | RIDE_STOP_LIMITS_CONSTRAINT   | `cannot be assigned due to ride stop limits constraint`        | relax `rideStopLimits` or allocate more vehicles?       |
-| SEPARATION_CONSTRAINT         | `cannot be assigned due to separation constraint`              | review `separation` of jobs or allocate more vehicles?  |
+| SHARING_CONSTRAINT            | `cannot be assigned due to sharing constraint`                 | review `sharing` of jobs or allocate more vehicles?     |
 
 ## Example
 
