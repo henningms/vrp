@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.47.0] 2026-11-14
+
 ### Added
 
 * job `sharing` with optional `labels` and optional `run.noneOf` and `tour.noneOf` label lists: a hard constraint
