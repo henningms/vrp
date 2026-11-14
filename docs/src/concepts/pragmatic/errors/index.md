@@ -811,6 +811,23 @@ deliveries:
 To fix the error, set at least one limit and make sure the job has both pickups and deliveries, or remove
 `rideStopLimits`.
 
+### E9107
+
+`empty sharing label` error is returned when a job's `sharing` has an empty label in `labels`, `run.noneOf` or
+`tour.noneOf`:
+
+```json
+{
+  "id": "job",
+  /** Error: labels have to be non-empty **/
+  "sharing": { "labels": [""], "run": { "noneOf": ["b"] } },
+  "pickups": [/* omitted */],
+  "deliveries": [/* omitted */]
+}
+```
+
+To fix the error, use non-empty labels.
+
 ### E9301
 
 `capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,

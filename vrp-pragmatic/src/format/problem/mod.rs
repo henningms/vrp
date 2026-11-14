@@ -120,6 +120,7 @@ pub(crate) struct ProblemProperties {
     pub(crate) has_compatibility: bool,
     pub(crate) has_solo_riding: bool,
     pub(crate) has_ride_stop_limits: bool,
+    pub(crate) has_sharing: bool,
     pub(crate) has_tour_size_limits: bool,
     pub(crate) has_tour_travel_limits: bool,
     pub(crate) has_lifo: bool,
@@ -143,6 +144,7 @@ impl ProblemProperties {
         self.has_compatibility = true;
         self.has_solo_riding = true;
         self.has_ride_stop_limits = true;
+        self.has_sharing = true;
         self.has_tour_size_limits = true;
         self.has_tour_travel_limits = true;
         self.has_lifo = true;

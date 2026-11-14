@@ -885,3 +885,144 @@ fn can_count_vicinity_cluster_members_as_one_stop() {
 
     assert_eq!(check_ride_stop_limits(&ctx), Ok(()));
 }
+
+fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> JobSharing {
+    let to_labels = |labels: &[&str]| Some(labels.iter().map(|label| label.to_string()).collect());
+    let to_rule = |labels: &[&str]| Some(JobSharingRule { none_of: to_labels(labels) });
+
+    JobSharing { labels: to_labels(labels), run: to_rule(run_none_of), tour: to_rule(tour_none_of) }
+}
+
+fn create_sharing_jobs(a: JobSharing, b: JobSharing) -> Vec<Job> {
+    let with_sharing = |id: &str, sharing: JobSharing| Job {
+        sharing: Some(sharing),
+        ..create_constraint_job(id, &["p"], &["d"], false, false)
+    };
+
+    vec![with_sharing("a", a), with_sharing("b", b), create_constraint_job("n", &["p"], &["d"], false, false)]
+}
+
+fn create_sharing_context(jobs: Vec<Job>, tours: Vec<Vec<(&str, &str)>>) -> CheckerContext {
+    let problem = Problem {
+        plan: Plan { jobs, ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                vehicle_ids: vec!["my_vehicle_1".to_string(), "my_vehicle_2".to_string()],
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+    let solution = tours
+        .into_iter()
+        .enumerate()
+        .fold(SolutionBuilder::default(), |builder, (idx, activities)| {
+            let stops = activities
+                .into_iter()
+                .map(|(job_id, activity_type)| {
+                    let tag = if activity_type == "pickup" { "p" } else { "d" };
+                    StopBuilder::default().coordinate((0., 0.)).build_single_tag(job_id, activity_type, tag)
+                })
+                .collect();
+            let vehicle_id = format!("my_vehicle_{}", idx + 1);
+            builder.tour(TourBuilder::default().vehicle_id(&vehicle_id).stops(stops).build())
+        })
+        .build();
+
+    CheckerContext::new(create_example_problem(), problem, None, solution).unwrap()
+}
+
+#[test]
+fn can_check_conflicting_labels_in_different_runs_of_one_tour() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+
+    assert_eq!(check_sharing(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_conflicting_labels_in_one_run() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
+        vec![vec![("a", "pickup"), ("b", "pickup"), ("a", "delivery"), ("b", "delivery")]],
+    );
+
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+}
+
+#[test]
+fn can_detect_conflicting_labels_in_a_run_joined_by_another_job() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[])),
+        vec![vec![
+            ("a", "pickup"),
+            ("n", "pickup"),
+            ("a", "delivery"),
+            ("b", "pickup"),
+            ("n", "delivery"),
+            ("b", "delivery"),
+        ]],
+    );
+
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+}
+
+#[test]
+fn can_check_conflicting_labels_in_different_tours() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])),
+        vec![vec![("a", "pickup"), ("a", "delivery")], vec![("b", "pickup"), ("b", "delivery")]],
+    );
+
+    assert_eq!(check_sharing(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_conflicting_labels_in_one_tour() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
+}
+
+#[test]
+fn can_detect_conflict_through_either_of_two_labels() {
+    for label in ["x", "y"] {
+        let ctx = create_sharing_context(
+            create_sharing_jobs(sharing(&["z"], &[label], &[]), sharing(&["x", "y"], &[], &[])),
+            vec![vec![("a", "pickup"), ("b", "pickup"), ("a", "delivery"), ("b", "delivery")]],
+        );
+
+        let error = check_sharing(&ctx).unwrap_err().to_string();
+
+        assert!(error.contains("jobs 'a' and 'b' must not share a run"));
+    }
+}
+
+#[test]
+fn can_detect_label_refused_by_a_job_without_labels() {
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&[], &[], &[]), sharing(&[], &[], &["y"])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+    assert_eq!(check_sharing(&ctx), Ok(()));
+
+    let ctx = create_sharing_context(
+        create_sharing_jobs(sharing(&["y"], &[], &[]), sharing(&[], &[], &["y"])),
+        vec![vec![("a", "pickup"), ("a", "delivery"), ("b", "pickup"), ("b", "delivery")]],
+    );
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
+}

@@ -21,6 +21,7 @@ mod recharge;
 mod relations;
 mod reload;
 mod ride_stop_limits;
+mod sharing;
 mod site_mixing;
 mod skills;
 mod solo_riding;
