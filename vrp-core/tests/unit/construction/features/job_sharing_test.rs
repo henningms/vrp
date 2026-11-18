@@ -1,10 +1,12 @@
 use super::*;
 use crate::construction::heuristics::{ActivityContext, MoveContext};
 use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
-use crate::helpers::models::problem::TestSingleBuilder;
+use crate::helpers::models::problem::{
+    FleetBuilder, TestSingleBuilder, TestVehicleBuilder, get_test_actor_from_fleet, test_driver, test_vehicle_with_id,
+};
 use crate::helpers::models::solution::{ActivityBuilder, RouteBuilder, RouteContextBuilder};
 use crate::models::common::Demand;
-use crate::models::problem::Multi;
+use crate::models::problem::{Fleet, Multi};
 use crate::models::solution::Activity;
 use std::sync::Arc;
 
@@ -48,6 +50,33 @@ fn route_with(activities: Vec<Activity>) -> RouteContext {
         builder.add_activity(activity);
     }
     let mut route_ctx = RouteContextBuilder::default().with_route(builder.build()).build();
+    create_feature().state.unwrap().accept_route_state(&mut route_ctx);
+
+    route_ctx
+}
+
+/// A fleet with a vehicle "tour" of the default scope and a vehicle "run" which applies tour labels per run.
+fn create_scoped_fleet() -> Fleet {
+    let mut run_vehicle = TestVehicleBuilder::default();
+    run_vehicle.id("run").dimens_mut().set_vehicle_tour_rule_scope(TourRuleScope::Run);
+
+    FleetBuilder::default()
+        .add_driver(test_driver())
+        .add_vehicle(test_vehicle_with_id("tour"))
+        .add_vehicle(run_vehicle.build())
+        .build()
+}
+
+fn scoped_route_without_state(vehicle_id: &str, activities: Vec<Activity>) -> RouteContext {
+    let mut builder = RouteBuilder::default();
+    builder.with_vehicle(&create_scoped_fleet(), vehicle_id).add_activities(activities);
+
+    RouteContextBuilder::default().with_route(builder.build()).build()
+}
+
+/// Builds a route of the given vehicle of [create_scoped_fleet] and accepts the feature's route state.
+fn scoped_route_with(vehicle_id: &str, activities: Vec<Activity>) -> RouteContext {
+    let mut route_ctx = scoped_route_without_state(vehicle_id, activities);
     create_feature().state.unwrap().accept_route_state(&mut route_ctx);
 
     route_ctx
@@ -336,4 +365,96 @@ fn refuses_to_merge_jobs_with_sharing() {
     assert_eq!(constraint.merge(with(), without()).err(), Some(SHARING_CODE));
     assert_eq!(constraint.merge(without(), with()).err(), Some(SHARING_CODE));
     assert!(constraint.merge(without(), without()).is_ok());
+}
+
+#[test]
+fn allows_tour_conflicting_labels_in_different_runs_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let (b, bp, bd) = pudo("b", sharing(&["y"], &[], &[]));
+    // [start, ap, ad, bp, end]: b is picked up right after a is delivered, which is a new run.
+    let route_ctx = scoped_route_with("run", vec![ap.clone(), ad.clone(), bp.clone()]);
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b.clone())), None);
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), None);
+
+    let route_ctx = scoped_route_with("tour", vec![ap, ad, bp]);
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b)), Some(SHARING_CODE));
+}
+
+#[test]
+fn rejects_tour_conflicting_labels_in_one_run_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let (_b, bp, bd) = pudo("b", sharing(&["y"], &[], &[]));
+    let route_ctx = scoped_route_with("run", vec![ap, bp, ad]);
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), Some(SHARING_CODE), "stated by the job in the tour");
+
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &[]));
+    let (_b, bp, bd) = pudo("b", sharing(&["y"], &[], &["x"]));
+    let route_ctx = scoped_route_with("run", vec![bp, ap, ad]);
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 2), Some(SHARING_CODE), "stated by the inserted job");
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 1), None, "delivered before a is picked up");
+}
+
+#[test]
+fn rejects_job_without_sharing_which_merges_runs_conflicting_through_tour_labels_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let (_c, cp, cd) = pudo("c", sharing(&["y"], &[], &[]));
+    let (_n, np, nd) = pudo("n", None);
+    // [start, ap, np, ad, cp, cd, end]: n is picked up during a's ride.
+    let route_ctx = scoped_route_with("run", vec![ap, np, ad, cp, cd]);
+
+    assert_eq!(evaluate_activity(&route_ctx, &nd, 4), Some(SHARING_CODE), "delivered during c's ride");
+    assert_eq!(evaluate_activity(&route_ctx, &nd, 3), None, "delivered before c is picked up");
+}
+
+#[test]
+fn keeps_run_labels_of_a_job_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &["y"], &[]));
+    let (b, bp, bd) = pudo("b", sharing(&["y"], &[], &[]));
+    let route_ctx = scoped_route_with("run", vec![ap.clone(), bp, ad.clone()]);
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), Some(SHARING_CODE));
+
+    let route_ctx = scoped_route_with("run", vec![ap, ad]);
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b)), None);
+}
+
+#[test]
+fn ignores_tour_sharing_of_a_single_job_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let mut single = TestSingleBuilder::default();
+    single.location(Some(5)).dimens_mut().set_job_sharing(sharing(&["y"], &[], &[]).unwrap());
+    let single = single.build_shared();
+    let target = ActivityBuilder::with_location(5).job(Some(single.clone())).build();
+    let route_ctx = scoped_route_with("run", vec![ap, ad]);
+
+    assert_eq!(evaluate_route(&route_ctx, &Job::Single(single)), None);
+    assert_eq!(evaluate_activity(&route_ctx, &target, 1), None);
+}
+
+#[test]
+fn evaluates_without_route_state_on_run_scope_vehicle() {
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let (b, bp, bd) = pudo("b", sharing(&["y"], &[], &[]));
+    let route_ctx = scoped_route_without_state("run", vec![ap, bp, ad]);
+
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b)), None);
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), Some(SHARING_CODE));
+}
+
+#[test]
+fn never_reads_route_state_built_for_another_scope() {
+    let fleet = create_scoped_fleet();
+    let (_a, ap, ad) = pudo("a", sharing(&["x"], &[], &["y"]));
+    let (b, bp, bd) = pudo("b", sharing(&["y"], &[], &[]));
+
+    // [start, ap, bp, ad, end] with a state built for the default scope, then served by the run scope vehicle
+    let mut route_ctx = scoped_route_with("tour", vec![ap.clone(), bp.clone(), ad.clone()]);
+    route_ctx.route_mut().actor = get_test_actor_from_fleet(&fleet, "run");
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), Some(SHARING_CODE));
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b.clone())), None);
+
+    // and the other way round
+    let mut route_ctx = scoped_route_with("run", vec![ap, bp, ad]);
+    route_ctx.route_mut().actor = get_test_actor_from_fleet(&fleet, "tour");
+    assert_eq!(evaluate_activity(&route_ctx, &bd, 3), None);
+    assert_eq!(evaluate_route(&route_ctx, &Job::Multi(b)), Some(SHARING_CODE));
 }
