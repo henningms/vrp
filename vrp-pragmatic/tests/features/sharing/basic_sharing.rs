@@ -3,7 +3,7 @@ use crate::format::solution::{Solution, Tour, UnassignedJobDetail, UnassignedJob
 use crate::helpers::*;
 use std::collections::HashSet;
 
-fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> Option<JobSharing> {
+pub(super) fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> Option<JobSharing> {
     let to_labels = |labels: &[&str]| -> Option<Vec<String>> {
         if labels.is_empty() { None } else { Some(labels.iter().map(|label| label.to_string()).collect()) }
     };
@@ -14,7 +14,7 @@ fn sharing(labels: &[&str], run_none_of: &[&str], tour_none_of: &[&str]) -> Opti
 
 // Both riders travel to one destination and are picked up close to each other, so sharing the ride is clearly
 // the cheapest plan.
-fn create_riders(a: Option<JobSharing>, b: Option<JobSharing>) -> Vec<Job> {
+pub(super) fn create_riders(a: Option<JobSharing>, b: Option<JobSharing>) -> Vec<Job> {
     let mut job_a = create_pickup_delivery_job("a", (1., 0.), (10., 0.));
     job_a.sharing = a;
     let mut job_b = create_pickup_delivery_job("b", (2., 0.), (10., 0.));
@@ -41,7 +41,7 @@ fn solve(jobs: Vec<Job>, vehicles: usize) -> Solution {
 }
 
 /// Checks whether both jobs are on board together at some point of the tour, by activity order.
-fn ride_together(tour: &Tour, first: &str, second: &str) -> bool {
+pub(super) fn ride_together(tour: &Tour, first: &str, second: &str) -> bool {
     let mut on_board = HashSet::new();
     tour.stops.iter().flat_map(|stop| stop.activities().iter()).any(|activity| {
         match activity.activity_type.as_str() {
@@ -53,7 +53,7 @@ fn ride_together(tour: &Tour, first: &str, second: &str) -> bool {
     })
 }
 
-fn find_tour<'a>(solution: &'a Solution, job_id: &str) -> &'a Tour {
+pub(super) fn find_tour<'a>(solution: &'a Solution, job_id: &str) -> &'a Tour {
     solution.tours.iter().find(|tour| get_ids_from_tour(tour).iter().flatten().any(|id| id == job_id)).unwrap()
 }
 

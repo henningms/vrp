@@ -76,12 +76,16 @@ consists of the following properties:
       board: from that job's first activity to its last, where overlapping rides form one run. Delivering one rider and
       then picking up the next, even at the same stop, makes two runs
     - `run` applies to jobs with several tasks only; `tour` applies to every job
+    - on a vehicle with `sharing.tourRuleScope` set to `run` (see [vehicle types](vehicles.md)), `tour` applies per
+      run instead: the job's `tour.noneOf` labels are checked together with its `run.noneOf` labels, so jobs with
+      conflicting tour labels may share that vehicle's tour but not a run, and only jobs with several tasks are bound
     - a job without `sharing` can still join two runs into one, so it is not inserted where that would put
       conflicting labels into one run
     - jobs with `sharing` are not clustered by vicinity clustering
 
   A job which cannot be assigned without a conflict is reported as unassigned with the `SHARING_CONSTRAINT` reason
-  code.
+  code. As only the most frequent failure is reported, a run conflict may instead be reported with the reason which
+  rules out the positions outside that run, e.g. a time window.
 - **site** (optional): a site key, e.g. the place a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).

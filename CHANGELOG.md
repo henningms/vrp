@@ -8,6 +8,14 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* vehicle type `sharing.tourRuleScope`: `tour` (default) or `run`. On a vehicle with `run`, e.g. capacity hired run by
+  run where each run may be driven by a different car, a job's `tour.noneOf` labels apply per run instead of per tour:
+  they are checked together with its `run.noneOf` labels, so jobs with conflicting tour labels may share the tour but
+  not a run. As at the run level, this binds pickup-delivery jobs only. Vehicles without it behave as before. The
+  solution checker applies the scope of each tour's vehicle. In core, `TourRuleScope` (`VehicleTourRuleScopeDimension`).
+
 ## [1.47.0] 2026-11-14
 
 ### Added

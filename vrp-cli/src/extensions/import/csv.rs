@@ -145,6 +145,7 @@ mod actual {
                     skills: None,
                     limits: None,
                     lifo_tags: None,
+                    sharing: None,
                 }
             })
             .collect();

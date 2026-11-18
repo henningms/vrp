@@ -30,7 +30,9 @@ mod hierarchical_areas;
 pub use self::hierarchical_areas::*;
 
 mod job_sharing;
-pub use self::job_sharing::{JobSharing, JobSharingDimension, create_job_sharing_feature};
+pub use self::job_sharing::{
+    JobSharing, JobSharingDimension, TourRuleScope, VehicleTourRuleScopeDimension, create_job_sharing_feature,
+};
 
 mod known_edge;
 pub use self::known_edge::create_known_edge_feature;

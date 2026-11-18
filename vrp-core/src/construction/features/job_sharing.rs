@@ -13,6 +13,9 @@
 //!   pickup-delivery (multi) jobs only; the tour level applies to every job.
 //! - A job without sharing can still join two runs into one, so it is refused when the runs it joins
 //!   hold conflicting labels.
+//! - A vehicle with [TourRuleScope::Run] (see [VehicleTourRuleScopeDimension]) applies the tour level per
+//!   run instead: on its tours, every job's tour labels count as run labels too and the tour level is not
+//!   checked. This suits a tour which is not one physical vehicle, e.g. capacity hired run by run.
 
 #[cfg(test)]
 #[path = "../../../tests/unit/construction/features/job_sharing_test.rs"]
@@ -24,7 +27,18 @@ use crate::models::solution::Tour;
 use rustc_hash::FxHashMap;
 
 custom_dimension!(pub JobSharing typeof JobSharing);
+custom_dimension!(pub VehicleTourRuleScope typeof TourRuleScope);
 custom_tour_state!(TourSharing typeof TourSharing);
+
+/// Where a vehicle applies the jobs' tour-level sharing rule.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TourRuleScope {
+    /// No two jobs with conflicting tour labels share a tour.
+    #[default]
+    Tour,
+    /// No two pickup-delivery jobs with conflicting tour labels share a run; they may share a tour.
+    Run,
+}
 
 /// Labels a job carries with the labels it must not share a run or a tour with.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -55,6 +69,9 @@ impl FeatureConstraint for JobSharingConstraint {
         match move_ctx {
             MoveContext::Route { route_ctx, job, .. } => {
                 let sharing = job.dimens().get_job_sharing()?;
+                if get_tour_rule_scope(route_ctx) == TourRuleScope::Run {
+                    return None;
+                }
                 with_tour_sharing(route_ctx, |state| {
                     state.tour.conflicts_with_job(&sharing.labels, &sharing.tour_none_of)
                 })
@@ -83,7 +100,7 @@ impl FeatureState for JobSharingState {
     }
 
     fn accept_route_state(&self, route_ctx: &mut RouteContext) {
-        let state = get_tour_sharing(&route_ctx.route().tour);
+        let state = get_tour_sharing(&route_ctx.route().tour, get_tour_rule_scope(route_ctx));
         route_ctx.state_mut().set_tour_sharing(state);
     }
 
@@ -121,9 +138,11 @@ impl LabelMix {
 /// Route state: the labels of the tour and of each of its runs.
 #[derive(Clone, Default)]
 struct TourSharing {
+    /// The scope of the tour labels which the runs were folded with.
+    scope: TourRuleScope,
     /// All jobs of the tour with their `tour_none_of` labels.
     tour: LabelMix,
-    /// Runs with their jobs' `run_none_of` labels.
+    /// Runs with their jobs' `run_none_of` labels, and `tour_none_of` labels in [TourRuleScope::Run].
     runs: Vec<TourRun<LabelMix>>,
     /// Multi jobs with only some activities in the tour: the job, its first and last activity index and
     /// the number of its activities. The evaluator inserts a multi job's activities one by one into a
@@ -153,22 +172,30 @@ impl TourSharing {
         let joined = &joined[..joined.iter().take_while(|run| run.overlaps(span)).count()];
 
         let sharing = job.dimens().get_job_sharing();
+        let run_scoped = self.scope == TourRuleScope::Run;
         joined.iter().enumerate().any(|(idx, run)| {
-            sharing.is_some_and(|sharing| run.value.conflicts_with_job(&sharing.labels, &sharing.run_none_of))
-                || joined[..idx].iter().any(|other| other.value.conflicts_with(&run.value))
+            sharing.is_some_and(|sharing| {
+                run.value.conflicts_with_job(&sharing.labels, &sharing.run_none_of)
+                    || (run_scoped && run.value.conflicts_with_job(&sharing.labels, &sharing.tour_none_of))
+            }) || joined[..idx].iter().any(|other| other.value.conflicts_with(&run.value))
         })
     }
 }
 
+fn get_tour_rule_scope(route_ctx: &RouteContext) -> TourRuleScope {
+    route_ctx.route().actor.vehicle.dimens.get_vehicle_tour_rule_scope().copied().unwrap_or_default()
+}
+
 fn with_tour_sharing<R>(route_ctx: &RouteContext, check: impl FnOnce(&TourSharing) -> R) -> R {
-    match route_ctx.state().get_tour_sharing() {
+    let scope = get_tour_rule_scope(route_ctx);
+    match route_ctx.state().get_tour_sharing().filter(|state| state.scope == scope) {
         Some(state) => check(state),
-        None => check(&get_tour_sharing(&route_ctx.route().tour)),
+        None => check(&get_tour_sharing(&route_ctx.route().tour, scope)),
     }
 }
 
-fn get_tour_sharing(tour: &Tour) -> TourSharing {
-    let mut state = TourSharing::default();
+fn get_tour_sharing(tour: &Tour, scope: TourRuleScope) -> TourSharing {
+    let mut state = TourSharing { scope, ..TourSharing::default() };
 
     tour.jobs().filter_map(|job| job.dimens().get_job_sharing()).for_each(|sharing| {
         state.tour.add(&sharing.labels, &sharing.tour_none_of);
@@ -183,6 +210,9 @@ fn get_tour_sharing(tour: &Tour) -> TourSharing {
     state.runs = get_tour_runs(tour, |mix: &mut LabelMix, job| {
         if let Some(sharing) = job.dimens().get_job_sharing() {
             mix.add(&sharing.labels, &sharing.run_none_of);
+            if scope == TourRuleScope::Run {
+                mix.add(&[], &sharing.tour_none_of);
+            }
         }
     });
 

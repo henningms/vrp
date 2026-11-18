@@ -558,6 +558,7 @@ fn can_check_feasibility_at_scale_500_jobs_50_vehicles() {
                 skills: None,
                 limits: None,
                 lifo_tags: None,
+                sharing: None,
             }
         })
         .collect();
@@ -802,6 +803,7 @@ fn compare_feasibility_vs_solver_500_jobs_50_vehicles() {
                 skills: None,
                 limits: None,
                 lifo_tags: None,
+                sharing: None,
             }
         })
         .collect();

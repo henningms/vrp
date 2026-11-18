@@ -448,6 +448,7 @@ fn check_solo_riding(ctx: &CheckerContext) -> GenericResult<()> {
 
 /// Checks that jobs whose sharing conflicts share neither a run nor a tour. A run is a maximal stretch of a
 /// tour while at least one job with several tasks is on board: from the first to the last activity of the job.
+/// On a vehicle with the `run` tour rule scope, the tour labels are checked per run instead of per tour.
 fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
     let jobs = ctx.problem.plan.jobs.iter().map(|job| (job.id.as_str(), job)).collect::<HashMap<_, _>>();
 
@@ -456,6 +457,17 @@ fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
     }
 
     ctx.solution.tours.iter().try_for_each(|tour| {
+        let scope = ctx
+            .get_vehicle(&tour.vehicle_id)?
+            .sharing
+            .as_ref()
+            .and_then(|sharing| sharing.tour_rule_scope)
+            .unwrap_or_default();
+        let run_levels: &[SharingLevel] = match scope {
+            VehicleSharingScope::Tour => &[run_rule],
+            VehicleSharingScope::Run => &[run_rule, tour_rule],
+        };
+
         let mut tour_jobs = Vec::<&str>::new();
         let mut spans = Vec::<(&str, usize, usize)>::new();
         tour.stops.iter().flat_map(|stop| stop.activities()).enumerate().for_each(|(idx, activity)| {
@@ -471,7 +483,11 @@ fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
             }
         });
 
-        if let Some((left, right)) = find_sharing_conflict(&jobs, &tour_jobs, |sharing| &sharing.tour) {
+        let tour_conflict = match scope {
+            VehicleSharingScope::Tour => find_sharing_conflict(&jobs, &tour_jobs, &[tour_rule]),
+            VehicleSharingScope::Run => None,
+        };
+        if let Some((left, right)) = tour_conflict {
             return Err(format!(
                 "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a tour",
                 tour.vehicle_id, tour.shift_index
@@ -488,7 +504,7 @@ fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
             _ => runs.push((last, vec![job_id])),
         });
 
-        runs.iter().try_for_each(|(_, run_jobs)| match find_sharing_conflict(&jobs, run_jobs, |sharing| &sharing.run) {
+        runs.iter().try_for_each(|(_, run_jobs)| match find_sharing_conflict(&jobs, run_jobs, run_levels) {
             Some((left, right)) => Err(format!(
                 "sharing is not respected in tour '{}'/{}: jobs '{left}' and '{right}' must not share a run",
                 tour.vehicle_id, tour.shift_index
@@ -501,16 +517,24 @@ fn check_sharing(ctx: &CheckerContext) -> GenericResult<()> {
 
 type SharingLevel = fn(&JobSharing) -> &Option<JobSharingRule>;
 
-/// Returns a pair of jobs where either one lists a label the other carries at the given level.
+fn run_rule(sharing: &JobSharing) -> &Option<JobSharingRule> {
+    &sharing.run
+}
+
+fn tour_rule(sharing: &JobSharing) -> &Option<JobSharingRule> {
+    &sharing.tour
+}
+
+/// Returns a pair of jobs where either one lists a label the other carries at any of the given levels.
 fn find_sharing_conflict<'a>(
     jobs: &HashMap<&str, &Job>,
     job_ids: &[&'a str],
-    level: SharingLevel,
+    levels: &[SharingLevel],
 ) -> Option<(&'a str, &'a str)> {
     let lists = |job: &Job, other: &Job| {
         job.sharing.as_ref().zip(other.sharing.as_ref()).is_some_and(|(job_sharing, other_sharing)| {
-            let none_of = level(job_sharing).as_ref().and_then(|rule| rule.none_of.as_ref());
-            none_of.into_iter().flatten().any(|label| other_sharing.labels.iter().flatten().any(|other| other == label))
+            let none_of = levels.iter().filter_map(|level| level(job_sharing).as_ref()?.none_of.as_ref());
+            none_of.flatten().any(|label| other_sharing.labels.iter().flatten().any(|other| other == label))
         })
     };
 

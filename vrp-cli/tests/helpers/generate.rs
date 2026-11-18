@@ -67,6 +67,7 @@ pub fn create_test_vehicle_type() -> VehicleType {
         skills: None,
         limits: None,
         lifo_tags: None,
+        sharing: None,
     }
 }
 

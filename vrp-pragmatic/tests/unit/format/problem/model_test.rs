@@ -161,6 +161,41 @@ fn can_serialize_flat_one_of_as_one_group() {
     assert_eq!(serde_json::to_string(&skills).unwrap(), r#"{"oneOf":[["ramp","lift"]]}"#);
 }
 
+fn parse_vehicle_with_sharing(sharing: Option<&str>) -> Result<VehicleType, serde_json::Error> {
+    let sharing = sharing.map_or(String::new(), |sharing| format!(r#", "sharing": {sharing}"#));
+    serde_json::from_str(&format!(
+        r#"{{ "typeId": "car", "vehicleIds": ["car_1"], "profile": {{ "matrix": "car" }},
+              "costs": {{ "distance": 1, "time": 1 }}, "shifts": [] {sharing} }}"#
+    ))
+}
+
+#[test]
+fn can_deserialize_vehicle_sharing_tour_rule_scope() {
+    let scope = |sharing: &str| parse_vehicle_with_sharing(Some(sharing)).unwrap().sharing.unwrap().tour_rule_scope;
+
+    assert!(parse_vehicle_with_sharing(None).unwrap().sharing.is_none());
+    assert_eq!(scope("{}"), None);
+    assert_eq!(scope(r#"{ "tourRuleScope": "tour" }"#), Some(VehicleSharingScope::Tour));
+    assert_eq!(scope(r#"{ "tourRuleScope": "run" }"#), Some(VehicleSharingScope::Run));
+}
+
+#[test]
+fn can_reject_unknown_vehicle_sharing_tour_rule_scope() {
+    for sharing in [r#"{ "tourRuleScope": "trip" }"#, r#"{ "tourRuleScope": "Run" }"#] {
+        let error = parse_vehicle_with_sharing(Some(sharing)).unwrap_err().to_string();
+
+        assert!(error.contains("unknown variant"), "{error}");
+    }
+}
+
+#[test]
+fn can_serialize_vehicle_sharing_only_when_present() {
+    let serialize = |sharing| serde_json::to_string(&parse_vehicle_with_sharing(sharing).unwrap()).unwrap();
+
+    assert!(!serialize(None).contains("sharing"));
+    assert!(serialize(Some(r#"{ "tourRuleScope": "run" }"#)).contains(r#""sharing":{"tourRuleScope":"run"}"#));
+}
+
 /// The documented example; cargo runs the tests from the crate directory.
 const DOCUMENTED_EXAMPLE: &str = "../examples/data/pragmatic/basics/duration-offsets.basic.matrix.json";
 

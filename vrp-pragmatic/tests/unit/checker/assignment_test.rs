@@ -1026,3 +1026,154 @@ fn can_detect_label_refused_by_a_job_without_labels() {
 
     assert!(error.contains("jobs 'a' and 'b' must not share a tour"));
 }
+
+/// A fleet of the vehicles "run_1" with the run tour rule scope, "tour_1" with the tour scope stated and "plain_1"
+/// without sharing, serving the given tours by vehicle id.
+fn create_scoped_sharing_context(jobs: Vec<Job>, tours: Vec<(&str, Vec<(&str, &str)>)>) -> CheckerContext {
+    let with_scope = |id: &str, scope: Option<VehicleSharingScope>| VehicleType {
+        sharing: scope.map(|scope| VehicleSharing { tour_rule_scope: Some(scope) }),
+        ..create_default_vehicle(id)
+    };
+    let problem = Problem {
+        plan: Plan { jobs, ..create_empty_plan() },
+        fleet: Fleet {
+            vehicles: vec![
+                with_scope("run", Some(VehicleSharingScope::Run)),
+                with_scope("tour", Some(VehicleSharingScope::Tour)),
+                with_scope("plain", None),
+            ],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+    let solution = tours
+        .into_iter()
+        .fold(SolutionBuilder::default(), |builder, (vehicle_id, activities)| {
+            let stops = activities
+                .into_iter()
+                .map(|(job_id, activity_type)| {
+                    let tag = if activity_type == "pickup" { "p" } else { "d" };
+                    StopBuilder::default().coordinate((0., 0.)).build_single_tag(job_id, activity_type, tag)
+                })
+                .collect();
+            builder.tour(TourBuilder::default().vehicle_id(vehicle_id).stops(stops).build())
+        })
+        .build();
+
+    CheckerContext::new(create_example_problem(), problem, None, solution).unwrap()
+}
+
+/// Jobs "a" and "b" whose labels conflict at the tour level, with "n" without sharing.
+fn create_tour_sharing_jobs() -> Vec<Job> {
+    create_sharing_jobs(sharing(&["x"], &[], &["y"]), sharing(&["y"], &[], &[]))
+}
+
+fn in_two_runs<'a>(first: &'a str, second: &'a str) -> Vec<(&'a str, &'a str)> {
+    vec![(first, "pickup"), (first, "delivery"), (second, "pickup"), (second, "delivery")]
+}
+
+fn in_one_run<'a>(first: &'a str, second: &'a str) -> Vec<(&'a str, &'a str)> {
+    vec![(first, "pickup"), (second, "pickup"), (first, "delivery"), (second, "delivery")]
+}
+
+#[test]
+fn can_check_tour_conflicting_labels_in_different_runs_on_run_scope_vehicle() {
+    let ctx = create_scoped_sharing_context(create_tour_sharing_jobs(), vec![("run_1", in_two_runs("a", "b"))]);
+
+    assert_eq!(check_sharing(&ctx), Ok(()));
+}
+
+#[test]
+fn can_detect_tour_conflicting_labels_in_one_run_on_run_scope_vehicle() {
+    let ctx = create_scoped_sharing_context(create_tour_sharing_jobs(), vec![("run_1", in_one_run("a", "b"))]);
+
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"), "{error}");
+}
+
+#[test]
+fn can_detect_tour_conflicting_labels_in_a_run_joined_by_another_job_on_run_scope_vehicle() {
+    let ctx = create_scoped_sharing_context(
+        create_tour_sharing_jobs(),
+        vec![(
+            "run_1",
+            vec![
+                ("a", "pickup"),
+                ("n", "pickup"),
+                ("a", "delivery"),
+                ("b", "pickup"),
+                ("n", "delivery"),
+                ("b", "delivery"),
+            ],
+        )],
+    );
+
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"), "{error}");
+}
+
+#[test]
+fn can_check_run_labels_on_run_scope_vehicle() {
+    let jobs = create_sharing_jobs(sharing(&["x"], &["y"], &[]), sharing(&["y"], &[], &[]));
+    let ctx = create_scoped_sharing_context(jobs.clone(), vec![("run_1", in_two_runs("a", "b"))]);
+    assert_eq!(check_sharing(&ctx), Ok(()));
+
+    let ctx = create_scoped_sharing_context(jobs, vec![("run_1", in_one_run("a", "b"))]);
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+    assert!(error.contains("jobs 'a' and 'b' must not share a run"), "{error}");
+}
+
+#[test]
+fn can_detect_tour_conflicting_labels_in_one_tour_on_tour_scope_vehicles() {
+    for vehicle_id in ["tour_1", "plain_1"] {
+        let ctx = create_scoped_sharing_context(create_tour_sharing_jobs(), vec![(vehicle_id, in_two_runs("a", "b"))]);
+
+        let error = check_sharing(&ctx).unwrap_err().to_string();
+
+        assert!(error.contains("jobs 'a' and 'b' must not share a tour"), "{vehicle_id}: {error}");
+    }
+}
+
+#[test]
+fn can_check_each_tour_by_the_scope_of_its_vehicle() {
+    let jobs = || {
+        let renamed =
+            create_tour_sharing_jobs().into_iter().take(2).map(|job| Job { id: format!("{}2", job.id), ..job });
+        create_tour_sharing_jobs().into_iter().chain(renamed).collect::<Vec<_>>()
+    };
+
+    let ctx = create_scoped_sharing_context(
+        jobs(),
+        vec![
+            ("run_1", in_two_runs("a", "b")),
+            ("plain_1", vec![("a2", "pickup"), ("a2", "delivery")]),
+            ("tour_1", vec![("b2", "pickup"), ("b2", "delivery")]),
+        ],
+    );
+    assert_eq!(check_sharing(&ctx), Ok(()));
+
+    let ctx = create_scoped_sharing_context(
+        jobs(),
+        vec![("run_1", in_two_runs("a", "b")), ("plain_1", in_two_runs("a2", "b2"))],
+    );
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+    assert!(error.contains("jobs 'a2' and 'b2' must not share a tour"), "{error}");
+}
+
+#[test]
+fn can_check_tour_labels_of_a_job_with_one_task_on_run_scope_vehicle() {
+    let jobs = vec![
+        Job { sharing: Some(sharing(&["x"], &[], &["y"])), ..create_constraint_job("a", &["p"], &["d"], false, false) },
+        Job { sharing: Some(sharing(&["y"], &[], &[])), ..create_constraint_job("s", &[], &["d"], false, false) },
+    ];
+    let activities = vec![("a", "pickup"), ("s", "delivery"), ("a", "delivery")];
+
+    let ctx = create_scoped_sharing_context(jobs.clone(), vec![("run_1", activities.clone())]);
+    assert_eq!(check_sharing(&ctx), Ok(()));
+
+    let ctx = create_scoped_sharing_context(jobs, vec![("plain_1", activities)]);
+    let error = check_sharing(&ctx).unwrap_err().to_string();
+    assert!(error.contains("jobs 'a' and 's' must not share a tour"), "{error}");
+}

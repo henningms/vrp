@@ -36,6 +36,7 @@ prop_compose! {
             skills,
             limits,
             lifo_tags: None,
+            sharing: None,
         }
     }
 }

@@ -1,8 +1,9 @@
 use super::*;
 use crate::format_time;
 use crate::helpers::*;
+use vrp_core::construction::features::{TourRuleScope, VehicleTourRuleScopeDimension};
 use vrp_core::models::common::Profile;
-use vrp_core::models::problem::{DurationOffsetsExtraProperty, TravelTime};
+use vrp_core::models::problem::{DurationOffsetsExtraProperty, TravelTime, VehicleIdDimension};
 use vrp_core::models::solution::Route;
 
 #[test]
@@ -221,6 +222,38 @@ fn adds_sharing_feature_only_when_a_job_has_sharing() {
     assert!(!get_problem_properties(&problem, std::slice::from_ref(&matrix)).has_sharing);
     assert!(get_problem_properties(&shared, &[matrix]).has_sharing);
     assert_eq!(regular_core.goal.constraints().count() + 1, shared_core.goal.constraints().count());
+}
+
+#[test]
+fn reads_tour_rule_scope_into_vehicle_dimensions() {
+    let with_scope = |id: &str, scope: Option<VehicleSharingScope>| VehicleType {
+        sharing: Some(VehicleSharing { tour_rule_scope: scope }),
+        ..create_default_vehicle(id)
+    };
+    let problem = Problem {
+        fleet: Fleet {
+            vehicles: vec![
+                with_scope("run", Some(VehicleSharingScope::Run)),
+                with_scope("tour", Some(VehicleSharingScope::Tour)),
+                with_scope("unset", None),
+                create_default_vehicle("plain"),
+            ],
+            ..create_default_fleet()
+        },
+        ..create_one_job_problem()
+    };
+    let matrix = create_matrix_from_problem(&problem);
+
+    let core_problem = (problem, vec![matrix]).read_pragmatic().expect("valid problem");
+
+    let scope_of = |vehicle_id: &str| {
+        let vehicle = core_problem.fleet.vehicles.iter().find(|v| v.dimens.get_vehicle_id().unwrap() == vehicle_id);
+        vehicle.unwrap().dimens.get_vehicle_tour_rule_scope().copied()
+    };
+    assert_eq!(scope_of("run_1"), Some(TourRuleScope::Run));
+    assert_eq!(scope_of("tour_1"), Some(TourRuleScope::Tour));
+    assert_eq!(scope_of("unset_1"), None);
+    assert_eq!(scope_of("plain_1"), None);
 }
 
 /// A job at (100, 0) is location 0 and the depot at (0, 0) location 1.
