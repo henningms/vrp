@@ -693,6 +693,33 @@ pub struct VehicleType {
     /// Useful for vehicles with limited maneuvering space (e.g., wheelchair minibuses, narrow cargo holds).
     #[serde(skip_serializing_if = "Option::is_none", rename = "lifoTags")]
     pub lifo_tags: Option<Vec<String>>,
+
+    /// How the vehicle applies the jobs' sharing rules.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sharing: Option<VehicleSharing>,
+}
+
+/// Specifies how a vehicle applies the jobs' sharing rules.
+#[derive(Clone, Deserialize, Debug, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct VehicleSharing {
+    /// Where the jobs' tour sharing rule holds on this vehicle. Default is `tour`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tour_rule_scope: Option<VehicleSharingScope>,
+}
+
+/// Where the jobs' tour sharing rule holds on a vehicle.
+#[derive(Clone, Copy, Deserialize, Debug, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub enum VehicleSharingScope {
+    /// Jobs with conflicting tour labels do not share a tour.
+    #[default]
+    Tour,
+    /// Jobs with several tasks and conflicting tour labels do not share a run, but may share a tour, e.g. when the
+    /// vehicle stands for capacity hired run by run.
+    Run,
 }
 
 /// Specifies a vehicle profile.

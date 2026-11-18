@@ -107,6 +107,7 @@ mod single {
                     skills: None,
                     limits: None,
                     lifo_tags: None,
+                    sharing: None,
                 }],
                 ..create_default_fleet()
             },

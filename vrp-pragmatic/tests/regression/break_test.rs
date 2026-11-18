@@ -170,6 +170,7 @@ fn can_handle_properly_invalid_break_removal() {
                     skills: None,
                     limits: None,
                     lifo_tags: None,
+                    sharing: None,
                 }],
                 ..create_default_fleet()
             },

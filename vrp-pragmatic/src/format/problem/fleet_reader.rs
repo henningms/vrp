@@ -9,7 +9,10 @@ use crate::parse_time_safe;
 use crate::utils::get_approx_transportation;
 use std::collections::HashSet;
 use vrp_core::construction::enablers::create_typed_actor_groups;
-use vrp_core::construction::features::{VehicleCapacityDimension, VehicleLifoTagsDimension, VehicleSkillsDimension};
+use vrp_core::construction::features::{
+    TourRuleScope, VehicleCapacityDimension, VehicleLifoTagsDimension, VehicleSkillsDimension,
+    VehicleTourRuleScopeDimension,
+};
 use vrp_core::models::common::*;
 use vrp_core::models::problem::*;
 
@@ -181,6 +184,11 @@ pub(super) fn read_fleet(
         let profile = Profile::new(index, vehicle.profile.scale);
 
         let tour_size = vehicle.limits.as_ref().and_then(|l| l.tour_size);
+        let tour_rule_scope =
+            vehicle.sharing.as_ref().and_then(|sharing| sharing.tour_rule_scope).map(|scope| match scope {
+                VehicleSharingScope::Tour => TourRuleScope::Tour,
+                VehicleSharingScope::Run => TourRuleScope::Run,
+            });
 
         for (shift_index, shift) in vehicle.shifts.iter().enumerate() {
             let start = {
@@ -217,6 +225,10 @@ pub(super) fn read_fleet(
 
                 if let Some(tour_size) = tour_size {
                     dimens.set_tour_size(tour_size);
+                }
+
+                if let Some(tour_rule_scope) = tour_rule_scope {
+                    dimens.set_vehicle_tour_rule_scope(tour_rule_scope);
                 }
 
                 // NOTE a zero per-run cost is left out so that such a vehicle costs exactly as one without it
