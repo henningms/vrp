@@ -52,6 +52,19 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
     - **tourSize** (optional): max amount of activities in the tour (without departure/arrival). Please note, that
       clustered activities are counted as one in case of vicinity clustering.
 
+- **sharing** (optional): how the vehicle applies the jobs' [sharing](jobs.md) rules. It has one property:
+
+    - **tourRuleScope** (optional): where a job's `tour.noneOf` labels hold on this vehicle's tours:
+        * `tour` (default, also when `sharing` is omitted): no two jobs with conflicting tour labels share a tour
+        * `run`: no two jobs with conflicting tour labels share a run, but they may share a tour. A job's
+          `tour.noneOf` labels are checked as if they were also listed in its `run.noneOf`. Use it when a tour is not
+          one physical vehicle, e.g. capacity hired run by run where each run may be driven by a different car.
+          Like `run.noneOf`, this binds jobs with several tasks, such as pickup-delivery jobs, only: a job with one
+          task is not constrained by tour labels on such a vehicle. A job's own `run.noneOf` applies as usual.
+```json
+"sharing": { "tourRuleScope": "run" }
+```
+
 An example:
 
 ```json
