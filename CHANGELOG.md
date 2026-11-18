@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.48.0] 2026-11-18
+
 ### Added
 
 * vehicle type `sharing.tourRuleScope`: `tour` (default) or `run`. On a vehicle with `run`, e.g. capacity hired run by
