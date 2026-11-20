@@ -1394,3 +1394,45 @@ fn refuses_a_candidate_needing_a_larger_stop_duration_at_a_known_location() {
         assert!(result.is_feasible, "{stop_duration}: {:?}", result.vehicles);
     }
 }
+
+fn create_per_passenger_context(per_passenger: Option<Float>) -> FeasibilityContext {
+    let vehicle = create_vehicle_with_capacity("my_vehicle", vec![10]);
+    let vehicle = VehicleType { costs: VehicleCosts { per_passenger, ..vehicle.costs.clone() }, ..vehicle };
+    let job = Job { passengers: Some(2), ..create_delivery_job("job1", (1.0, 0.0)) };
+    let (problem, matrix) = build_problem_and_matrix(vec![vehicle], vec![job]);
+    let solution_json =
+        build_solution_json("my_vehicle_1", "my_vehicle", (0.0, 0.0), vec![("job1", "delivery", (1.0, 0.0))], 10);
+
+    FeasibilityContext::new(problem, vec![matrix], &solution_json, &[]).expect("cannot build context")
+}
+
+#[test]
+fn per_passenger_cost_is_part_of_the_cost_delta_and_the_written_solution() {
+    let candidate = Job { passengers: Some(3), ..create_delivery_job("candidate1", (2.0, 0.0)) };
+    let cost_delta = |ctx: &FeasibilityContext| {
+        ctx.check_job(&candidate).expect("check_job failed").vehicles[0].cost_delta.expect("no cost delta")
+    };
+    let tour_cost = |ctx: &FeasibilityContext| {
+        let solution: Solution = serde_json::from_str(&ctx.to_solution_json().unwrap()).unwrap();
+        solution.tours[0].statistic.cost
+    };
+    let (mut with_fee, mut without_fee) =
+        (create_per_passenger_context(Some(100.)), create_per_passenger_context(None));
+
+    assert_eq!(cost_delta(&with_fee) - cost_delta(&without_fee), 300.);
+    assert_eq!(tour_cost(&with_fee) - tour_cost(&without_fee), 200.);
+
+    with_fee.accept_job(&candidate).expect("cannot accept candidate");
+    without_fee.accept_job(&candidate).expect("cannot accept candidate");
+
+    assert_eq!(tour_cost(&with_fee) - tour_cost(&without_fee), 500.);
+}
+
+#[test]
+fn refuses_a_candidate_with_invalid_passengers() {
+    let ctx = create_per_passenger_context(Some(100.));
+
+    let result = ctx.check_job(&Job { passengers: Some(0), ..create_delivery_job("candidate1", (2.0, 0.0)) });
+
+    assert!(result.is_err_and(|err| err.to_string().contains("invalid passengers")));
+}

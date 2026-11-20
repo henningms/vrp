@@ -1,6 +1,7 @@
 mod basic_multi_shift;
 mod basic_open_end;
 mod multi_dimens;
+mod per_passenger_cost;
 mod per_run_cost;
 mod profile_variation;
 mod unreachable_jobs;

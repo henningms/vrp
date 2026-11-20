@@ -300,3 +300,34 @@ fn can_detect_stop_duration_on_shift_places_impl(
 
     assert_eq!(result.err().map(|err| err.code), expected);
 }
+
+parameterized_test! {can_detect_invalid_per_passenger_cost, (per_passenger, expected), {
+    can_detect_invalid_per_passenger_cost_impl(per_passenger, expected);
+}}
+
+can_detect_invalid_per_passenger_cost! {
+    case01: (None, None),
+    case02: (Some(0.), None),
+    case03: (Some(25.), None),
+    case04: (Some(-1.), Some("E9308".to_string())),
+    case05: (Some(Float::NAN), Some("E9308".to_string())),
+    case06: (Some(Float::INFINITY), Some("E9308".to_string())),
+}
+
+fn can_detect_invalid_per_passenger_cost_impl(per_passenger: Option<Float>, expected: Option<String>) {
+    let problem = Problem {
+        fleet: Fleet {
+            vehicles: vec![VehicleType {
+                costs: VehicleCosts { per_passenger, ..create_default_vehicle_costs() },
+                ..create_default_vehicle_type()
+            }],
+            ..create_default_fleet()
+        },
+        ..create_empty_problem()
+    };
+
+    let result =
+        check_e9308_vehicle_per_passenger_cost(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem)));
+
+    assert_eq!(result.err().map(|err| err.code), expected);
+}
