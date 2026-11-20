@@ -468,6 +468,27 @@ fn check_e9306_vehicle_per_run_cost(ctx: &ValidationContext) -> Result<(), Forma
     }
 }
 
+/// Checks that a vehicle's per-passenger cost is a finite, non-negative number.
+fn check_e9308_vehicle_per_passenger_cost(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let type_ids = ctx
+        .vehicles()
+        .filter(|vehicle| {
+            vehicle.costs.per_passenger.is_some_and(|per_passenger| !per_passenger.is_finite() || per_passenger < 0.)
+        })
+        .map(|vehicle| vehicle.type_id.clone())
+        .collect::<Vec<_>>();
+
+    if type_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9308".to_string(),
+            "invalid per-passenger cost".to_string(),
+            format!("use a finite, non-negative perPassenger cost for vehicle types: '{}'", type_ids.join(", ")),
+        ))
+    }
+}
+
 /// Checks that required stops, via and recharge station places carry no stop duration.
 fn check_e9307_shift_place_stop_duration(ctx: &ValidationContext) -> Result<(), FormatError> {
     let has_stop_duration = |place: &JobPlace| place.stop_duration.is_some_and(|value| value != 0.);
@@ -522,6 +543,7 @@ pub fn validate_vehicles(ctx: &ValidationContext) -> Result<(), MultiFormatError
         check_e9305_capacity_configurations_count(ctx),
         check_e9306_vehicle_per_run_cost(ctx),
         check_e9307_shift_place_stop_duration(ctx),
+        check_e9308_vehicle_per_passenger_cost(ctx),
         check_e1309_fleet_has_vehicle_types(ctx),
     ])
     .map_err(From::from)

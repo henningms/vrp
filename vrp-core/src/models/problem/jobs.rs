@@ -15,6 +15,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock, Weak};
 
 custom_dimension!(pub JobId typeof String);
+// the passengers a job carries, charged by a vehicle with a per-passenger cost; a job without it carries none
+custom_dimension!(pub JobPassengers typeof usize);
 
 /// Represents a job variant.
 #[derive(Clone)]

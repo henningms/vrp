@@ -828,6 +828,11 @@ To fix the error, set at least one limit and make sure the job has both pickups 
 
 To fix the error, use non-empty labels.
 
+### E9108
+
+`invalid passengers` is returned when a job's `passengers` is `0` or negative. To fix it, use a positive number, or
+omit `passengers` for a job with one passenger.
+
 ### E9301
 
 `capacity and capacityConfigurations are mutually exclusive` is returned when a vehicle type specifies both. To fix it,
@@ -863,6 +868,12 @@ use a non-negative number, or `0` or no `perRun` at all for a vehicle without a 
 `stop duration on a vehicle shift place` is returned when a place in a vehicle shift's `requiredStops`, `via` or
 `recharges.stations` has a `stopDuration` other than `0`. These places have no stop duration of their own. To fix it,
 remove `stopDuration` from them.
+
+### E9308
+
+`invalid per-passenger cost` is returned when a vehicle type's `costs.perPassenger` is negative or not a finite
+number. To fix it, use a non-negative number, or `0` or no `perPassenger` at all for a vehicle without a
+per-passenger cost.
 
 ### E9501
 

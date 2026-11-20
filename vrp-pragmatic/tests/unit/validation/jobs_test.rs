@@ -291,3 +291,28 @@ fn can_detect_empty_sharing_labels_impl(
         assert!(result.is_none());
     }
 }
+
+parameterized_test! {can_detect_invalid_passengers, (passengers, expected), {
+    can_detect_invalid_passengers_impl(passengers, expected);
+}}
+
+can_detect_invalid_passengers! {
+    case01_absent: (None, false),
+    case02_one: (Some(1), false),
+    case03_several: (Some(3), false),
+    case04_zero: (Some(0), true),
+    case05_negative: (Some(-2), true),
+}
+
+fn can_detect_invalid_passengers_impl(passengers: Option<i32>, expected: bool) {
+    let job = Job { passengers, ..create_pickup_delivery_job("job1", (1., 0.), (2., 0.)) };
+    let problem = Problem { plan: Plan { jobs: vec![job], ..create_empty_plan() }, ..create_empty_problem() };
+
+    let result = check_e9108_passengers(&ValidationContext::new(&problem, None, &CoordIndex::new(&problem))).err();
+
+    if expected {
+        assert_result("E9108", "positive number of passengers", result);
+    } else {
+        assert!(result.is_none());
+    }
+}

@@ -19,6 +19,9 @@ pub use self::only_vehicle_activity_cost::*;
 mod route_intervals;
 pub use self::route_intervals::*;
 
+mod passenger_cost;
+pub use self::passenger_cost::*;
+
 mod reserved_time;
 pub use self::reserved_time::*;
 

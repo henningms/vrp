@@ -266,6 +266,25 @@ fn check_e9107_sharing_labels(ctx: &ValidationContext) -> Result<(), FormatError
     }
 }
 
+/// Checks that a job's passenger count is positive.
+fn check_e9108_passengers(ctx: &ValidationContext) -> Result<(), FormatError> {
+    let ids = ctx
+        .jobs()
+        .filter(|job| job.passengers.is_some_and(|passengers| passengers < 1))
+        .map(|job| job.id.clone())
+        .collect::<Vec<_>>();
+
+    if ids.is_empty() {
+        Ok(())
+    } else {
+        Err(FormatError::new(
+            "E9108".to_string(),
+            "invalid passengers".to_string(),
+            format!("use a positive number of passengers, or omit it for one, in jobs with ids: '{}'", ids.join(", ")),
+        ))
+    }
+}
+
 /// Checks that demand and namedDemand are mutually exclusive.
 fn check_e9101_demand_named_demand_mutual_exclusion(ctx: &ValidationContext) -> Result<(), FormatError> {
     let ids: Vec<String> = ctx
@@ -448,6 +467,7 @@ pub fn validate_jobs(ctx: &ValidationContext) -> Result<(), MultiFormatError> {
         check_e1107_negative_demand(ctx),
         check_e9106_ride_stop_limits(ctx),
         check_e9107_sharing_labels(ctx),
+        check_e9108_passengers(ctx),
         check_e9101_demand_named_demand_mutual_exclusion(ctx),
         check_e9102_named_demand_dimensions_exist(ctx),
         check_e9103_no_empty_one_of_skill_group(ctx),

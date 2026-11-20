@@ -16,7 +16,8 @@ use vrp_core::{
     },
     models::common::*,
     models::problem::{
-        Actor, Fleet, Job, JobIdDimension, Jobs, Multi, Place, Single, TransportCost, VehicleIdDimension,
+        Actor, Fleet, Job, JobIdDimension, JobPassengersDimension, Jobs, Multi, Place, Single, TransportCost,
+        VehicleIdDimension,
     },
     models::{Lock, LockDetail, LockOrder, LockPosition},
 };
@@ -220,9 +221,9 @@ fn read_required_jobs(
 
         let problem_job = if singles.len() > 1 {
             let deliveries_start_index = job.pickups.as_ref().map_or(0, |p| p.len());
-            get_multi_job(job, singles, deliveries_start_index, random)
+            get_multi_job(job, singles, deliveries_start_index, random, props)
         } else {
-            get_single_job(job, singles.into_iter().next().unwrap())
+            get_single_job(job, singles.into_iter().next().unwrap(), props)
         };
 
         job_index.insert(job.id.clone(), problem_job.clone());
@@ -316,9 +317,9 @@ pub(crate) fn convert_api_job_to_core(
     if singles.len() > 1 {
         let deliveries_start_index = api_job.pickups.as_ref().map_or(0, |p| p.len());
         let random: Arc<dyn Random> = Arc::new(DefaultRandom::default());
-        get_multi_job(api_job, singles, deliveries_start_index, &random)
+        get_multi_job(api_job, singles, deliveries_start_index, &random, props)
     } else {
-        get_single_job(api_job, singles.into_iter().next().unwrap())
+        get_single_job(api_job, singles.into_iter().next().unwrap(), props)
     }
 }
 
@@ -645,8 +646,13 @@ fn get_single_with_dimens(
     single
 }
 
-fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
+fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions, props: &ProblemProperties) {
     dimens.set_job_id(job.id.clone());
+
+    if props.has_passenger_costs {
+        // NOTE validation keeps the count positive
+        dimens.set_job_passengers(job.passengers.map_or(1, |passengers| passengers.max(0) as usize));
+    }
 
     if let Some(value) = job.value {
         dimens.set_job_value(value);
@@ -699,9 +705,9 @@ fn fill_dimens(job: &ApiJob, dimens: &mut Dimensions) {
     }
 }
 
-fn get_single_job(job: &ApiJob, single: Single) -> Job {
+fn get_single_job(job: &ApiJob, single: Single, props: &ProblemProperties) -> Job {
     let mut single = single;
-    fill_dimens(job, &mut single.dimens);
+    fill_dimens(job, &mut single.dimens, props);
 
     Job::Single(Arc::new(single))
 }
@@ -711,9 +717,10 @@ fn get_multi_job(
     mut singles: Vec<Single>,
     deliveries_start_index: usize,
     random: &Arc<dyn Random>,
+    props: &ProblemProperties,
 ) -> Job {
     let mut dimens: Dimensions = Default::default();
-    fill_dimens(job, &mut dimens);
+    fill_dimens(job, &mut dimens, props);
 
     // If this job has a max ride duration, store it in the Multi job dimensions
     if let Some(max_ride_duration) = job.max_ride_duration {

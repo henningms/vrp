@@ -887,3 +887,120 @@ mod duration_offsets {
         assert_eq!(tour.get(3).unwrap().schedule.arrival, clock(7., 4.) + 4.);
     }
 }
+
+mod per_passenger_cost {
+    use super::*;
+    use crate::helpers::construction::heuristics::TestInsertionContextBuilder;
+    use crate::models::problem::{JobPassengersDimension, Multi, VehiclePerPassengerCostDimension};
+    use crate::models::solution::Activity;
+
+    const PER_PASSENGER: Cost = 100.;
+
+    fn create_feature() -> Feature {
+        TransportFeatureBuilder::new("transport")
+            .set_violation_code(VIOLATION_CODE)
+            .set_transport_cost(TestTransportCost::new_shared())
+            .set_activity_cost(TestActivityCost::new_shared())
+            .build_minimize_cost()
+            .unwrap()
+    }
+
+    fn pudo(pickup_at: Location, delivery_at: Location, passengers: usize) -> (Arc<Multi>, Activity, Activity) {
+        let mut pickup = TestSingleBuilder::default();
+        pickup.location(Some(pickup_at)).demand(Demand::pudo_pickup(1));
+        let mut delivery = TestSingleBuilder::default();
+        delivery.location(Some(delivery_at)).demand(Demand::pudo_delivery(1));
+        let mut dimens = Dimensions::default();
+        dimens.set_job_passengers(passengers);
+        let multi = Multi::new_shared(vec![pickup.build_shared(), delivery.build_shared()], dimens);
+
+        let pickup = ActivityBuilder::with_location(pickup_at).job(Some(multi.jobs[0].clone())).build();
+        let delivery = ActivityBuilder::with_location(delivery_at).job(Some(multi.jobs[1].clone())).build();
+
+        (multi, pickup, delivery)
+    }
+
+    fn route_with(per_passenger: Option<Cost>, activities: &[&Activity]) -> RouteContext {
+        let mut vehicle = TestVehicleBuilder::default();
+        vehicle.id("v1");
+        if let Some(per_passenger) = per_passenger {
+            vehicle.dimens_mut().set_vehicle_per_passenger_cost(per_passenger);
+        }
+        let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(vehicle.build()).build();
+
+        let mut builder = RouteBuilder::default();
+        builder.with_vehicle(&fleet, "v1");
+        activities.iter().for_each(|activity| {
+            builder.add_activity(activity.deep_copy());
+        });
+        let mut route_ctx = RouteContextBuilder::default().with_route(builder.build()).build();
+        create_feature().state.unwrap().accept_route_state(&mut route_ctx);
+
+        route_ctx
+    }
+
+    fn fitness_of(per_passenger: Option<Cost>, activities: &[&Activity]) -> Cost {
+        let insertion_ctx =
+            TestInsertionContextBuilder::default().with_routes(vec![route_with(per_passenger, activities)]).build();
+        create_feature().objective.unwrap().fitness(&insertion_ctx)
+    }
+
+    fn estimate_route(per_passenger: Option<Cost>, activities: &[&Activity], job: &Job) -> Cost {
+        let route_ctx = route_with(per_passenger, activities);
+        let solution_ctx = TestInsertionContextBuilder::default().build().solution;
+
+        create_feature().objective.unwrap().estimate(&MoveContext::route(&solution_ctx, &route_ctx, job))
+    }
+
+    #[test]
+    fn fitness_charges_every_passenger_of_the_tour_once() {
+        let (_a, ap, ad) = pudo(5, 10, 1);
+        let (_b, bp, bd) = pudo(6, 11, 2);
+        let activities = [&ap, &bp, &ad, &bd];
+
+        assert_eq!(fitness_of(Some(PER_PASSENGER), &activities) - fitness_of(None, &activities), 3. * PER_PASSENGER);
+    }
+
+    #[test]
+    fn route_estimate_charges_the_job_passengers() {
+        let (_a, ap, ad) = pudo(5, 10, 1);
+        let (b, ..) = pudo(6, 11, 3);
+        let job = Job::Multi(b);
+
+        let fee = estimate_route(Some(PER_PASSENGER), &[&ap, &ad], &job) - estimate_route(None, &[&ap, &ad], &job);
+
+        assert_eq!(fee, 3. * PER_PASSENGER);
+    }
+
+    #[test]
+    fn route_estimate_without_per_passenger_cost_is_unchanged() {
+        let (b, ..) = pudo(6, 11, 3);
+        let job = Job::Multi(b);
+        let without_passengers = Job::Multi(Multi::new_shared(
+            vec![TestSingleBuilder::default().build_shared(), TestSingleBuilder::default().build_shared()],
+            Dimensions::default(),
+        ));
+
+        // an empty route charges the vehicle's fixed cost only
+        assert_eq!(estimate_route(None, &[], &job), estimate_route(None, &[], &without_passengers));
+    }
+
+    #[test]
+    fn merge_sums_the_passengers_of_clustered_jobs() {
+        let constraint = create_feature().constraint.unwrap();
+        let single = |passengers: Option<usize>| {
+            let mut builder = TestSingleBuilder::default();
+            if let Some(passengers) = passengers {
+                builder.dimens_mut().set_job_passengers(passengers);
+            }
+            Job::Single(builder.build_shared())
+        };
+        let passengers_of =
+            |job: Result<Job, ViolationCode>| job.ok().and_then(|job| job.dimens().get_job_passengers().copied());
+
+        assert_eq!(passengers_of(constraint.merge(single(Some(2)), single(Some(3)))), Some(5));
+        assert_eq!(passengers_of(constraint.merge(single(None), single(Some(3)))), Some(3));
+        assert_eq!(passengers_of(constraint.merge(single(Some(2)), single(None))), Some(2));
+        assert_eq!(passengers_of(constraint.merge(single(None), single(None))), None);
+    }
+}

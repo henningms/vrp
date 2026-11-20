@@ -100,6 +100,7 @@ prop_compose! {
             fixed_order: None,
             max_ride_duration: None,
             site: None,
+            passengers: None,
         }
     }
 }
@@ -154,6 +155,7 @@ prop_compose! {
             fixed_order: None,
             max_ride_duration: None,
             site: None,
+            passengers: None,
         }
     }
 }

@@ -20,7 +20,7 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
 {{#include ../../../../../examples/data/pragmatic/simple.basic.problem.json:104:106}}
 ```
 
-- **costs** (required): specifies how expensive is vehicle usage. It has four properties:
+- **costs** (required): specifies how expensive is vehicle usage. It has the following properties:
                                      
     - **fixed**: a fixed cost per vehicle tour
     - **time**: a cost per time unit
@@ -32,6 +32,14 @@ A vehicle types are defined by `fleet.vehicles` property and their schema has th
       of the activities there, unless a third job stays on board across that stop. Only pickup-delivery jobs open a
       run, and a job picked up and delivered at the same stop opens none. It is a part of the `minimize-cost`
       objective and of the reported cost, and it is charged in addition to `fixed`. It must not be negative
+    - **perPassenger** (optional): a cost per passenger, e.g. for a contract which pays a fee for every passenger
+      carried. Every job served by the tour is charged once for its `passengers` (see [jobs](jobs.md)), whatever the
+      number of its activities, so two passengers sharing the vehicle cost twice the amount, unlike `perRun`. A job
+      left unassigned is not charged. It is a part of the `minimize-cost` objective and of the reported cost, and it
+      is charged in addition to `fixed` and `perRun`. It must not be negative
+```json
+"costs": { "fixed": 10, "distance": 0.002, "time": 0.004, "perPassenger": 25 }
+```
 
 - **shifts** (required): specify one or more vehicle shift. See detailed description below.
 
@@ -132,3 +140,4 @@ Each shift can have the following properties:
 * [E1307 time offset interval for break  is used with departure rescheduling](../errors/index.md#e1307)
 * [E1308 invalid vehicle reload resource](../errors/index.md#e1308)
 * [E9306 invalid per-run cost](../errors/index.md#e9306)
+* [E9308 invalid per-passenger cost](../errors/index.md#e9308)
