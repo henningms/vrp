@@ -1,6 +1,7 @@
 use crate::format::problem::PragmaticProblem;
 use crate::format::problem::*;
 use crate::format::solution::*;
+use crate::format_time;
 use crate::helpers::*;
 
 fn create_vehicle_type(type_id: &str, per_run: Option<f64>, per_passenger: Option<f64>) -> VehicleType {
@@ -220,4 +221,74 @@ fn rejects_invalid_passengers_and_per_passenger_cost_when_reading() {
     assert_eq!(read_error_codes(Some(0), Some(100.)), vec!["E9108".to_string()]);
     assert_eq!(read_error_codes(Some(-1), Some(100.)), vec!["E9108".to_string()]);
     assert_eq!(read_error_codes(Some(1), Some(-100.)), vec!["E9308".to_string()]);
+}
+
+fn get_activity_ids(tour: &Tour) -> Vec<Vec<String>> {
+    tour.stops.iter().map(|stop| stop.activities().iter().map(|activity| activity.job_id.clone()).collect()).collect()
+}
+
+#[test]
+fn charges_the_passengers_of_every_clustered_job() {
+    let solve_clustered = |per_passenger| {
+        let jobs = vec![
+            Job { passengers: Some(1), ..create_delivery_job("first", (1., 0.)) },
+            Job { passengers: Some(2), ..create_delivery_job("second", (2., 0.)) },
+        ];
+        let problem = create_problem(jobs, vec![create_vehicle_type("vehicle", None, per_passenger)]);
+        let clustering = Clustering::Vicinity {
+            profile: VehicleProfile { matrix: "car".to_string(), scale: None },
+            threshold: VicinityThresholdPolicy {
+                duration: 3.,
+                distance: 3.,
+                min_shared_time: None,
+                smallest_time_window: None,
+                max_jobs_per_cluster: None,
+            },
+            visiting: VicinityVisitPolicy::Continue,
+            serving: VicinityServingPolicy::Original { parking: 0. },
+            filtering: None,
+        };
+
+        solve(Problem { plan: Plan { clustering: Some(clustering), ..problem.plan }, ..problem })
+    };
+
+    let (with_fee, without_fee) = (solve_clustered(Some(100.)), solve_clustered(None));
+
+    for solution in [&with_fee, &without_fee] {
+        assert!(solution.unassigned.is_none());
+        assert_eq!(solution.tours.len(), 1);
+        let clustered_stop = get_activity_ids(&solution.tours[0]).into_iter().find(|ids| ids.len() == 2);
+        assert!(
+            clustered_stop.is_some_and(|ids| ids.contains(&"first".to_string()) && ids.contains(&"second".to_string()))
+        );
+    }
+    assert_eq!(with_fee.tours[0].statistic.cost - without_fee.tours[0].statistic.cost, 300.);
+    assert_eq!(with_fee.statistic.cost, with_fee.tours[0].statistic.cost);
+}
+
+#[test]
+fn charges_every_job_of_a_multi_trip_tour_once() {
+    let jobs = vec![
+        Job { passengers: Some(2), ..create_delivery_job("first", (1., 0.)) },
+        Job { passengers: Some(3), ..create_delivery_job("second", (2., 0.)) },
+    ];
+    let vehicle = VehicleType {
+        shifts: vec![VehicleShift {
+            end: Some(ShiftEnd { earliest: None, latest: format_time(100.), location: (0., 0.).to_loc() }),
+            reloads: Some(vec![VehicleReload { location: (0., 0.).to_loc(), duration: 2., ..create_default_reload() }]),
+            ..create_default_open_vehicle_shift()
+        }],
+        capacity: Some(vec![1]),
+        ..create_vehicle_type("vehicle", None, Some(100.))
+    };
+
+    let solution = solve(create_problem(jobs, vec![vehicle]));
+
+    assert!(solution.unassigned.is_none());
+    assert_eq!(solution.tours.len(), 1);
+    let tour = &solution.tours[0];
+    let activity_ids = get_activity_ids(tour).concat();
+    assert_eq!(activity_ids.iter().filter(|id| *id == "reload").count(), 1);
+    assert_eq!(tour.statistic.cost, get_base_cost(tour) + 500.);
+    assert_eq!(solution.statistic.cost, tour.statistic.cost);
 }
