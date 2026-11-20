@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.49.0] 2026-11-20
+
 ### Added
 
 * vehicle `costs.perPassenger` and job `passengers` (a positive integer, default 1): a cost charged once for every
