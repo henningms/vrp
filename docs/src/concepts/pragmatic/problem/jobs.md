@@ -89,6 +89,18 @@ consists of the following properties:
 - **site** (optional): a site key, e.g. the place a rider travels to or from. Used by the
   `minimize-site-mixing` and `minimize-site-visits` objectives; it has no effect otherwise. When a
   pickup-delivery job has no `site`, these objectives infer one (see objectives).
+- **passengers** (optional): the number of passengers the job carries, e.g. a rider travelling with two companions,
+  a positive integer, default is `1`. A vehicle with a `perPassenger` cost (see [vehicle types](vehicles.md)) charges
+  it once per job for this number. It does not change the job's demand, so the capacity a job takes is set by its
+  task `demand` as usual:
+  ```json
+  {
+    "id": "rider",
+    "passengers": 3,
+    "pickups": [ { "places": [ { "location": { "index": 0 }, "duration": 60 } ], "demand": [3] } ],
+    "deliveries": [ { "places": [ { "location": { "index": 1 }, "duration": 60 } ], "demand": [3] } ]
+  }
+  ```
 
 A job should have at least one task property specified.
 
@@ -249,6 +261,7 @@ Use `tag` property on each job place if you want to use initial solution or chec
 * [E1105 empty job](../errors/index.md#e1105)
 * [E1106 job has negative duration](../errors/index.md#e1106)
 * [E1107 job has negative demand](../errors/index.md#e1107)
+* [E9108 invalid passengers](../errors/index.md#e9108)
 
 
 ## Examples

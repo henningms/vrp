@@ -8,6 +8,20 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* vehicle `costs.perPassenger` and job `passengers` (a positive integer, default 1): a cost charged once for every
+  job a tour serves, for each of its passengers, e.g. for a contract which pays a fee per passenger carried, so two
+  passengers sharing a vehicle cost twice the amount, unlike `perRun`. A multi job is charged once whatever the
+  number of its activities, an unassigned job is not charged, and `passengers` does not change a job's demand. It
+  is part of `minimize-cost` and of the reported tour and solution `statistic.cost`, so the solver prefers a vehicle
+  with a lower amount for jobs with more passengers. Absent or `0` keeps costs and results unchanged; a passenger
+  count below one is rejected (E9108), a negative or non-finite amount too (E9308). In core, the amount is the
+  vehicle dimension `VehiclePerPassengerCost`, the count the job dimension `JobPassengers`, and
+  `count_tour_passengers` in `construction::enablers` counts a tour's passengers. Vicinity clustering adds up the
+  passengers of clustered jobs. Rust code constructing the pragmatic `Job` or `VehicleCosts` by struct literal must
+  set the new `passengers` and `per_passenger` fields.
+
 ## [1.48.0] 2026-11-18
 
 ### Added
