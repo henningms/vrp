@@ -61,6 +61,15 @@ fn check_valid_stop_durations(candidate: &ApiJob) -> Result<(), GenericError> {
     }
 }
 
+/// Refuses a passenger count below one, as the problem validation does for a plan job.
+fn check_valid_passengers(candidate: &ApiJob) -> Result<(), GenericError> {
+    if candidate.passengers.is_some_and(|passengers| passengers < 1) {
+        Err(format!("candidate job '{}' has invalid passengers: use a positive number", candidate.id).into())
+    } else {
+        Ok(())
+    }
+}
+
 /// Information about a constraint violation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -205,6 +214,7 @@ impl FeasibilityContext {
         let coord_index =
             self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
         self.check_known_stop_durations(candidate, &coord_index)?;
+        check_valid_passengers(candidate)?;
 
         let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 
@@ -287,6 +297,7 @@ impl FeasibilityContext {
         let coord_index =
             self.problem.extras.get_coord_index().ok_or_else(|| GenericError::from("cannot get coord index"))?;
         self.check_known_stop_durations(candidate, &coord_index)?;
+        check_valid_passengers(candidate)?;
 
         let core_job = convert_api_job_to_core(candidate, &self.api_problem, &self.properties, &coord_index);
 

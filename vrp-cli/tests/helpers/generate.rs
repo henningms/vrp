@@ -20,6 +20,7 @@ pub fn create_empty_job() -> Job {
         fixed_order: None,
         max_ride_duration: None,
         site: None,
+        passengers: None,
     }
 }
 
@@ -48,7 +49,7 @@ pub fn create_test_vehicle_type() -> VehicleType {
         type_id: "vehicle".to_string(),
         vehicle_ids: vec!["vehicle_1".to_string()],
         profile: VehicleProfile { matrix: "car".to_string(), scale: None },
-        costs: VehicleCosts { fixed: None, distance: 1., time: 0., per_run: None },
+        costs: VehicleCosts { fixed: None, distance: 1., time: 0., per_run: None, per_passenger: None },
         shifts: vec![VehicleShift {
             start: ShiftStart {
                 earliest: "2020-05-01T09:00:00.00Z".to_string(),

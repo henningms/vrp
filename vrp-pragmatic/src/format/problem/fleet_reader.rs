@@ -236,6 +236,10 @@ pub(super) fn read_fleet(
                     dimens.set_vehicle_per_run_cost(per_run);
                 }
 
+                if let Some(per_passenger) = vehicle.costs.per_passenger.filter(|per_passenger| *per_passenger != 0.) {
+                    dimens.set_vehicle_per_passenger_cost(per_passenger);
+                }
+
                 if props.has_configurable_capacity {
                     // NOTE plain capacity is read as a single configuration as the whole fleet shares one load type
                     let configurations: Option<Vec<Vec<i32>>> = vehicle

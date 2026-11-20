@@ -81,6 +81,7 @@ pub(crate) fn generate_plan(
                 fixed_order: job_proto.fixed_order,
                 max_ride_duration: job_proto.max_ride_duration,
                 site: job_proto.site.clone(),
+                passengers: job_proto.passengers,
             }
         })
         .collect();

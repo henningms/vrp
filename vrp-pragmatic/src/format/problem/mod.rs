@@ -126,6 +126,7 @@ pub(crate) struct ProblemProperties {
     pub(crate) has_lifo: bool,
     pub(crate) has_max_ride_duration: bool,
     pub(crate) has_via: bool,
+    pub(crate) has_passenger_costs: bool,
 }
 
 impl ProblemProperties {

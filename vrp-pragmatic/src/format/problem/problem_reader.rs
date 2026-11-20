@@ -247,6 +247,13 @@ pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matri
 
     let has_max_ride_duration = api_problem.plan.jobs.iter().any(|job| job.max_ride_duration.is_some());
 
+    let has_passenger_costs = api_problem
+        .fleet
+        .vehicles
+        .iter()
+        .filter_map(|v| v.costs.per_passenger)
+        .any(|per_passenger| per_passenger != 0.);
+
     ProblemProperties {
         has_multi_dimen_capacity,
         has_configurable_capacity,
@@ -268,6 +275,7 @@ pub(crate) fn get_problem_properties(api_problem: &ApiProblem, matrices: &[Matri
         has_lifo,
         has_max_ride_duration,
         has_via,
+        has_passenger_costs,
     }
 }
 

@@ -287,6 +287,11 @@ pub struct Job {
     /// objective, which penalizes riders of different sites being on board at the same time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
+
+    /// The number of passengers the job carries, e.g. a rider with companions, charged by a vehicle's
+    /// `perPassenger` cost. A positive number, default is 1. It does not change the job's demand.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passengers: Option<i32>,
 }
 
 // region Clustering
@@ -420,6 +425,10 @@ pub struct VehicleCosts {
     /// Cost per run: a stretch of a tour while at least one pickup-delivery job is on board.
     #[serde(rename = "perRun", skip_serializing_if = "Option::is_none")]
     pub per_run: Option<Float>,
+
+    /// Cost per passenger of every job the vehicle's tour serves: each job is charged once, for its `passengers`.
+    #[serde(rename = "perPassenger", skip_serializing_if = "Option::is_none")]
+    pub per_passenger: Option<Float>,
 }
 
 /// Specifies vehicle shift start.
