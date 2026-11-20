@@ -9,7 +9,7 @@ use std::ops::ControlFlow;
 use super::*;
 use crate::construction::enablers::*;
 use crate::models::common::Timestamp;
-use crate::models::problem::{ActivityCost, Single, TransportCost, TravelTime};
+use crate::models::problem::{ActivityCost, JobPassengersDimension, Single, TransportCost, TravelTime};
 use crate::models::solution::Activity;
 use rosomaxa::utils::UnwrapValue;
 
@@ -292,9 +292,22 @@ impl FeatureConstraint for TransportConstraint {
         }
     }
 
-    fn merge(&self, source: Job, _: Job) -> Result<Job, ViolationCode> {
+    fn merge(&self, source: Job, candidate: Job) -> Result<Job, ViolationCode> {
         // NOTE we don't change temporal parameters here, it is responsibility of the caller
-        Ok(source)
+        let Some(&candidate_passengers) = candidate.dimens().get_job_passengers() else {
+            return Ok(source);
+        };
+
+        match &source {
+            Job::Single(single) => {
+                let passengers = single.dimens.get_job_passengers().copied().unwrap_or_default();
+                let mut single = Single { places: single.places.clone(), dimens: single.dimens.clone() };
+                single.dimens.set_job_passengers(passengers + candidate_passengers);
+
+                Ok(Job::Single(Arc::new(single)))
+            }
+            Job::Multi(_) => Ok(source),
+        }
     }
 }
 
@@ -479,7 +492,11 @@ impl FeatureObjective for CostObjective {
 
     fn estimate(&self, move_ctx: &MoveContext<'_>) -> Cost {
         match move_ctx {
-            MoveContext::Route { route_ctx, .. } => self.estimate_route(route_ctx),
+            MoveContext::Route { route_ctx, job, .. } => {
+                let cost = self.estimate_route(route_ctx);
+                get_job_passenger_cost(&route_ctx.route().actor.vehicle, job)
+                    .map_or(cost, |passenger_cost| cost + passenger_cost)
+            }
             MoveContext::Activity { route_ctx, activity_ctx, .. } => {
                 let cost = self.estimate_activity(route_ctx, activity_ctx);
                 estimate_route_run_cost(route_ctx, activity_ctx).map_or(cost, |run_cost| cost + run_cost)

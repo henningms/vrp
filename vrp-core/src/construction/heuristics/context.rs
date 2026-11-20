@@ -2,7 +2,9 @@
 #[path = "../../../tests/unit/construction/heuristics/context_test.rs"]
 mod context_test;
 
-use crate::construction::enablers::{TotalDistanceTourState, TotalDurationTourState, get_route_run_cost};
+use crate::construction::enablers::{
+    TotalDistanceTourState, TotalDurationTourState, get_route_passenger_cost, get_route_run_cost,
+};
 use crate::construction::heuristics::factories::*;
 use crate::models::GoalContext;
 use crate::models::common::Cost;
@@ -80,7 +82,8 @@ impl InsertionContext {
                 let cost = acc
                     + get_cost(&actor.vehicle.costs, distance, duration)
                     + get_cost(&actor.driver.costs, distance, duration);
-                get_route_run_cost(route_ctx).map_or(cost, |run_cost| cost + run_cost)
+                let cost = get_route_run_cost(route_ctx).map_or(cost, |run_cost| cost + run_cost);
+                get_route_passenger_cost(route_ctx).map_or(cost, |passenger_cost| cost + passenger_cost)
             })
         })
     }

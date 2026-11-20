@@ -13,6 +13,8 @@ use std::sync::Arc;
 custom_dimension!(pub VehicleId typeof String);
 // a cost charged for every run of the vehicle's tour, see `construction::enablers::count_tour_runs`
 custom_dimension!(pub VehiclePerRunCost typeof Cost);
+// a cost charged for every passenger of the tour's jobs, see `construction::enablers::count_tour_passengers`
+custom_dimension!(pub VehiclePerPassengerCost typeof Cost);
 
 /// Represents operating costs for driver and vehicle.
 #[derive(Clone, Debug)]
