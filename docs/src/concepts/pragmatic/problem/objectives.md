@@ -44,7 +44,9 @@ constraints such as time windows. The objective has the following optional param
   job does not meet. Unassigned jobs are not counted, so keep it after `minimize-unassigned`
 * `maximize-tours`: maximizes total amount of tours present in solution
 * `minimize-arrival-time`: prefers solutions where work is finished earlier
-* `fast-service`: prefers solutions when jobs are served early in tours
+* `fast-service`: prefers solutions when jobs are served early in tours. A job with one activity counts the time from
+  the start of its tour (or of its last reload) to the job; a job with several activities, e.g. a pickup and a
+  delivery, counts the time between its first and its last activity
 * `match-requested-time`: minimizes early/late deviation between activity
   service start and a place's optional `requestedTime`. Optional `earlyPenalty`
   and `latePenalty` values are expressed per minute and default to `1`. This is

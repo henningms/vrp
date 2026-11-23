@@ -255,7 +255,8 @@ impl FastServiceObjective {
             .get_multi_job_ranges()
             .and_then(|job_ranges| job_ranges.get(job))
             .map(|&(start_idx, end_idx)| {
-                self.get_end_time(route_ctx, end_idx) - self.get_start_time(route_ctx, start_idx)
+                let tour = &route_ctx.route().tour;
+                tour[end_idx].schedule.arrival - tour[start_idx].schedule.departure
             })
             .unwrap_or_default()
     }

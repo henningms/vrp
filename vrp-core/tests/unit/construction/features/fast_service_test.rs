@@ -179,6 +179,38 @@ mod global_estimation {
     }
 
     #[test]
+    fn can_get_solution_fitness_for_multi_job_from_its_first_to_its_last_activity() {
+        use crate::helpers::construction::features::create_simple_dynamic_demand;
+
+        let feature = create_fast_service_feature(false);
+        let jobs = [(20, 1), (30, -1)]
+            .into_iter()
+            .map(|(l, d)| {
+                TestSingleBuilder::default().location(Some(l)).demand(create_simple_dynamic_demand(d)).build_shared()
+            })
+            .collect::<Vec<_>>();
+        let multi = Multi::new_shared(jobs, Default::default());
+        let mut route_ctx = RouteContextBuilder::default()
+            .with_route(
+                RouteBuilder::default()
+                    .add_activity(ActivityBuilder::with_location(10).build())
+                    .add_activity(ActivityBuilder::with_location(20).job(Some(multi.jobs[0].clone())).build())
+                    .add_activity(ActivityBuilder::with_location(30).job(Some(multi.jobs[1].clone())).build())
+                    .add_activity(ActivityBuilder::with_location(50).build())
+                    .build(),
+            )
+            .build();
+        feature.state.as_ref().expect("no state").accept_route_state(&mut route_ctx);
+        let insertion_ctx = TestInsertionContextBuilder::default().with_routes(vec![route_ctx]).build();
+
+        let fitness = feature.objective.expect("no objective").fitness(&insertion_ctx);
+
+        // singles: 10 and 50 from the tour start; the multi job: 30 - 20, not the whole tour
+        assert_eq!(fitness, 70.);
+        drop(multi);
+    }
+
+    #[test]
     fn can_get_solution_fitness_with_reload() {
         let reload_filter_enabled = true;
 
