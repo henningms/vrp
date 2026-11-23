@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.49.1] 2026-11-23
+
 ### Fixed
 
 * `fast-service`: in a solution's fitness, a job with several activities (e.g. a pickup and a delivery) is now charged
