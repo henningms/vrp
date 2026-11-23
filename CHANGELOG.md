@@ -8,6 +8,14 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Fixed
+
+* `fast-service`: in a solution's fitness, a job with several activities (e.g. a pickup and a delivery) is now charged
+  the time from its first activity's departure to its last activity's arrival, as it already was when estimating an
+  insertion. Before, such a job was charged the whole duration of its tour (or of its interval between reloads), so
+  the objective pushed towards short tours instead of short times between a job's own activities. Jobs with a single
+  activity are charged as before.
+
 ## [1.49.0] 2026-11-20
 
 ### Added
