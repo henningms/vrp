@@ -155,6 +155,7 @@ fn can_handle_order_between_special_activities() {
             demand: Some(vec![1]),
             named_demand: None,
             order: Some(order),
+            outside_ride_limit: None,
         }]),
         ..create_job(id)
     };

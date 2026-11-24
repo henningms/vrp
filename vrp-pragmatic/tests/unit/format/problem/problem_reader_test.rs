@@ -154,6 +154,7 @@ fn reads_the_largest_stop_duration_per_location_into_the_transport() {
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         ..create_job("alternatives")
     };

@@ -19,7 +19,13 @@ pub fn create_job_place(location: (f64, f64), tag: Option<String>) -> JobPlace {
 }
 
 pub fn create_task(location: (f64, f64), tag: Option<String>) -> JobTask {
-    JobTask { places: vec![create_job_place(location, tag)], demand: Some(vec![1]), named_demand: None, order: None }
+    JobTask {
+        places: vec![create_job_place(location, tag)],
+        demand: Some(vec![1]),
+        named_demand: None,
+        order: None,
+        outside_ride_limit: None,
+    }
 }
 
 pub fn create_job(id: &str) -> Job {
@@ -69,6 +75,7 @@ pub fn create_delivery_job_with_order(id: &str, location: (f64, f64), order: i32
             demand: Some(vec![1]),
             named_demand: None,
             order: Some(order),
+            outside_ride_limit: None,
         }]),
         ..create_job(id)
     }
@@ -81,6 +88,7 @@ pub fn create_delivery_job_with_group(id: &str, location: (f64, f64), group: &st
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         group: Some(group.to_string()),
         ..create_job(id)
@@ -94,6 +102,7 @@ pub fn create_delivery_job_with_compatibility(id: &str, location: (f64, f64), co
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         compatibility: Some(compatibility.to_string()),
         ..create_job(id)
@@ -115,6 +124,7 @@ pub fn create_delivery_job_with_duration(id: &str, location: (f64, f64), duratio
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         ..create_job(id)
     }
@@ -132,6 +142,7 @@ pub fn create_delivery_job_with_times(
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         ..create_job(id)
     }
@@ -181,6 +192,7 @@ pub fn create_pickup_delivery_job_with_params(
             demand: Some(demand.clone()),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         deliveries: Some(vec![JobTask {
             places: vec![JobPlace {
@@ -191,6 +203,7 @@ pub fn create_pickup_delivery_job_with_params(
             demand: Some(demand),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
 
         ..create_job(id)
@@ -212,6 +225,7 @@ pub fn create_delivery_job_with_index(id: &str, index: usize) -> Job {
             demand: Some(vec![1]),
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         ..create_job(id)
     }
@@ -234,6 +248,7 @@ pub fn create_multi_job(
                 demand: Some(demand),
                 named_demand: None,
                 order: None,
+                outside_ride_limit: None,
             })
             .collect::<Vec<_>>();
 

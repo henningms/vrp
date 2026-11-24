@@ -9,10 +9,10 @@ use std::sync::Arc;
 use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
-        JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
-        JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension, JobSiteDimension,
-        JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
-        LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
+        JobOutsideRideLimitDimension, JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension,
+        JobRequestedTimesDimension, JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension,
+        JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension,
+        LifoGroupDimension, LifoGroupId, LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
     },
     models::common::*,
     models::problem::{
@@ -186,6 +186,7 @@ fn read_required_jobs(
             places,
             demand,
             &task.order,
+            task.outside_ride_limit.unwrap_or(false),
             activity_type,
             has_multi_dimens,
             props.has_configurable_capacity,
@@ -277,6 +278,7 @@ pub(crate) fn convert_api_job_to_core(
             places,
             demand,
             &task.order,
+            task.outside_ride_limit.unwrap_or(false),
             activity_type,
             has_multi_dimens,
             props.has_configurable_capacity,
@@ -609,6 +611,7 @@ fn get_single_with_dimens(
     places: Vec<PlaceData>,
     demand: Demand<MultiDimLoad>,
     order: &Option<i32>,
+    outside_ride_limit: bool,
     activity_type: &str,
     has_multi_dimens: bool,
     has_configurable_capacity: bool,
@@ -641,6 +644,10 @@ fn get_single_with_dimens(
 
     if let Some(order) = order {
         dimens.set_job_order(*order);
+    }
+
+    if outside_ride_limit {
+        dimens.set_job_outside_ride_limit(true);
     }
 
     single

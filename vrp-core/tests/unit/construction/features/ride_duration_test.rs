@@ -657,3 +657,88 @@ fn can_count_the_stop_duration_between_pickup_and_delivery_in_the_ride_impl(
 
     assert_eq!(result.map(|violation| violation.code), expected);
 }
+
+/// A job with a second person's own pickup before the rider's and own delivery after it.
+fn create_companion_multi_job(limit: Duration, companion_stops_outside: bool) -> Arc<Multi> {
+    let single = |demand: Demand<SingleDimLoad>, location: usize, outside: bool| {
+        let mut builder = TestSingleBuilder::default();
+        builder.demand(demand);
+        builder.location(Some(location));
+        if outside {
+            builder.dimens_mut().set_job_outside_ride_limit(true);
+        }
+        builder.build_shared()
+    };
+    let mut dimens: Dimensions = Default::default();
+    dimens.set_job_max_ride_duration(limit);
+
+    Multi::new_shared(
+        vec![
+            single(Demand::pudo_pickup(1), 5, companion_stops_outside),
+            single(Demand::pudo_pickup(1), 10, false),
+            single(Demand::pudo_delivery(1), 20, false),
+            single(Demand::pudo_delivery(1), 30, companion_stops_outside),
+        ],
+        dimens,
+    )
+}
+
+/// Companion boards at 100, rider at 700; rider is set down at 1000, companion at 1500.
+fn companion_solution(multi: &Arc<Multi>) -> InsertionContext {
+    let delivery_at = |location: usize, arrival: f64, single: Arc<Single>| {
+        let mut delivery = create_delivery_activity(location, single);
+        delivery.place.time = TimeWindow::new(0.0, 5000.0);
+        delivery.schedule = Schedule::new(arrival, arrival + 60.0);
+        delivery
+    };
+    let fleet = FleetBuilder::default().add_driver(test_driver()).add_vehicle(test_vehicle_with_id("v1")).build();
+    let route_ctx = RouteContextBuilder::default()
+        .with_route(
+            RouteBuilder::default()
+                .with_vehicle(&fleet, "v1")
+                .add_activity(create_pickup_activity(5, 100.0, multi.jobs[0].clone()))
+                .add_activity(create_pickup_activity(10, 700.0, multi.jobs[1].clone()))
+                .add_activity(delivery_at(20, 1000.0, multi.jobs[2].clone()))
+                .add_activity(delivery_at(30, 1500.0, multi.jobs[3].clone()))
+                .build(),
+        )
+        .build();
+
+    TestInsertionContextBuilder::default().with_routes(vec![route_ctx]).build()
+}
+
+#[test]
+fn stops_outside_the_ride_limit_are_left_out_of_the_measured_ride() {
+    // The rider rides 300; the whole job spans 1400.
+    let multi = create_companion_multi_job(500.0, true);
+    let mut insertion_ctx = companion_solution(&multi);
+
+    MaxRideDurationState {}.accept_solution_state(&mut insertion_ctx.solution);
+
+    assert!(insertion_ctx.solution.routes[0].route().tour.contains(&Job::Multi(multi)));
+    assert!(insertion_ctx.solution.unassigned.is_empty());
+}
+
+#[test]
+fn the_whole_job_is_measured_when_no_stop_is_outside_the_ride_limit() {
+    let multi = create_companion_multi_job(500.0, false);
+    let job = Job::Multi(multi.clone());
+    let mut insertion_ctx = companion_solution(&multi);
+
+    MaxRideDurationState {}.accept_solution_state(&mut insertion_ctx.solution);
+
+    assert!(!insertion_ctx.solution.routes[0].route().tour.contains(&job));
+    assert!(insertion_ctx.solution.unassigned.contains_key(&job));
+}
+
+#[test]
+fn the_ride_limit_still_holds_between_the_stops_that_count() {
+    // The rider rides 300, over a limit of 200, whatever the companion's stops do.
+    let multi = create_companion_multi_job(200.0, true);
+    let job = Job::Multi(multi.clone());
+    let mut insertion_ctx = companion_solution(&multi);
+
+    MaxRideDurationState {}.accept_solution_state(&mut insertion_ctx.solution);
+
+    assert!(insertion_ctx.solution.unassigned.contains_key(&job));
+}

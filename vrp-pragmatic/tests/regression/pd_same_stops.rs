@@ -20,6 +20,7 @@ fn can_handle_two_pd_jobs_with_same_locations_and_unusual_routing() {
         demand: Some(vec![1]),
         named_demand: None,
         order: None,
+        outside_ride_limit: None,
     };
 
     let problem = Problem {

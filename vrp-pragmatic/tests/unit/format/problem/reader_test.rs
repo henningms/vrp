@@ -87,6 +87,7 @@ fn can_read_complex_problem() {
                         demand: Some(vec![0, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     skills: Some(all_of_skills(vec!["unique".to_string()])),
                     ..create_job("delivery_job")
@@ -108,6 +109,7 @@ fn can_read_complex_problem() {
                         demand: Some(vec![2]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     deliveries: Some(vec![JobTask {
                         places: vec![JobPlace {
@@ -125,6 +127,7 @@ fn can_read_complex_problem() {
                         demand: Some(vec![2]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("pickup_delivery_job")
                 },
@@ -145,6 +148,7 @@ fn can_read_complex_problem() {
                         demand: Some(vec![3]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     skills: Some(all_of_skills(vec!["unique2".to_string()])),
                     ..create_job("pickup_job")
@@ -306,6 +310,7 @@ fn can_read_requested_times_with_configurable_capacity() {
                     demand: Some(vec![0, 1]),
                     named_demand: None,
                     order: None,
+                    outside_ride_limit: None,
                 }]),
                 deliveries: Some(vec![JobTask {
                     places: vec![JobPlace {
@@ -320,6 +325,7 @@ fn can_read_requested_times_with_configurable_capacity() {
                     demand: Some(vec![0, 1]),
                     named_demand: None,
                     order: None,
+                    outside_ride_limit: None,
                 }]),
                 ..create_job("wheelchair_trip")
             }],

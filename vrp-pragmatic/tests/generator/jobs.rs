@@ -76,7 +76,7 @@ prop_compose! {
                         tag: Some("p1".to_owned()),
                         ..pickup
                     }
-                ], demand: demand.clone(), named_demand: None, order }
+                ], demand: demand.clone(), named_demand: None, order, outside_ride_limit: None }
             ]),
             deliveries: Some(vec![
              JobTask { places: vec![
@@ -84,7 +84,7 @@ prop_compose! {
                         tag: Some("d1".to_owned()),
                         ..delivery
                     }
-                ], demand, named_demand: None, order: None }
+                ], demand, named_demand: None, order: None, outside_ride_limit: None }
             ]),
             replacements: None,
             services: None,
@@ -171,7 +171,7 @@ prop_compose! {
      demand in demand_proto,
      order in order_proto,
     ) -> JobTask {
-       JobTask { places: vec![place], demand, named_demand: None, order }
+       JobTask { places: vec![place], demand, named_demand: None, order, outside_ride_limit: None }
     }
 }
 

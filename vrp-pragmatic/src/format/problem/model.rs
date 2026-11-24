@@ -151,6 +151,11 @@ pub struct JobTask {
     /// An order, bigger value - later assignment in the route.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub order: Option<i32>,
+    /// When true, this pickup or delivery is left out of the job's `maxRideDuration`: the ride is
+    /// measured between the job's other pickups and deliveries. Use it for the own stops of a second
+    /// person travelling with the rider the limit belongs to.
+    #[serde(skip_serializing_if = "Option::is_none", default, rename = "outsideRideLimit")]
+    pub outside_ride_limit: Option<bool>,
 }
 
 /// Limits on the stops a vehicle makes while a job is on board. At least one limit has to be set.

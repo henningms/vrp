@@ -24,6 +24,7 @@ fn can_use_index_with_coordinate_an_unknown_location_types() {
                         demand: None,
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("job3")
                 },

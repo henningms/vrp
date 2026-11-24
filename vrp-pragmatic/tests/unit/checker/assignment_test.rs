@@ -139,6 +139,7 @@ fn check_jobs_impl(
                 demand: if tgt != "service" { Some(vec![1]) } else { None },
                 named_demand: None,
                 order: None,
+                outside_ride_limit: None,
             })
             .collect()
     };

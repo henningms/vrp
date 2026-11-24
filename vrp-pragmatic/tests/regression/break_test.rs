@@ -29,6 +29,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![1]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job1")
                     },
@@ -49,6 +50,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![1]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job2")
                     },
@@ -69,6 +71,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![1]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job3")
                     },
@@ -89,6 +92,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![2]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job4")
                     },
@@ -109,6 +113,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![3]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job5")
                     },
@@ -129,6 +134,7 @@ fn can_handle_properly_invalid_break_removal() {
                             demand: Some(vec![1]),
                             named_demand: None,
                             order: None,
+                            outside_ride_limit: None,
                         }]),
                         ..create_job("job6")
                     },

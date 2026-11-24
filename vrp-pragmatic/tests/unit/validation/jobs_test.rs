@@ -110,6 +110,7 @@ fn can_iterate_all_task_kinds_in_validation_order() {
         demand: None,
         named_demand: None,
         order: None,
+        outside_ride_limit: None,
     };
     let problem = Problem {
         plan: Plan {
