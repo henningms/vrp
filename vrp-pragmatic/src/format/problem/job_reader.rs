@@ -182,16 +182,20 @@ fn read_required_jobs(
             })
             .collect();
 
-        get_single_with_dimens(
+        let mut single = get_single_with_dimens(
             places,
             demand,
             &task.order,
-            task.outside_ride_limit.unwrap_or(false),
             activity_type,
             has_multi_dimens,
             props.has_configurable_capacity,
             coord_index,
-        )
+        );
+        if task.outside_ride_limit.unwrap_or(false) {
+            single.dimens.set_job_outside_ride_limit(true);
+        }
+
+        single
     };
 
     api_problem.plan.jobs.iter().for_each(|job| {
@@ -274,16 +278,20 @@ pub(crate) fn convert_api_job_to_core(
             })
             .collect();
 
-        get_single_with_dimens(
+        let mut single = get_single_with_dimens(
             places,
             demand,
             &task.order,
-            task.outside_ride_limit.unwrap_or(false),
             activity_type,
             has_multi_dimens,
             props.has_configurable_capacity,
             coord_index,
-        )
+        );
+        if task.outside_ride_limit.unwrap_or(false) {
+            single.dimens.set_job_outside_ride_limit(true);
+        }
+
+        single
     };
 
     let pickups = api_job.pickups.as_ref().map_or(0, |p| p.len());
@@ -611,7 +619,6 @@ fn get_single_with_dimens(
     places: Vec<PlaceData>,
     demand: Demand<MultiDimLoad>,
     order: &Option<i32>,
-    outside_ride_limit: bool,
     activity_type: &str,
     has_multi_dimens: bool,
     has_configurable_capacity: bool,
@@ -644,10 +651,6 @@ fn get_single_with_dimens(
 
     if let Some(order) = order {
         dimens.set_job_order(*order);
-    }
-
-    if outside_ride_limit {
-        dimens.set_job_outside_ride_limit(true);
     }
 
     single
