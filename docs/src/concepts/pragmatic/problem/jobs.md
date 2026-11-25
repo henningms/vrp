@@ -268,3 +268,29 @@ Use `tag` property on each job place if you want to use initial solution or chec
 
 Please refer to [basic job usage examples](../../../examples/pragmatic/basics/job-types.md) to see how to specify problem with
 different job types.
+
+### Stops outside the ride limit
+
+A job's `maxRideDuration` is measured from the earliest pickup's departure to the latest delivery's service start. A
+pickup or delivery task with `outsideRideLimit: true` is left out of that measure, so the ride runs between the job's
+other pickups and deliveries. Use it when a job carries a second person with stops of their own, such as a companion
+who boards before the rider and is set down after: the limit then covers the rider's ride only.
+
+```json
+{
+  "id": "rider-with-companion",
+  "maxRideDuration": 2700,
+  "fixedOrder": true,
+  "pickups": [
+    { "places": [{ "location": { "lat": 59.90, "lng": 10.70 }, "duration": 15, "tag": "companion" }], "demand": [1], "outsideRideLimit": true },
+    { "places": [{ "location": { "lat": 59.91, "lng": 10.75 }, "duration": 15, "tag": "rider" }], "demand": [1] }
+  ],
+  "deliveries": [
+    { "places": [{ "location": { "lat": 59.95, "lng": 10.80 }, "duration": 5, "tag": "both" }], "demand": [2] }
+  ]
+}
+```
+
+Nothing else about the job changes: capacity, `fixedOrder` and the `fast-service` objective still see every task. The
+solution checker tells a task outside the limit from the job's other tasks by its place `tag`, so give such a task's
+places a tag.

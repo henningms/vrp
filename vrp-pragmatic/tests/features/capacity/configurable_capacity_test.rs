@@ -34,6 +34,7 @@ fn can_serve_jobs_with_configurable_capacity() {
                         demand: Some(vec![2, 0]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     deliveries: Some(vec![JobTask {
                         places: vec![JobPlace {
@@ -48,6 +49,7 @@ fn can_serve_jobs_with_configurable_capacity() {
                         demand: Some(vec![2, 0]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("seated_passengers")
                 },
@@ -66,6 +68,7 @@ fn can_serve_jobs_with_configurable_capacity() {
                         demand: Some(vec![0, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     deliveries: Some(vec![JobTask {
                         places: vec![JobPlace {
@@ -80,6 +83,7 @@ fn can_serve_jobs_with_configurable_capacity() {
                         demand: Some(vec![0, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("wheelchair_passenger")
                 },
@@ -146,6 +150,7 @@ fn can_reject_jobs_exceeding_all_configurations() {
                         demand: Some(vec![3, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     deliveries: Some(vec![JobTask {
                         places: vec![JobPlace {
@@ -160,6 +165,7 @@ fn can_reject_jobs_exceeding_all_configurations() {
                         demand: Some(vec![3, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("impossible_job")
                 },
@@ -225,6 +231,7 @@ fn can_use_named_demand_with_capacity_dimensions() {
                     demand: None,
                     named_demand: Some(named_demand_pickup),
                     order: None,
+                    outside_ride_limit: None,
                 }]),
                 deliveries: Some(vec![JobTask {
                     places: vec![JobPlace {
@@ -239,6 +246,7 @@ fn can_use_named_demand_with_capacity_dimensions() {
                     demand: None,
                     named_demand: Some(named_demand_delivery),
                     order: None,
+                    outside_ride_limit: None,
                 }]),
                 ..create_job("wheelchair_user")
             }],
@@ -311,6 +319,7 @@ fn can_handle_multiple_accessibility_features() {
                         demand: Some(vec![2, 0, 0]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("seated")
                 },
@@ -329,6 +338,7 @@ fn can_handle_multiple_accessibility_features() {
                         demand: Some(vec![0, 1, 0]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("wheelchair")
                 },
@@ -347,6 +357,7 @@ fn can_handle_multiple_accessibility_features() {
                         demand: Some(vec![0, 0, 1]),
                         named_demand: None,
                         order: None,
+                        outside_ride_limit: None,
                     }]),
                     ..create_job("stroller")
                 },

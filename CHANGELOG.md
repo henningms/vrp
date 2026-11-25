@@ -8,6 +8,12 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* `outsideRideLimit` on a pickup or delivery task: the task is left out of the job's `maxRideDuration`, which is then
+  measured between the job's other pickups and deliveries. For a job that carries a second person with stops of
+  their own, such as a companion who boards before the rider.
+
 ## [1.49.1] 2026-11-23
 
 ### Fixed

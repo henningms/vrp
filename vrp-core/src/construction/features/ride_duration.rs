@@ -11,6 +11,9 @@
 //! - When evaluating insertions, the constraint checks if the delivery would occur within
 //!   the allowed time from when the corresponding pickup departs
 //! - This is a hard constraint - violations result in the insertion being rejected
+//! - A pickup or delivery marked as outside the ride limit is left out of the measured ride: the
+//!   ride then runs from the earliest remaining pickup to the latest remaining delivery. This is
+//!   how a job that carries a second person with stops of their own keeps the limit on the first
 
 #[cfg(test)]
 #[path = "../../../tests/unit/construction/features/ride_duration_test.rs"]
@@ -24,6 +27,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 custom_dimension!(pub JobMaxRideDuration typeof Duration);
+custom_dimension!(pub JobOutsideRideLimit typeof bool);
 
 /// Creates a max ride duration feature as a hard constraint.
 ///
@@ -179,6 +183,9 @@ fn record_interval(
     let Some(single) = activity.job.as_ref() else { return };
     let Some(multi) = Multi::roots(single) else { return };
     let Some(limit) = multi.dimens.get_job_max_ride_duration().copied() else { return };
+    if single.dimens.get_job_outside_ride_limit().copied().unwrap_or(false) {
+        return;
+    }
     let key = Arc::as_ptr(&multi) as usize;
     let interval = intervals.entry(key).or_insert_with(|| RideInterval {
         job: multi,

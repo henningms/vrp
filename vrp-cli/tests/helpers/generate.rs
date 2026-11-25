@@ -25,7 +25,7 @@ pub fn create_empty_job() -> Job {
 }
 
 pub fn create_empty_job_task() -> JobTask {
-    JobTask { places: vec![], demand: None, named_demand: None, order: None }
+    JobTask { places: vec![], demand: None, named_demand: None, order: None, outside_ride_limit: None }
 }
 
 pub fn create_empty_job_place() -> JobPlace {

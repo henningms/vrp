@@ -269,6 +269,7 @@ fn can_handle_required_break_with_infeasible_sequence_relation() {
             demand: None,
             named_demand: None,
             order: None,
+            outside_ride_limit: None,
         }]),
         ..create_job(index.to_string().as_str())
     };

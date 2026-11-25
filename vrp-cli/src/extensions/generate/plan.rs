@@ -50,6 +50,7 @@ pub(crate) fn generate_plan(
                     },
                     named_demand: None,
                     order: task.order,
+                    outside_ride_limit: None,
                 })
                 .collect::<Vec<_>>()
         })

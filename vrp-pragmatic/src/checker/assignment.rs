@@ -45,12 +45,40 @@ fn check_max_ride_duration(ctx: &CheckerContext) -> GenericResult<()> {
         return Ok(());
     }
 
+    // A task left out of the ride limit is told from the job's other tasks by its place tag.
+    fn outside_tags(tasks: &Option<Vec<JobTask>>) -> HashSet<&str> {
+        tasks
+            .iter()
+            .flatten()
+            .filter(|task| task.outside_ride_limit.unwrap_or(false))
+            .flat_map(|task| task.places.iter().filter_map(|place| place.tag.as_deref()))
+            .collect()
+    }
+    let outside_ride_limit = ctx
+        .problem
+        .plan
+        .jobs
+        .iter()
+        .filter(|job| job.max_ride_duration.is_some())
+        .map(|job| (job.id.as_str(), (outside_tags(&job.pickups), outside_tags(&job.deliveries))))
+        .collect::<HashMap<_, _>>();
+    let is_outside = |job_id: &str, activity_type: &str, tag: Option<&str>| {
+        outside_ride_limit.get(job_id).zip(tag).is_some_and(|((pickups, deliveries), tag)| match activity_type {
+            "pickup" => pickups.contains(tag),
+            "delivery" => deliveries.contains(tag),
+            _ => false,
+        })
+    };
+
     ctx.solution.tours.iter().try_for_each(|tour| {
         let mut intervals = HashMap::<&str, (Vec<Float>, Vec<Float>)>::new();
         for stop in &tour.stops {
             let schedule = stop.schedule();
             for activity in stop.activities() {
                 if !constrained_jobs.contains_key(activity.job_id.as_str()) {
+                    continue;
+                }
+                if is_outside(activity.job_id.as_str(), activity.activity_type.as_str(), activity.job_tag.as_deref()) {
                     continue;
                 }
                 let entry = intervals.entry(activity.job_id.as_str()).or_default();

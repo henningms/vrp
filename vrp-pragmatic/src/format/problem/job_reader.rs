@@ -9,10 +9,10 @@ use std::sync::Arc;
 use vrp_core::{
     construction::features::{
         BreakPolicy, JobCompatibilityDimension, JobDemandDimension, JobGroupDimension, JobMaxRideDurationDimension,
-        JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension, JobRequestedTimesDimension,
-        JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension, JobSiteDimension,
-        JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension, LifoGroupDimension, LifoGroupId,
-        LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
+        JobOutsideRideLimitDimension, JobPreferredSkills as FeaturePreferredSkills, JobPreferredSkillsDimension,
+        JobRequestedTimesDimension, JobRideStopLimitsDimension, JobSharing as FeatureJobSharing, JobSharingDimension,
+        JobSiteDimension, JobSkills as FeatureJobSkills, JobSkillsDimension, JobSoloRidingDimension,
+        LifoGroupDimension, LifoGroupId, LifoTagDimension, RideStopLimits as FeatureRideStopLimits,
     },
     models::common::*,
     models::problem::{
@@ -182,7 +182,7 @@ fn read_required_jobs(
             })
             .collect();
 
-        get_single_with_dimens(
+        let mut single = get_single_with_dimens(
             places,
             demand,
             &task.order,
@@ -190,7 +190,12 @@ fn read_required_jobs(
             has_multi_dimens,
             props.has_configurable_capacity,
             coord_index,
-        )
+        );
+        if task.outside_ride_limit.unwrap_or(false) {
+            single.dimens.set_job_outside_ride_limit(true);
+        }
+
+        single
     };
 
     api_problem.plan.jobs.iter().for_each(|job| {
@@ -273,7 +278,7 @@ pub(crate) fn convert_api_job_to_core(
             })
             .collect();
 
-        get_single_with_dimens(
+        let mut single = get_single_with_dimens(
             places,
             demand,
             &task.order,
@@ -281,7 +286,12 @@ pub(crate) fn convert_api_job_to_core(
             has_multi_dimens,
             props.has_configurable_capacity,
             coord_index,
-        )
+        );
+        if task.outside_ride_limit.unwrap_or(false) {
+            single.dimens.set_job_outside_ride_limit(true);
+        }
+
+        single
     };
 
     let pickups = api_job.pickups.as_ref().map_or(0, |p| p.len());

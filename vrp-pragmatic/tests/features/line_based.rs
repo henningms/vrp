@@ -25,6 +25,7 @@ fn create_line_task(
         demand,
         named_demand: None,
         order: Some(order),
+        outside_ride_limit: None,
     }
 }
 
