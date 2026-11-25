@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.49.2] 2026-11-25
+
 ### Added
 
 * `outsideRideLimit` on a pickup or delivery task: the task is left out of the job's `maxRideDuration`, which is then
