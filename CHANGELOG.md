@@ -8,6 +8,8 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+## [1.49.3] 2026-11-26
+
 ### Added
 
 * `minimize-delivery-margin-shortfall` objective with `targetMargin` (seconds): one unit per second that a rider's
