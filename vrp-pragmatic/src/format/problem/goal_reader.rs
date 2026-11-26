@@ -238,6 +238,12 @@ fn get_objective_feature_layer(
         }
         Objective::TourOrder => create_tour_order_soft_feature("tour_order", get_tour_order_fn()),
         Objective::FastService => get_fast_service_feature("fast_service", blocks),
+        Objective::MinimizeDeliveryMarginShortfall { target_margin } => create_delivery_margin_feature(
+            "delivery_margin_shortfall",
+            *target_margin,
+            blocks.transport.clone(),
+            blocks.activity.clone(),
+        ),
         Objective::MatchRequestedTime { early_penalty, late_penalty } => {
             let penalty = RequestedTimePenalty::new(early_penalty.unwrap_or(1.0), late_penalty.unwrap_or(1.0));
             create_requested_time_feature("match_requested_time", penalty, blocks.transport.clone())

@@ -217,17 +217,20 @@ impl From<(InsertionContext, Option<TelemetryMetrics>)> for Solution {
         let (insertion_ctx, telemetry) = value;
         let cost = insertion_ctx.get_total_cost().unwrap_or_default();
         let solution_ctx = insertion_ctx.solution;
+        let mut unassigned: Vec<_> = solution_ctx
+            .unassigned
+            .into_iter()
+            .chain(solution_ctx.required.into_iter().map(|job| (job, UnassignmentInfo::Unknown)))
+            .collect();
+        if insertion_ctx.environment.random.is_seeded() {
+            unassigned.sort_by(|(a, _), (b, _)| a.dimens().get_job_id().cmp(&b.dimens().get_job_id()));
+        }
 
         Solution {
             cost,
             registry: solution_ctx.registry.resources().deep_copy(),
             routes: solution_ctx.routes.iter().map(|rc| rc.route.deep_copy()).collect(),
-            unassigned: solution_ctx
-                .unassigned
-                .iter()
-                .map(|(job, code)| (job.clone(), code.clone()))
-                .chain(solution_ctx.required.iter().map(|job| (job.clone(), UnassignmentInfo::Unknown)))
-                .collect(),
+            unassigned,
             telemetry,
         }
     }

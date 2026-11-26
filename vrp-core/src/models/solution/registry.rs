@@ -3,6 +3,7 @@
 mod actor_test;
 
 use crate::models::problem::{Actor, Fleet};
+use crate::utils::Either;
 use rosomaxa::prelude::Random;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -57,16 +58,38 @@ impl Registry {
 
     /// Returns list of all available actors.
     pub fn available(&'_ self) -> impl Iterator<Item = Arc<Actor>> + '_ {
-        self.available.values().flat_map(|set| set.iter().cloned())
+        if self.random.is_seeded() {
+            Either::Left(self.all.iter().filter(|a| self.available[&self.index[*a]].contains(*a)).cloned())
+        } else {
+            Either::Right(self.available.values().flat_map(|set| set.iter().cloned()))
+        }
     }
 
     /// Returns next available actors from each different type.
     pub fn next(&'_ self) -> impl Iterator<Item = Arc<Actor>> + '_ {
-        self.available.values().flat_map(move |set| {
+        if self.random.is_seeded() {
+            // Actor and group enumeration must both follow fleet order. Group keys may
+            // themselves be assigned by an unordered grouping function.
+            let mut indices = HashMap::new();
+            let mut groups: Vec<Vec<Arc<Actor>>> = Vec::new();
+            for actor in self.available() {
+                let idx = *indices.entry(self.index[&actor]).or_insert_with(|| {
+                    groups.push(Vec::new());
+                    groups.len() - 1
+                });
+                groups[idx].push(actor);
+            }
+            return Either::Left(groups.into_iter().map(|mut group| {
+                let idx = self.random.uniform_int(0, group.len() as i32 - 1) as usize;
+                group.swap_remove(idx)
+            }));
+        }
+
+        Either::Right(self.available.values().flat_map(move |set| {
             // NOTE pick a random actor from set of available actors.
             let skip_amount = if set.len() < 2 { 0 } else { self.random.uniform_int(0, set.len() as i32 - 1) as usize };
             set.iter().skip(skip_amount).take(1).cloned()
-        })
+        }))
     }
 
     /// Returns all available actors (no per-type-group sampling).
@@ -77,7 +100,7 @@ impl Registry {
     /// that need exhaustive coverage so a feasible insertion is guaranteed to be
     /// found if one exists.
     pub fn next_all(&'_ self) -> impl Iterator<Item = Arc<Actor>> + '_ {
-        self.available.values().flat_map(|set| set.iter().cloned())
+        self.available()
     }
 
     /// Creates a deep copy of registry.

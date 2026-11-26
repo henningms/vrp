@@ -133,6 +133,7 @@ pub struct VrpConfigBuilder {
     environment: Option<Arc<Environment>>,
     heuristic: Option<TargetHeuristic>,
     telemetry_mode: Option<TelemetryMode>,
+    fixed_work: Option<usize>,
     initial_max_size: Option<usize>,
     construction_job_cap: Option<usize>,
     initial_construction: InitialConstruction,
@@ -147,6 +148,7 @@ impl VrpConfigBuilder {
             environment: None,
             heuristic: None,
             telemetry_mode: None,
+            fixed_work: None,
             initial_max_size: None,
             construction_job_cap: None,
             initial_construction: InitialConstruction::default(),
@@ -157,6 +159,14 @@ impl VrpConfigBuilder {
     /// Sets [Environment] instance to be used.
     pub fn set_environment(mut self, environment: Arc<Environment>) -> Self {
         self.environment = Some(environment);
+        self
+    }
+
+    /// Uses a single incumbent and a fixed number of random-route removal and cheapest
+    /// repair attempts. One complete construction precedes the attempts by default.
+    /// For replay, run the whole solve on a single seeded worker.
+    pub fn set_fixed_work(mut self, attempts: usize) -> Self {
+        self.fixed_work = Some(attempts);
         self
     }
 
@@ -236,20 +246,32 @@ impl VrpConfigBuilder {
         let telemetry_mode =
             self.telemetry_mode.unwrap_or_else(|| get_default_telemetry_mode(environment.logger.clone()));
 
-        let heuristic = self.heuristic.unwrap_or_else(|| {
-            get_default_heuristic_with_search_config(problem.clone(), environment.clone(), self.heuristic_search)
-        });
+        let builder = ProblemConfigBuilder::default();
+        let builder = if let Some(attempts) = self.fixed_work {
+            let limits = RemovalLimits::new(&problem);
+            let operator = RuinAndRecreate::new(
+                Arc::new(RandomRouteRemoval::new(limits)),
+                Arc::new(RecreateWithCheapest::new(environment.random.clone())),
+            );
+            builder
+                .with_strategy(Box::new(FixedWork { attempts, operator }))
+                .with_max_generations(Some(attempts.max(1)))
+        } else {
+            builder.with_heuristic(self.heuristic.unwrap_or_else(|| {
+                get_default_heuristic_with_search_config(problem.clone(), environment.clone(), self.heuristic_search)
+            }))
+        };
 
         let selection_size = get_default_selection_size(environment.as_ref());
         let footprint = Footprint::new(problem.as_ref());
         let population = get_default_population(problem.goal.clone(), footprint, environment.clone(), selection_size);
 
-        let initial_max_size = self.initial_max_size.unwrap_or(DEFAULT_INITIAL_MAX_SIZE);
+        let initial_max_size =
+            self.initial_max_size.unwrap_or(if self.fixed_work.is_some() { 1 } else { DEFAULT_INITIAL_MAX_SIZE });
         let construction_job_cap = self.construction_job_cap;
         let initial_construction = self.initial_construction;
 
-        Ok(ProblemConfigBuilder::default()
-            .with_heuristic(heuristic)
+        Ok(builder
             .with_context(RefinementContext::new(problem.clone(), population, telemetry_mode, environment.clone()))
             .with_processing(create_default_processing())
             .with_initial(
@@ -260,7 +282,42 @@ impl VrpConfigBuilder {
     }
 }
 
-/// Creates default telemetry mode.B
+/// A reference search whose outer budget counts complete proposals. The selected ruin is
+/// bounded by route/activity counts and its repair finishes the insertion queue. Neither
+/// uses median generation duration, elapsed-time cutoffs, or adaptive population width.
+struct FixedWork {
+    attempts: usize,
+    operator: RuinAndRecreate,
+}
+
+impl EvolutionStrategy for FixedWork {
+    type Context = RefinementContext;
+    type Objective = GoalContext;
+    type Solution = InsertionContext;
+
+    fn run(
+        &mut self,
+        mut ctx: Self::Context,
+        termination: Box<dyn Termination<Context = Self::Context, Objective = Self::Objective>>,
+    ) -> EvolutionResult<Self::Solution> {
+        let mut completed = 0;
+        for _ in 0..self.attempts {
+            if termination.is_termination(&mut ctx) || ctx.environment.quota.as_ref().is_some_and(|q| q.is_reached()) {
+                break;
+            }
+            let timer = Timer::start();
+            let best = ctx.ranked().next().ok_or_else(|| GenericError::from("missing initial solution"))?;
+            let next = self.operator.search(&ctx, best);
+            completed += 1;
+            ctx.on_generation(vec![next], completed as Float / self.attempts as Float, timer);
+        }
+        (ctx.environment.logger)(&format!("completed {completed}/{} fixed-work attempts", self.attempts));
+        let (population, metrics) = ctx.on_result()?;
+        Ok((population.ranked().take(1).map(|individual| individual.deep_copy()).collect(), metrics))
+    }
+}
+
+/// Creates default telemetry mode.
 pub fn get_default_telemetry_mode(logger: InfoLogger) -> TelemetryMode {
     TelemetryMode::OnlyLogging { logger, log_best: 100, log_population: 1000 }
 }

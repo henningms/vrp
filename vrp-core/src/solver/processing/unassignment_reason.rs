@@ -4,7 +4,9 @@ mod unassignment_reason_test;
 
 use super::*;
 use crate::construction::heuristics::*;
+use crate::models::problem::JobIdDimension;
 use rosomaxa::utils::{CollectGroupBy, ParallelismPolicy, parallel_collect};
+use std::cmp::Reverse;
 
 /// Tries to improve job unassignment reason.
 #[derive(Default)]
@@ -16,7 +18,10 @@ impl HeuristicSolutionProcessing for UnassignmentReason {
     fn post_process(&self, solution: Self::Solution) -> Self::Solution {
         let mut insertion_ctx = solution;
 
-        let unassigned = insertion_ctx.solution.unassigned.drain().collect::<Vec<_>>();
+        let mut unassigned = insertion_ctx.solution.unassigned.drain().collect::<Vec<_>>();
+        if insertion_ctx.environment.random.is_seeded() {
+            unassigned.sort_by(|(a, _), (b, _)| a.dimens().get_job_id().cmp(&b.dimens().get_job_id()));
+        }
         let leg_selection = LegSelection::Exhaustive;
         let result_selector = BestResultSelector::default();
 
@@ -49,7 +54,7 @@ impl HeuristicSolutionProcessing for UnassignmentReason {
                         .collect_group_by_key(|code| code.constraint)
                         .into_iter()
                         // NOTE: pick only the most frequent reason
-                        .max_by(|(_, a), (_, b)| a.len().cmp(&b.len()))
+                        .max_by_key(|(code, failures)| (failures.len(), Reverse(code.0)))
                         .map(|(code, _)| (route_ctx.route().actor.clone(), code))
                 })
                 .collect::<Vec<_>>();

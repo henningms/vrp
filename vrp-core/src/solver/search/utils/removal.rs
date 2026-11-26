@@ -3,7 +3,7 @@
 mod removal_test;
 
 use crate::construction::heuristics::*;
-use crate::models::problem::{Actor, Job};
+use crate::models::problem::{Actor, Job, JobIdDimension};
 use crate::solver::search::RemovalLimits;
 use rand::prelude::SliceRandom;
 use rosomaxa::prelude::{Float, Random};
@@ -136,6 +136,9 @@ impl JobRemovalTracker {
         let locked = solution.locked.clone();
         let route_ctx = solution.routes.get(route_idx).expect("invalid route index");
         let mut jobs: Vec<Job> = route_ctx.route().tour.jobs().filter(|job| !locked.contains(*job)).cloned().collect();
+        if random.is_seeded() {
+            jobs.sort_by(|a, b| a.dimens().get_job_id().cmp(&b.dimens().get_job_id()));
+        }
         jobs.shuffle(&mut random.get_rng());
         jobs.truncate(self.activities_left as usize);
 

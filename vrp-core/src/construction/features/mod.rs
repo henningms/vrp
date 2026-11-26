@@ -17,6 +17,9 @@ pub use self::capacity::{CapacityFeatureBuilder, JobDemandDimension, VehicleCapa
 mod compatibility;
 pub use self::compatibility::{JobCompatibilityDimension, create_compatibility_feature};
 
+mod delivery_margin;
+pub use self::delivery_margin::create_delivery_margin_feature;
+
 mod fast_service;
 pub use self::fast_service::FastServiceFeatureBuilder;
 

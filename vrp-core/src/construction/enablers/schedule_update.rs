@@ -98,7 +98,7 @@ pub(crate) fn is_on_time_when_leaving_at(
 }
 
 /// Schedules `a` when the vehicle leaves `from` for it at `departure`.
-fn schedule_after(
+pub(crate) fn schedule_after(
     route: &Route,
     activity: &dyn ActivityCost,
     transport: &dyn TransportCost,

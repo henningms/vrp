@@ -1,5 +1,5 @@
 use crate::construction::heuristics::SolutionContext;
-use crate::models::problem::Job;
+use crate::models::problem::{Job, JobIdDimension};
 use std::collections::HashSet;
 
 /// Defines how jobs are moved in solution context. Index of original affected route context is passed.
@@ -85,8 +85,15 @@ pub fn process_conditional_jobs(
         .collect();
     solution_ctx.ignored.retain(|job| !required.contains(job));
 
-    solution_ctx.required.extend(required);
-    solution_ctx.ignored.extend(ignored);
+    // These queues feed ordered insertion passes. Preserve a stable order when multiple
+    // conditional jobs (e.g. reloads) become available at the same insertion.
+    let ordered = |jobs: HashSet<Job>| {
+        let mut jobs: Vec<_> = jobs.into_iter().collect();
+        jobs.sort_by(|a, b| a.dimens().get_job_id().cmp(&b.dimens().get_job_id()));
+        jobs
+    };
+    solution_ctx.required.extend(ordered(required));
+    solution_ctx.ignored.extend(ordered(ignored));
 
     // analyze locked
     let not_locked: HashSet<Job> = solution_ctx

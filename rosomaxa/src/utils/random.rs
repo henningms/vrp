@@ -5,7 +5,7 @@ mod random_test;
 use crate::utils::Float;
 use rand::prelude::*;
 use rand_distr::{Gamma, Normal};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -36,6 +36,11 @@ pub trait Random: Send + Sync {
     /// Uses exponential distribution where the weights are the rate of the distribution (lambda)
     /// and selects the smallest sampled value.
     fn weighted(&self, weights: &[usize]) -> usize;
+
+    /// Whether sampling from unordered collections needs a stable enumeration.
+    fn is_seeded(&self) -> bool {
+        false
+    }
 
     /// Returns RNG.
     fn get_rng(&self) -> RandomGen;
@@ -83,6 +88,13 @@ pub struct DefaultRandom {
 }
 
 impl DefaultRandom {
+    /// Initializes the default random stream of a dedicated worker, including readers and
+    /// operators that obtain the default generator independently of the solve environment.
+    pub fn seed_thread(seed: u64) {
+        RANDOMIZED_RNG.with(|rng| *rng.borrow_mut() = SmallRng::seed_from_u64(seed));
+        SEEDED.set(true);
+    }
+
     /// Creates an instance of `DefaultRandom` with repeatable (predictable) random generation.
     pub fn new_repeatable() -> Self {
         Self { use_repeatable: true }
@@ -90,6 +102,10 @@ impl DefaultRandom {
 }
 
 impl Random for DefaultRandom {
+    fn is_seeded(&self) -> bool {
+        self.use_repeatable || SEEDED.get()
+    }
+
     fn uniform_int(&self, min: i32, max: i32) -> i32 {
         if min == max {
             return min;
@@ -133,6 +149,8 @@ impl Random for DefaultRandom {
 }
 
 thread_local! {
+    static SEEDED: Cell<bool> = const { Cell::new(false) };
+
     /// Random generator seeded from thread_rng to make runs non-repeatable.
     static RANDOMIZED_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_rng(&mut rand::rng()));
 
