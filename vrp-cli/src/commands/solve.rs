@@ -23,6 +23,8 @@ const FORMAT_ARG_NAME: &str = "FORMAT";
 const PROBLEM_ARG_NAME: &str = "PROBLEM";
 const MATRIX_ARG_NAME: &str = "matrix";
 const GENERATIONS_ARG_NAME: &str = "max-generations";
+const SEED_ARG_NAME: &str = "seed";
+const FIXED_WORK_ARG_NAME: &str = "fixed-work";
 const TIME_ARG_NAME: &str = "max-time";
 const MIN_CV_ARG_NAME: &str = "min-cv";
 const GEO_JSON_ARG_NAME: &str = "geo-json";
@@ -62,6 +64,24 @@ pub fn get_solve_app() -> Command {
                 .short('n')
                 .long(GENERATIONS_ARG_NAME)
                 .required(false)
+        )
+        .arg(
+            Arg::new(SEED_ARG_NAME)
+                .long(SEED_ARG_NAME)
+                .value_parser(clap::value_parser!(u64))
+                .help("Seeds solve worker streams. Timed or parallel searches can still vary."),
+        )
+        .arg(
+            Arg::new(FIXED_WORK_ARG_NAME)
+                .long(FIXED_WORK_ARG_NAME)
+                .value_name("ATTEMPTS")
+                .value_parser(clap::value_parser!(usize))
+                .conflicts_with_all([
+                    TIME_ARG_NAME, GENERATIONS_ARG_NAME, MIN_CV_ARG_NAME, CONFIG_ARG_NAME, PARALLELISM_ARG_NAME,
+                    HEURISTIC_ARG_NAME, SEARCH_MODE_ARG_NAME, BOUNDED_RECREATES_ARG_NAME,
+                    DISABLE_INFEASIBLE_DIVERSIFICATION_ARG_NAME,
+                ])
+                .help("Run single-worker reference search with this many random-route removal and cheapest-repair attempts. Defaults to seed 0 and one initial solution. Use 0 for construction only."),
         )
         .arg(
             Arg::new(TIME_ARG_NAME)
@@ -245,6 +265,27 @@ pub fn run_solve(
     matches: &ArgMatches,
     out_writer_func: fn(Option<File>) -> BufWriter<Box<dyn Write>>,
 ) -> Result<(), GenericError> {
+    let work = matches.get_one::<usize>(FIXED_WORK_ARG_NAME).copied();
+    let seed = matches.get_one::<u64>(SEED_ARG_NAME).copied().or(work.map(|_| 0));
+    if let Some(seed) = seed {
+        // The entire solve, including problem parsing, runs on fresh, solve-local worker streams.
+        let mut pool = rayon::ThreadPoolBuilder::new()
+            .start_handler(move |worker| DefaultRandom::seed_thread(seed.wrapping_add(worker as u64)));
+        if let Some(threads) = work.map(|_| 1).or(get_legacy_parallelism_threads(matches)?) {
+            pool = pool.num_threads(threads);
+        }
+        return pool
+            .build()
+            .map_err(|err| format!("cannot start seeded worker pool: {err}"))?
+            .install(|| solve_with_workers(matches, out_writer_func));
+    }
+    solve_with_workers(matches, out_writer_func)
+}
+
+fn solve_with_workers(
+    matches: &ArgMatches,
+    out_writer_func: fn(Option<File>) -> BufWriter<Box<dyn Write>>,
+) -> Result<(), GenericError> {
     let environment = get_environment(matches)?;
 
     let is_rounded = matches.get_one::<bool>(ROUNDED_ARG_NAME).copied().unwrap_or(false);
@@ -365,6 +406,7 @@ fn from_cli_parameters(
 ) -> GenericResult<Solver> {
     let max_time = parse_int_value::<usize>(matches, TIME_ARG_NAME, "max time")?;
 
+    let fixed_work = matches.get_one::<usize>(FIXED_WORK_ARG_NAME).copied();
     let max_generations = parse_int_value::<usize>(matches, GENERATIONS_ARG_NAME, "max generations")?;
     let telemetry_mode = if matches.get_one::<bool>(LOG_ARG_NAME).copied().unwrap_or(false) {
         get_default_telemetry_mode(environment.logger.clone())
@@ -406,10 +448,15 @@ fn from_cli_parameters(
     let mut builder = VrpConfigBuilder::new(problem.clone())
         .set_environment(environment.clone())
         .set_telemetry_mode(telemetry_mode.clone())
-        .set_heuristic(get_heuristic(matches, problem.clone(), environment.clone(), heuristic_search)?)
         .set_initial_construction(initial_construction)
         .set_infeasible_diversification(heuristic_search.infeasible_diversification)
         .set_bounded_recreates(heuristic_search.bounded_recreates);
+
+    builder = if let Some(attempts) = fixed_work {
+        builder.set_fixed_work(attempts)
+    } else {
+        builder.set_heuristic(get_heuristic(matches, problem.clone(), environment.clone(), heuristic_search)?)
+    };
 
     if let Some(initial_max_size) = initial_max_size {
         builder = builder.set_initial_max_size(initial_max_size);
@@ -421,7 +468,7 @@ fn from_cli_parameters(
     let config = builder
         .prebuild()?
         .with_init_solutions(init_solutions, init_size)
-        .with_max_generations(max_generations)
+        .with_max_generations(max_generations.or(fixed_work.map(|n| n.max(1))))
         .with_max_time(max_time)
         .with_min_cv(min_cv, "min_cv".to_string())
         .with_context(RefinementContext::new(
@@ -480,14 +527,21 @@ fn get_environment(matches: &ArgMatches) -> GenericResult<Arc<Environment>> {
     let quota = Some(create_interruption_quota(max_time));
     let is_experimental = matches.get_one::<bool>(EXPERIMENTAL_ARG_NAME).copied().unwrap_or(false);
 
-    if let Some(num_threads) = get_legacy_parallelism_threads(matches)? {
+    if matches.get_one::<u64>(SEED_ARG_NAME).is_none()
+        && let Some(num_threads) = get_legacy_parallelism_threads(matches)?
+    {
         // The global pool can be built only once per process; keep solving on the existing one.
         if let Err(err) = rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global() {
             eprintln!("cannot apply parallelism setting, using existing worker pool: {err}");
         }
     }
 
-    Ok(Arc::new(Environment { quota, is_experimental, ..Environment::default() }))
+    let parallelism = if matches.get_one::<usize>(FIXED_WORK_ARG_NAME).is_some() {
+        Parallelism::new_with_cpus(1)
+    } else {
+        Parallelism::default()
+    };
+    Ok(Arc::new(Environment { quota, is_experimental, parallelism, ..Environment::default() }))
 }
 
 /// Maps the removed `num_thread_pools,threads_per_pool` setting to a total worker count, so that

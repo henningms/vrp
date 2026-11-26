@@ -386,6 +386,9 @@ impl TryFrom<InsertionResult> for InsertionSuccess {
 pub(crate) fn prepare_insertion_ctx(insertion_ctx: &mut InsertionContext) {
     insertion_ctx.solution.required.extend(insertion_ctx.solution.unassigned.keys().cloned());
     insertion_ctx.problem.goal.accept_solution_state(&mut insertion_ctx.solution);
+    if insertion_ctx.environment.random.is_seeded() {
+        insertion_ctx.solution.required.sort_by(|a, b| a.dimens().get_job_id().cmp(&b.dimens().get_job_id()));
+    }
 }
 
 pub(crate) fn finalize_insertion_ctx(insertion_ctx: &mut InsertionContext) {

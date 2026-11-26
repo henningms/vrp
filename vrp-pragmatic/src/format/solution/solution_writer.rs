@@ -468,7 +468,7 @@ fn create_unassigned(solution: &DomainSolution) -> Option<Vec<UnassignedJob>> {
         .map(|(job, code)| {
             let job_id = job.dimens().get_job_id().expect("job id expected").clone();
 
-            let reasons = match code {
+            let mut reasons = match code {
                 UnassignmentInfo::Simple(code) => create_simple_reasons(*code),
                 UnassignmentInfo::Detailed(details) if !details.is_empty() => details
                     .iter()
@@ -503,6 +503,7 @@ fn create_unassigned(solution: &DomainSolution) -> Option<Vec<UnassignedJob>> {
                 _ => create_simple_reasons(ViolationCode(0)),
             };
 
+            reasons.sort_by(|a, b| a.code.cmp(&b.code));
             UnassignedJob { job_id, reasons }
         })
         .collect::<Vec<_>>();

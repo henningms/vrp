@@ -247,3 +247,46 @@ fn can_specify_cv() {
         assert_eq!(min_cv, result);
     }
 }
+
+#[test]
+fn fixed_work_accepts_zero_attempts_and_conflicts_with_time_limits() {
+    let args = ["solve", "pragmatic", PRAGMATIC_PROBLEM_PATH, "--fixed-work", "0", "--seed", "17"];
+    let matches = get_solve_app().try_get_matches_from(args).unwrap();
+    run_solve_without_writer(&matches);
+    assert!(get_solve_app().try_get_matches_from(args.into_iter().chain(["--max-time", "10"])).is_err());
+}
+
+#[test]
+fn fixed_work_replays_assignments_tours_and_diagnostics_across_independent_solves() {
+    let mut problem: serde_json::Value = serde_json::from_reader(File::open(PRAGMATIC_PROBLEM_PATH).unwrap()).unwrap();
+    let jobs = problem["plan"]["jobs"].as_array_mut().unwrap();
+    for id in ["unassignable-b", "unassignable-a"] {
+        let mut job = jobs[0].clone();
+        job["id"] = id.into();
+        job["skills"] = serde_json::json!({"allOf": ["unavailable-skill"]});
+        jobs.push(job);
+    }
+    let input = tempfile::NamedTempFile::new().unwrap();
+    serde_json::to_writer(input.as_file(), &problem).unwrap();
+    let solve = || {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let args = [
+            "solve",
+            "pragmatic",
+            input.path().to_str().unwrap(),
+            "--fixed-work",
+            "10",
+            "--seed",
+            "31",
+            "--out-result",
+            file.path().to_str().unwrap(),
+        ];
+        let matches = get_solve_app().try_get_matches_from(args).unwrap();
+        run_solve(&matches, create_write_buffer).unwrap();
+        serde_json::from_reader::<_, serde_json::Value>(file.as_file()).unwrap()
+    };
+    let solution = solve();
+    assert!(!solution["tours"].as_array().unwrap().is_empty());
+    assert!(solution["unassigned"].as_array().unwrap().len() >= 2);
+    assert_eq!(solution, solve());
+}

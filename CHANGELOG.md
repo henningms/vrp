@@ -8,6 +8,19 @@ are already published. So, I stick to it for now.
 
 ## [Unreleased]
 
+### Added
+
+* `minimize-delivery-margin-shortfall` objective with `targetMargin` (seconds): one unit per second that a rider's
+  delivery service starts inside the target margin before its window closes. Opt-in; companion tasks marked
+  `outsideRideLimit` are skipped.
+* `vrp-cli solve --seed <n>` seeds the solve's worker streams, and `--fixed-work <attempts>` runs a single-worker
+  reference search with a fixed number of removal-and-repair attempts, so two variants can be compared on
+  identical work. With a seed, unordered collections are enumerated in a stable order.
+
+### Changed
+
+* Unassignment reasons are written in code order, and ties between equally frequent reasons resolve to the lower code.
+
 ## [1.49.2] 2026-11-25
 
 ### Added

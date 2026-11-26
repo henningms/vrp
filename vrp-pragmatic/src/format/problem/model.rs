@@ -886,6 +886,13 @@ pub enum Objective {
     /// An objective to prefer jobs to be served as soon as possible.
     FastService,
 
+    /// Minimizes seconds of missing margin before each rider's delivery window closes.
+    #[serde(rename_all = "camelCase")]
+    MinimizeDeliveryMarginShortfall {
+        /// Target time remaining at delivery service start, in seconds.
+        target_margin: Float,
+    },
+
     /// An objective to minimize deviation from requested service-start times.
     /// Jobs with requestedTime specified on their places will be penalized
     /// based on how far the actual service start deviates from the requested time.

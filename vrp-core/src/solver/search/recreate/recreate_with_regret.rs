@@ -4,7 +4,7 @@ mod recreate_with_regret_test;
 
 use crate::construction::heuristics::*;
 use crate::construction::heuristics::{InsertionContext, InsertionResult};
-use crate::models::problem::Job;
+use crate::models::problem::{Job, JobIdDimension};
 use crate::solver::RefinementContext;
 use crate::solver::search::{ConfigurableRecreate, Recreate};
 use rosomaxa::utils::{CollectGroupBy, Random};
@@ -113,6 +113,11 @@ impl InsertionEvaluator for RegretInsertionEvaluator {
             .collect::<Vec<_>>();
 
         if !results.is_empty() {
+            // The grouped successes come from a hash map. Establish the order of ties
+            // before the existing stable regret sort when replaying.
+            if insertion_ctx.environment.random.is_seeded() {
+                results.sort_by(|a, b| a.1.job.dimens().get_job_id().cmp(&b.1.job.dimens().get_job_id()));
+            }
             results.sort_by(|a, b| b.0.cmp(&a.0));
 
             let (_, best_success) = results.swap_remove(0);

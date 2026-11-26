@@ -213,7 +213,7 @@ fn is_pickup(single: &Single) -> bool {
     single.dimens.get_job_demand::<SingleDimLoad>().is_some_and(|d| d.pickup.1.is_not_empty())
 }
 
-fn is_delivery(single: &Single) -> bool {
+pub(super) fn is_delivery(single: &Single) -> bool {
     if let Some(demand) = single.dimens.get_job_demand::<ConfigurableLoad>() {
         return configurable_load_has_load(&demand.delivery.1);
     }

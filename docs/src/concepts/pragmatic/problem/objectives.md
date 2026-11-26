@@ -47,6 +47,11 @@ constraints such as time windows. The objective has the following optional param
 * `fast-service`: prefers solutions when jobs are served early in tours. A job with one activity counts the time from
   the start of its tour (or of its last reload) to the job; a job with several activities, e.g. a pickup and a
   delivery, counts the time between its first and its last activity
+* `minimize-delivery-margin-shortfall` adds one unit per second that a rider's delivery service starts inside the
+  target margin before its selected window closes. Set `targetMargin` in seconds, for example `300` for five minutes.
+  Each pickup-delivery job's own delivery contributes once. Companion activities marked `outsideRideLimit` are skipped.
+  Service at or before the target earns zero penalty. To charge five units per missing minute in a weighted objective
+  layer, use weight `0.08333333333333333`. The objective takes effect when included in the objective list.
 * `match-requested-time`: minimizes early/late deviation between activity
   service start and a place's optional `requestedTime`. Optional `earlyPenalty`
   and `latePenalty` values are expressed per minute and default to `1`. This is

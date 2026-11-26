@@ -4,7 +4,7 @@ use crate::format::problem::*;
 use crate::format::{JobIndex, Location};
 use crate::parse_time;
 use crate::utils::VariableJobPermutation;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use vrp_core::{
     construction::features::{
@@ -56,8 +56,8 @@ pub(super) fn read_locks(api_problem: &ApiProblem, job_index: &JobIndex) -> Vec<
         return vec![];
     }
 
-    let relations: HashMap<_, Vec<_>> =
-        api_problem.plan.relations.as_ref().unwrap().iter().fold(HashMap::new(), |mut acc, r| {
+    let relations: BTreeMap<_, Vec<_>> =
+        api_problem.plan.relations.as_ref().unwrap().iter().fold(BTreeMap::new(), |mut acc, r| {
             let shift_index = r.shift_index.unwrap_or_default();
             acc.entry((r.vehicle_id.clone(), shift_index)).or_default().push(r.clone());
 
